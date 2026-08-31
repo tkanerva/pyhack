@@ -172,7 +172,9 @@ class BaseActor(ABC):
 
 class MessageRouter:
     """Decoupled pub/sub routing. Replaces direct function calls."""
-    def __init__(self):
+    def __init__(self, world: Optional[WorldProtocol] = None):
+        # Store optional world reference to forward broadcasts
+        self.world = world
         self._handlers: Dict[str, Dict[str, callable]] = defaultdict(dict)
         self._listeners: Dict[str, List[callable]] = defaultdict(list)
 
@@ -189,6 +191,11 @@ class MessageRouter:
         self._listeners[msg_type].append(listener)
 
     def broadcast(self, msg_type: str, payload: Any):
+        # Forward to world if attached
+        if self.world:
+            self.world.broadcast(msg_type, payload)
+        
+        # Notify listeners
         for listener in self._listeners.get(msg_type, []):
             listener(payload)
 
