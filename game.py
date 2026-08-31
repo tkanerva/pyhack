@@ -22,6 +22,7 @@ class DemoWorld(WorldProtocol):
         self.monsters: List[SimpleMonster] = []
         self.map: List[List[int]] = []
         self.trap_actor: TrapActor = TrapActor(self, MessageRouter())
+        self.broadcast_messages: List[str] = []  # NEW: Listens to broadcasts
 
     def register_actor(self, pid: str, actor: Any) -> None:
         self.actors[pid] = actor
@@ -29,7 +30,13 @@ class DemoWorld(WorldProtocol):
     def get_actor(self, pid: str) -> Any:
         return self.actors.get(pid)
 
-    def broadcast(self, message: Any, exclude: List[str] | None = None) -> None: pass
+    def broadcast(self, message: Any, exclude: List[str] | None = None) -> None:
+        # NEW: Log broadcast messages for debugging
+        if isinstance(message, str):
+            self.broadcast_messages.append(message)
+        else:
+            self.broadcast_messages.append(str(message))
+
     def query(self, message: QueryMessage) -> Any: return None
 
     def get_monsters_at(self, pos: Tuple[int, int]) -> List[MonsterProtocol]:
@@ -76,14 +83,20 @@ class DemoWorld(WorldProtocol):
                 self.actors[f"bat_{i}"] = b
 
 
-def render(map_data: List[List[int]], hero: Hero, monsters: List[SimpleMonster], traps: List[Trap], messages: List[str]):
+def render(map_data: List[List[int]], hero: Hero, monsters: List[SimpleMonster], traps: List[Trap], messages: List[str], broadcasts: List[str]):
+    # Print broadcasts as the very first line after clearing screen
+    if broadcasts:
+        print("📡 Broadcasts:")
+        for b in broadcasts:
+            print(f"   {b}")
+        print("-" * 40)
+        
     print("🗺️  Cave Map")
     print("   @ = Hero | M/O/B = Monster | ^ = Seen Trap | # = Wall | X = Triggered Trap")
     print()
     for y, row in enumerate(map_data):
         line = ""
         for x, tile in enumerate(row):
-            print(list(t.seen for t in traps))
             if (x, y) == hero.pos:
                 line += "@"
             elif any(m.pos == (x, y) for m in monsters):
@@ -172,7 +185,7 @@ def main():
 
     if not hero.alive:
         os.system('cls' if os.name == 'nt' else 'clear')
-        render(world.map, hero, world.monsters, world.traps, all_messages[-5:])
+        render(world.map, hero, world.monsters, world.traps, all_messages[-5:], world.broadcast_messages[-10:])
         print(f"\n💀 HERO DEAD | Total Damage Taken: {25 - hero.hp}")
         print("   Thanks for playing the NetHack OOP Demo!")
     elif not any(m.alive for m in world.monsters):
