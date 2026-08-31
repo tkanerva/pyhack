@@ -21,8 +21,10 @@ class DemoWorld(WorldProtocol):
         self.traps: List[Trap] = []
         self.monsters: List[SimpleMonster] = []
         self.map: List[List[int]] = []
-        self.trap_actor: TrapActor = TrapActor(self, MessageRouter())
-        self.broadcast_messages: List[str] = []  # NEW: Listens to broadcasts
+        # Create a router that knows about this world
+        self.router = MessageRouter(self) 
+        self.trap_actor: TrapActor = TrapActor(self, self.router)
+        self.broadcast_messages: List[str] = []  # Listens to broadcasts
 
     def register_actor(self, pid: str, actor: Any) -> None:
         self.actors[pid] = actor
@@ -31,11 +33,9 @@ class DemoWorld(WorldProtocol):
         return self.actors.get(pid)
 
     def broadcast(self, message: Any, exclude: List[str] | None = None) -> None:
-        # NEW: Log broadcast messages for debugging
-        if isinstance(message, str):
-            self.broadcast_messages.append(message)
-        else:
-            self.broadcast_messages.append(str(message))
+        # Capture broadcast messages for debugging
+        msg_str = str(message)
+        self.broadcast_messages.append(msg_str)
 
     def query(self, message: QueryMessage) -> Any: return None
 
@@ -74,7 +74,6 @@ class DemoWorld(WorldProtocol):
         for i in range(orcs):
             if floor_tiles:
                 o = Orc(floor_tiles.pop())
-                self.monsters.append(o)
                 self.actors[f"orc_{i}"] = o
         for i in range(bats):
             if floor_tiles:
@@ -86,7 +85,7 @@ class DemoWorld(WorldProtocol):
 def render(map_data: List[List[int]], hero: Hero, monsters: List[SimpleMonster], traps: List[Trap], messages: List[str], broadcasts: List[str]):
     # Print broadcasts as the very first line after clearing screen
     if broadcasts:
-        print("📡 Broadcasts:")
+        print("📡 Broadcast Log:")
         for b in broadcasts:
             print(f"   {b}")
         print("-" * 40)
@@ -142,16 +141,17 @@ def main():
 
     while hero.alive and any(m.alive for m in world.monsters):
         os.system('cls' if os.name == 'nt' else 'clear')
-        render(world.map, hero, world.monsters, world.traps, all_messages[-5:])
+        # Pass the last 10 broadcasts to keep the screen manageable
+        render(world.map, hero, world.monsters, world.traps, all_messages[-5:], world.broadcast_messages[-10:])
         print(f"🩸 HP: {hero.hp}/{hero.max_hp} | 💥 Damage Taken: {25 - hero.hp}")
         print("   [WASD/Arrows to move, Q to quit]")
 
         key = input("   Move: ").strip().lower()
         dx, dy = 0, 0
         if key in ("w", "up", "\x1b[A"): dy = -1
-        elif key in ("s", "down", "\x1b[B"): dy = 1
-        elif key in ("a", "left", "\x1b[D"): dx = -1
-        elif key in ("d", "right", "\x1b[C"): dx = 1
+        elif key in ("s", "down", "\x1b[B"]: dy = 1
+        elif key in ("a", "left", "\x1b[D"]: dx = -1
+        elif key in ("d", "right", "\x1b[C"]: dx = 1
         elif key == "q": break
 
         # 1. Player move + trap check
@@ -194,4 +194,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
