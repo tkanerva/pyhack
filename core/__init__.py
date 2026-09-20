@@ -15,3 +15,4 @@ from .commands import (
     CastCommand, Command, MoveCommand, QuaffCommand, WaitCommand,
     ZapCommand,
 )
+from .step import step
