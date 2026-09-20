@@ -49,4 +49,4 @@ def test_sleeping_sickness():
 def test_unknown_item_is_rejected():
     w = make_world()
     ev = quaff(w, "player", "nope", random.Random(1))
-    assert "no such potion" in ev[0].text.lower()
+    assert ev[0].text == "You don't have such a potion."

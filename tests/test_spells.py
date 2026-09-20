@@ -29,7 +29,8 @@ def test_beam_hits_first_monster_only():
 def test_wall_stops_beam():
     w = world_with_book(SpellType.MAGIC_MISSILE,
                         monsters=[make_monster(pos=(10, 4))])
-    w.map.tiles[8][4] = 1
+    # wall at (x=8, y=4); Map.tiles is indexed as tiles[y][x]
+    w.map.tiles[4][8] = 1
     cast_spell(w, "player", "book_0", Direction.E, SeqRng())
     assert w.actors["goblin_0"].hp == 8
 
