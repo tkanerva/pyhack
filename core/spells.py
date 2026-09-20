@@ -68,13 +68,15 @@ def cast_spell(world: World, caster_id: str, book_id: str,
         if not hit_anyone:
             events.append(MessageEvent("The fireball bursts harmlessly."))
     elif st in SPELL_DAMAGE:
-        dmg = roll(rng, 6, 2)
+        # resolve the beam first; dice are only rolled when the spell
+        # actually connects (as in NetHack's spell_hit())
         target, hit_wall = find_target_in_line(world, caster.pos, direction, BEAM_RANGE)
         if target is None:
             events.append(MessageEvent(_miss_message(hit_wall)))
         elif resists(target, SPELL_DAMAGE[st]):
             events.append(MessageEvent(f"{target.name} is unaffected."))
         else:
+            dmg = roll(rng, 6, 2)
             events += apply_damage(world, target.id, dmg, SPELL_DAMAGE[st],
                                    f"spell:{spell_name}")
     elif st == SpellType.SLEEP:
