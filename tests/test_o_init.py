@@ -122,7 +122,7 @@ def test_obj_shuffle_ranges():
     assert obj_shuffle_range(state, O.AMULET_OF_GUARDING) == \
         (state.bases[ObjClass.AMULET], O.FAKE_AMULET_OF_YENDOR.value - 1)
     assert obj_shuffle_range(state, O.HELMET) == \
-        (O.HELMET.value, O.HELM_OF_TELEPHY.value)
+        (O.HELMET.value, O.HELM_OF_TELEPATHY.value)
     assert obj_shuffle_range(state, O.PLATE_MAIL) == \
         (O.PLATE_MAIL.value, O.PLATE_MAIL.value)  # suits don't shuffle
     assert obj_shuffle_range(state, O.SPEED_BOOTS) == \
