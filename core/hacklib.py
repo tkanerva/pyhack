@@ -197,7 +197,7 @@ def online2(a: Pos, b: Pos) -> bool:
     (C: online2)"""
     dx = a[0] - b[0]
     dy = a[1] - b[1]
-    return dy == 0 or dx == 0 or dy == dx or dy == -dy
+    return dy == 0 or dx == 0 or dy == dx or dy == -dx
 
 
 def swapbits(val: int, bita: int, bitb: int) -> int:
