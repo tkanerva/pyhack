@@ -7,7 +7,7 @@ import core.monst as M
 
 
 def test_table_shape():
-    assert len(MONS) == NUMMONS == 382
+    assert len(MONS) == NUMMONS == 383
     assert len(PM_NAMES) == NUMMONS
     assert len(SUBSET_PM) == 40
     assert sum(1 for m in MONS if m is not None) == 40
@@ -15,7 +15,7 @@ def test_table_shape():
 
 def test_pm_names_anchors():
     # spot-checks against include/monsters.h ordering (default build:
-    # CHARON/MAIL_STRUCTURES undefined, #if 0 blocks excluded)
+    # CHARON undefined; MAIL_STRUCTURES always defined in 5.0)
     assert PM_NAMES[0] == "giant ant"
     assert PM_NAMES[10] == "cockatrice"
     assert PM_NAMES[70] == "goblin"
@@ -24,8 +24,10 @@ def test_pm_names_anchors():
     assert PM_NAMES[152] == "yellow dragon"
     assert PM_NAMES[248] == "skeleton"
     assert PM_NAMES[287] == "ghost"
-    assert PM_NAMES[329] == "long worm tail"
-    assert PM_NAMES[381] == "apprentice"
+    assert PM_NAMES[314] == "mail daemon"  # MAIL_STRUCTURES in 5.0
+    assert PM_NAMES[315] == "djinni"
+    assert PM_NAMES[330] == "long worm tail"
+    assert PM_NAMES[382] == "apprentice"
 
 
 def test_special_pm_anchor():

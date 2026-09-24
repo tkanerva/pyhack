@@ -9,8 +9,9 @@ home for all of that:
   bitmaps, MR_* resistances, MS_* sounds, MZ_* sizes, WT_* weights,
   alignment values);
 - `Attack` / `PerMonst` -- the struct attack / struct permonst rows;
-- `PM_NAMES` -- the COMPLETE C ordering of all 382 monster types
-  (default build: CHARON and MAIL_STRUCTURES undefined, all `#if 0`
+- `PM_NAMES` -- the COMPLETE C ordering of all 383 monster types
+  (default build: CHARON undefined; MAIL_STRUCTURES always defined in
+  5.0 (global.h), so the mail daemon IS in the table; all `#if 0`
   blocks excluded).  This is recorded even though only a subset of the
   table is implemented, so the PM_ numbering is fixed once and the
   remaining ~90% can be completed later without renumbering anything;
@@ -482,7 +483,7 @@ def _mon(pmidx, mlet, name, lvl, mov, ac, mr, aln, geno,
 
 
 # ------------------------------------------------------------
-# The complete C ordering (all 382 types, default build).
+# The complete C ordering (all 383 types, default build).
 # Recorded so the PM_ numbering is fixed for the later completion
 # pass of the remaining ~90% of monsters.h.
 # ------------------------------------------------------------
@@ -583,6 +584,7 @@ PM_NAMES: Tuple[str, ...] = (
     "Juiblex", "Yeenoghu", "Orcus", "Geryon", "Dispater",
     "Baalzebub", "Asmodeus", "Demogorgon",
     "Death", "Pestilence", "Famine",
+    "mail daemon",  # MAIL_STRUCTURES is always defined in 5.0
     "djinni",
     "jellyfish", "piranha", "shark", "giant eel", "electric eel",
     "kraken",
@@ -606,11 +608,11 @@ PM_NAMES: Tuple[str, ...] = (
     "warrior", "apprentice",
 )
 
-NUMMONS = 382
+NUMMONS = 383
 HIGH_PM = NUMMONS - 1
 # mons[SPECIAL_PM..HIGH_PM] are never generated randomly and cannot be
 # polymorphed into (permonst.h)
-SPECIAL_PM = 329
+SPECIAL_PM = 330
 
 # PM_ identifiers the game code refers to (subset + anchors)
 PM_COCKATRICE = 10
@@ -653,7 +655,8 @@ PM_SKELETON = 248
 PM_FLESH_GOLEM = 255
 PM_STONE_GOLEM = 257
 PM_GHOST = 287
-PM_LONG_WORM_TAIL = 329
+PM_MAIL_DAEMON = 314
+PM_LONG_WORM_TAIL = 330
 
 SUBSET_PM = (
     PM_COCKATRICE, PM_IMP, PM_QUASIT, PM_KOBOLD, PM_LARGE_KOBOLD,
@@ -1063,7 +1066,7 @@ MONS[PM_GHOST] = _mon(
 # dummy monster for the visual interface; the anchor of the
 # "never generated randomly" section (permonst.h SPECIAL_PM)
 MONS[PM_LONG_WORM_TAIL] = _mon(
-    329, S_WORM_TAIL, "long worm tail",
+    330, S_WORM_TAIL, "long worm tail",
     0, 0, 0, 0, 0, G_NOGEN | G_NOCORPSE | G_UNIQ,
     NO_ATK, NO_ATK, NO_ATK, NO_ATK, NO_ATK, NO_ATK,
     0, 0, 0, 0, 0, 0, 0, M2_NOPOLY, 0, 1, 3)
@@ -1117,6 +1120,7 @@ def _validate() -> None:
         PM_COCKATRICE: "cockatrice", PM_BAT: "bat",
         PM_GRAY_DRAGON: "gray dragon", PM_BLACK_DRAGON: "black dragon",
         PM_YELLOW_DRAGON: "yellow dragon", PM_GHOST: "ghost",
+        PM_MAIL_DAEMON: "mail daemon",
         PM_LONG_WORM_TAIL: "long worm tail", PM_SKELETON: "skeleton",
     }
     for idx, name in anchors.items():
