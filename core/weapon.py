@@ -621,6 +621,7 @@ def dmgval(otmp: ObjLike, mon: MonLike, rng) -> int:
     if otyp == O.CREAM_PIE.value:
         return 0
 
+    tmp = 0
     # base damage: an exact die of the table's max small/large damage
     if bigmonst(pm):
         base = OBJECTS[otyp].wldam
@@ -1184,7 +1185,7 @@ NEED_PICK_OR_AXE = 5
 NO_WEAPON_WANTED = 6
 
 # "weapons" a monster knows how to throw, in order of preference
-# (C: rwep[])
+# (C: rwep[]); the gray stones are GEM_CLASS in the 5.0 table
 RWERP: Tuple[int, ...] = (
     O.DWARVISH_SPEAR.value, O.SILVER_SPEAR.value, O.ELVEN_SPEAR.value,
     O.SPEAR.value, O.ORCISH_SPEAR.value, O.JAVELIN.value,
@@ -1356,12 +1357,14 @@ def _validate() -> None:
             assert OBJECTS[idx].name is not None, (skill, idx)
         elif idx < 0 and idx != -1:  # -1 is the bare-handed special case
             assert 1 <= -idx < len(_ODD_SKILL_NAMES), (skill, idx)
-    # the monster preference tables are real weapon/tool/food types
+    # the monster preference tables are real weapon/tool/food/gem types
+    # (the gray stones in RWERP are GEM_CLASS in the 5.0 table)
     for otyp in RWERP + PWERP + HWEP:
         assert 0 <= otyp < NUM_OBJECTS, otyp
         assert int(OBJECTS[otyp].oclass) in (int(ObjClass.WEAPON),
                                              int(ObjClass.TOOL),
-                                             int(ObjClass.FOOD)), otyp
+                                             int(ObjClass.FOOD),
+                                             int(ObjClass.GEM)), otyp
     # the gem-sling hook in select_rwep fires at DART in RWERP order
     assert RWERP.index(O.DART.value) > RWERP.index(O.LUCKSTONE.value)
     # the level->bonus tables cover every non-restricted level
@@ -1394,8 +1397,8 @@ __all__ = [
     "is_graystone", "is_poisonable", "matching_launcher",
     "ammo_and_launcher", "greatest_erosion",
     # hit/damage
-    "CombatCtx", "PM_SHADE", "HIT_BONUS_SOURCES", "hitval", "_Extra",
-    "_DMG_EXTRA_LARGE", "_DMG_EXTRA_SMALL", "DMG_BONUS_SOURCES", "dmgval",
+    "CombatCtx", "PM_SHADE", "HIT_BONUS_SOURCES", "hitval",
+    "DMG_BONUS_SOURCES", "dmgval",
     "WT_IRON_BALL_INCR", "WT_IRON_BALL_BASE",
     # ability bonuses
     "STR18", "abon", "dbon",

@@ -10,16 +10,16 @@ from core.mondata import hates_blessings, hates_silver
 from core.monst import (M1_THICK_HIDE, MONS, PM_GARTER_SNAKE, PM_GOBLIN,
                         PM_GRAY_DRAGON, PM_GHOST, PM_NAMES,
                         PM_STONE_GOLEM, PM_VAMPIRE)
-from core.objects import (Material, ObjType as O, OBJECTS, PIERCE,
+from core.objects import (ObjClass, ObjType as O, OBJECTS, PIERCE,
                           Skill, WHACK)
 from core.weapon import (
-    DefSkill, P_BASIC, P_EXPERT, P_MASTER, P_SKILLED, P_UNSKILLED,
-    P_GRAND_MASTER, RWERP, Skills, abon, advance_skill,
-    add_weapon_skill, ammo_and_launcher, bimanual, can_advance,
-    dbon, dmgval, drain_weapon_skill, hitval, is_ammo, is_axe,
-    is_blade, is_blunt_weapon, is_graystone, is_launcher, is_multigen,
-    is_pick, is_pole, is_spear, is_weptool, is_wet_towel,
-    lose_weapon_skill, matching_launcher, peaked_skill, practice_needed,
+    DefSkill, P_BASIC, P_EXPERT, P_GRAND_MASTER, P_MASTER, P_SKILLED,
+    P_UNSKILLED, RWERP, Skills, abon, advance_skill, add_weapon_skill,
+    ammo_and_launcher, bimanual, can_advance, could_advance, dbon,
+    dmgval, drain_weapon_skill, hitval, is_ammo, is_axe, is_blade,
+    is_blunt_weapon, is_graystone, is_launcher, is_multigen, is_pick,
+    is_pole, is_spear, is_weptool, is_wet_towel, lose_weapon_skill,
+    matching_launcher, peaked_skill, practice_needed_to_advance,
     skill_init, use_skill, weapon_hit_bonus, weapon_dam_bonus,
     weapon_type,
 )
@@ -297,7 +297,7 @@ def test_skill_init_role_flow():
     s = Skills()
     table = (DefSkill(Skill.P_DAGGER, P_SKILLED),
              DefSkill(Skill.P_BOW, P_EXPERT),
-             DefSkill(Skill.P_BARE_HANDED_COMBAT, P_SKILLED))
+             DefSkill(Skill.P_BARE_HANDED_COMBAT, P_MASTER))
     skill_init(s, table, held=(int(O.DAGGER), int(O.ARROW)), role="")
     # carried dagger -> basic; carried arrows (ammo) -> no bow skill
     assert s.skill[Skill.P_DAGGER] == P_BASIC
@@ -307,7 +307,7 @@ def test_skill_init_role_flow():
     # advance is seeded one step below the current level
     assert s.advance[Skill.P_DAGGER] == practice_needed_to_advance(P_BASIC - 1)
     assert s.advance[Skill.P_BOW] == 0
-    # high-potential hands: max > expert starts basic
+    # high-potential hands (max > expert) start basic
     assert s.skill[Skill.P_BARE_HANDED_COMBAT] == P_BASIC
     # the P_NONE slot is unrestrictable (C calls unrestrict_weapon_skill
     # with P_NONE via the special-spell default)
@@ -361,9 +361,10 @@ def test_slots_and_advance_cost():
     assert s.weapon_slots == 1 + 1 - 2
     assert msg == "You are now more skilled in dagger."
     assert s.skill_record == [Skill.P_DAGGER] and s.skills_advanced == 1
-    # practice does not reset on advance; skilled->expert needs 180 and 3
+    # practice does not reset on advance; skilled->expert needs 180 and
+    # 3 slots (slots_required reads the CURRENT level)
     use_skill(s, Skill.P_DAGGER, 180)          # 100 + 180 = 280 >= 180
-    add_weapon_skill(s, 2)                     # 1 + 2 = 3 slots
+    add_weapon_skill(s, 3)                     # 0 + 3 = 3 slots
     assert can_advance(s, Skill.P_DAGGER)
     advance_skill(s, Skill.P_DAGGER)
     assert s.skill[Skill.P_DAGGER] == P_EXPERT
@@ -482,38 +483,44 @@ def test_weapon_dam_bonus():
 
 
 # ------------------------------------------------------------
-# data for the mon.c port
+# data for the mon.c port + the stub surface
 # ------------------------------------------------------------
 
 def test_monster_weapon_tables():
-    # every RWERP entry is a weapon, weptool, stone, or the cream pie
-    from core.objects import ObjClass
+    # every table entry is a real weapon/tool/food/gem type (the gray
+    # stones in RWERP are GEM_CLASS in the 5.0 table)
     for otyp in RWERP:
         assert int(OBJECTS[otyp].oclass) in (
-            int(ObjClass.WEAPON), int(ObjClass.TOOL), int(ObjClass.FOOD)), otyp
-    # the throw-and-return table resolves
-    from core.weapon import autoreturn_weapon
+            int(ObjClass.WEAPON), int(ObjClass.TOOL), int(ObjClass.FOOD),
+            int(ObjClass.GEM)), otyp
+    from core.weapon import autoreturn_weapon, monmightthrowwep
     assert autoreturn_weapon(obj("AKLYS")).tethered == 1
     assert autoreturn_weapon(obj("BOOMERANG")) is None
-    from core.weapon import monmightthrowwep
     assert monmightthrowwep(obj("DAGGER"))
     assert not monmightthrowwep(obj("BULLWHIP"))
 
 
 def test_stubs_raise():
-    from core.weapon import (enhance_weapon_skill, mon_wield_item,
-                             possibly_unwield, select_hwep, select_rwep,
+    from core.weapon import (add_skills_to_menu, enhance_weapon_skill,
+                             mon_wield_item, mwepgone, possibly_unwield,
+                             select_hwep, select_rwep, setmnotwielded,
                              silver_sears, show_skills, special_dmgval)
-    for fn in (enhance_weapon_skill, show_skills, select_hwep):
+    calls = (
+        (enhance_weapon_skill, ()),
+        (show_skills, ()),
+        (add_skills_to_menu, (None, True, False)),
+        (select_rwep, (None,)),
+        (select_hwep, (None,)),
+        (possibly_unwield, (None,)),
+        (mon_wield_item, (None,)),
+        (mwepgone, (None,)),
+        (setmnotwielded, (None, None)),
+        (special_dmgval, (None, None, 0)),
+        (silver_sears, (None, None, 0)),
+    )
+    for fn, args in calls:
         try:
-            fn() if fn not in (select_hwep,) else fn(None)
-            raise AssertionError(f"{fn.__name__} did not raise")
-        except NotImplementedError:
-            pass
-    for fn in (select_rwep, possibly_unwield, mon_wield_item, special_dmgval,
-               silver_sears):
-        try:
-            fn(None, None, None, None)
+            fn(*args)
             raise AssertionError(f"{fn.__name__} did not raise")
         except NotImplementedError:
             pass
