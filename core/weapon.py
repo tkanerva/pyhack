@@ -25,8 +25,8 @@ Included:
   15-case extra-damage switch is two auditable otyp tables
   (_DMG_EXTRA_LARGE / _DMG_EXTRA_SMALL with a roll spec), and the
   independent "weapon vs. monster" bonuses are an ordered list of named
-  source functions that the caller SUMS (all sources may fire; the C
-  ifs are independent, and the list order is the RNG draw order);
+  source functions that the caller SUMS (all sources may fire; the list
+  order is the RNG draw order);
 - the skill system: skill_name / skill_level_name / weapon_descr,
   slots_required, can_advance, could_advance, peaked_skill,
   advance_skill, use_skill, add_weapon_skill, lose_weapon_skill,
@@ -40,6 +40,10 @@ Included:
 - the monster weapon preference tables RWERP / PWERP / HWEP / ARWEP
   (data for the mon.c port) with autoreturn_weapon() and
   monmightthrowwep(), plus the weapon_check state constants.
+
+The tables are checked by `_validate()`.  It runs from the test
+suite (tests/test_weapon.py) and via `python -m core.weapon`, NOT
+at import time, so importing this module has no side effects.
 
 5.0 note (observed, not a bug): the 5.0 WEPTOOL macro puts the strike
 mode (WHACK/PIERCE) in the oc_hitbon slot, so a wielded pick-axe or
@@ -97,9 +101,22 @@ class ObjLike(Protocol):
 
 
 class MonLike(Protocol):
-    """A monster instance as far as hitval()/dmgval() care (C:
-    struct monst): it needs its base type (C: mon->data)."""
+    """A monster instance as far as the weapon code cares (C:
+    struct monst): its base type (C: mon->data) for hitval() /
+    dmgval().  The monster-weapon stubs take the same shape until the
+    mon.c port widens it (minvent, mw, weapon_check, LOS)."""
     mdata: PerMonst
+
+
+class RngLike(Protocol):
+    """The shape of the game RNG as far as the weapon code cares
+    (C: the global RNG functions of rnd.c).  The real implementation
+    is core.rnd.Rng; tests pass stand-ins that preset the draws.
+    Named are exactly the draws this module makes: rnd(x) in [1, x],
+    rn2(x) in [0, x), d(n, x) as n dice of x."""
+    def rnd(self, n: int) -> int: ...
+    def rn2(self, n: int) -> int: ...
+    def d(self, n: int, x: int) -> int: ...
 
 
 # ------------------------------------------------------------
@@ -243,16 +260,12 @@ def weapon_type(otmp: Optional[ObjLike]) -> int:
     P_NONE; None (no weapon) is bare-handed combat."""
     if otmp is None:
         return int(Skill.P_BARE_HANDED_COMBAT)
-    ocls = int(otmp.oclass)
-    if ocls not in (int(ObjClass.WEAPON), int(ObjClass.TOOL),
-                    int(ObjClass.GEM)):
-        return int(Skill.P_NONE)
-    t = OBJECTS[int(otmp.otyp)].subtyp
-    return -t if t < 0 else t
+    return _weapon_type_otyp(int(otmp.otyp))
 
 
 def _weapon_type_otyp(otyp: int) -> int:
-    """Table-level weapon_type() (for skill_init over otypes)."""
+    """The table-level primitive that weapon_type() delegates to (for
+    table-driven contexts like skill_init over otypes)."""
     o = OBJECTS[otyp]
     ocls = int(o.oclass)
     if ocls not in (int(ObjClass.WEAPON), int(ObjClass.TOOL),
@@ -264,14 +277,12 @@ def _weapon_type_otyp(otyp: int) -> int:
 def is_ammo(otmp: ObjLike) -> bool:
     """C: is_ammo -- launcher ammunition (arrows, bolts, sling
     stones/gems)."""
-    ocls = int(otmp.oclass)
-    if ocls not in (int(ObjClass.WEAPON), int(ObjClass.GEM)):
-        return False
-    t = OBJECTS[int(otmp.otyp)].subtyp
-    return -int(Skill.P_CROSSBOW) <= t <= -int(Skill.P_BOW)
+    return _is_ammo_otyp(int(otmp.otyp))
 
 
 def _is_ammo_otyp(otyp: int) -> bool:
+    """The table-level primitive that is_ammo() delegates to (for
+    table-driven contexts like skill_init over otypes)."""
     o = OBJECTS[otyp]
     ocls = int(o.oclass)
     if ocls not in (int(ObjClass.WEAPON), int(ObjClass.GEM)):
@@ -397,7 +408,7 @@ def is_poisonable(otmp: ObjLike, permapoisoned: bool = False) -> bool:
     return permapoisoned
 
 
-def matching_launcher(ammo: ObjLike, launcher) -> bool:
+def matching_launcher(ammo: ObjLike, launcher: Optional[ObjLike]) -> bool:
     """C: matching_launcher -- the ammo's skill is the negation of the
     launcher's (arrows<->bows, bolts<->crossbows, stones<->slings)."""
     if launcher is None:
@@ -406,7 +417,7 @@ def matching_launcher(ammo: ObjLike, launcher) -> bool:
             == -OBJECTS[int(launcher.otyp)].subtyp)
 
 
-def ammo_and_launcher(ammo: ObjLike, launcher) -> bool:
+def ammo_and_launcher(ammo: ObjLike, launcher: Optional[ObjLike]) -> bool:
     """C: ammo_and_launcher."""
     return is_ammo(ammo) and matching_launcher(ammo, launcher)
 
@@ -518,7 +529,7 @@ class _Extra:
     d: int = 0
 
 
-def _roll_extra(extra: _Extra, rng) -> int:
+def _roll_extra(extra: _Extra, rng: RngLike) -> int:
     if extra.kind == "one":
         return 1
     if extra.kind == "rnd":
@@ -580,19 +591,19 @@ WT_IRON_BALL_INCR = 160  # weight increment of heavy iron ball
 WT_IRON_BALL_BASE = 480  # base starting weight of iron ball
 
 
-def _blessed_dmg(ctx: CombatCtx, rng) -> int:
+def _blessed_dmg(ctx: CombatCtx, rng: RngLike) -> int:
     if ctx.obj.blessed and hates_blessings(ctx.pm):
         return rng.rnd(4)
     return 0
 
 
-def _axe_dmg(ctx: CombatCtx, rng) -> int:
+def _axe_dmg(ctx: CombatCtx, rng: RngLike) -> int:
     if is_axe(ctx.obj) and is_wooden(ctx.pm):
         return rng.rnd(4)
     return 0
 
 
-def _silver_dmg(ctx: CombatCtx, rng) -> int:
+def _silver_dmg(ctx: CombatCtx, rng: RngLike) -> int:
     if (OBJECTS[int(ctx.obj.otyp)].material == Material.SILVER
             and hates_silver(ctx.pm)):
         return rng.rnd(20)
@@ -607,7 +618,7 @@ DMG_BONUS_SOURCES = (_blessed_dmg, _axe_dmg, _silver_dmg)
 #  -> bonus = (bonus + 1) / 2).
 
 
-def dmgval(otmp: ObjLike, mon: MonLike, rng) -> int:
+def dmgval(otmp: ObjLike, mon: MonLike, rng: RngLike) -> int:
     """The damage bonus of weapon `otmp` against monster `mon`
     (C: dmgval).  `rng` is the game RNG (C: the global RNG); rolls
     happen only when the corresponding bonus actually applies.
@@ -913,7 +924,7 @@ def lose_weapon_skill(skills: Skills, n: int) -> None:
             skills.weapon_slots = slots_required(skills, skill) - 1
 
 
-def drain_weapon_skill(skills: Skills, n: int, rng) -> List[str]:
+def drain_weapon_skill(skills: Skills, n: int, rng: RngLike) -> List[str]:
     """C: drain_weapon_skill -- lose `n` skills (randomly chosen);
     returns the "you forget" messages."""
     msgs: List[str] = []
@@ -1038,9 +1049,9 @@ _TWC_DAM_BY_LEVEL = {P_ISRESTRICTED: -3, P_UNSKILLED: -3, P_BASIC: -1,
                      P_SKILLED: 0, P_EXPERT: 1}
 
 
-def weapon_hit_bonus(skills: Skills, otmp, twoweap: bool = False,
-                     in_hands: bool = False, mounted: bool = False,
-                     martial: bool = False) -> int:
+def weapon_hit_bonus(skills: Skills, otmp: Optional[ObjLike],
+                     twoweap: bool = False, in_hands: bool = False,
+                     mounted: bool = False, martial: bool = False) -> int:
     """Hit bonus/penalty based on skill of weapon (C:
     weapon_hit_bonus).  `otmp` may be None (bare-handed combat).
     `in_hands` is C's (weapon == uwep || weapon == uswapwep);
@@ -1085,9 +1096,9 @@ def weapon_hit_bonus(skills: Skills, otmp, twoweap: bool = False,
     return bonus
 
 
-def weapon_dam_bonus(skills: Skills, otmp, twoweap: bool = False,
-                     in_hands: bool = False, mounted: bool = False,
-                     martial: bool = False) -> int:
+def weapon_dam_bonus(skills: Skills, otmp: Optional[ObjLike],
+                     twoweap: bool = False, in_hands: bool = False,
+                     mounted: bool = False, martial: bool = False) -> int:
     """Damage bonus/penalty based on skill of weapon (C:
     weapon_dam_bonus); parameters as in weapon_hit_bonus()."""
     wep_type = weapon_type(otmp)
@@ -1125,7 +1136,7 @@ def weapon_dam_bonus(skills: Skills, otmp, twoweap: bool = False,
     return bonus
 
 
-def uwep_skill_type(twoweap: bool, uwep) -> int:
+def uwep_skill_type(twoweap: bool, uwep: Optional[ObjLike]) -> int:
     """C: uwep_skill_type."""
     if twoweap:
         return int(Skill.P_TWO_WEAPON_COMBAT)
@@ -1263,7 +1274,8 @@ def monmightthrowwep(otmp: ObjLike) -> bool:
     return int(otmp.otyp) in RWERP
 
 
-def select_rwep(mon, rng=None):
+def select_rwep(mon: MonLike,
+                rng: Optional[RngLike] = None) -> Optional[ObjLike]:
     """STUB (mon.c port): select a ranged weapon for the monster (C:
     select_rwep).  Needs the per-instance monster model: minvent,
     mw/weapon_check, misc_worn_check, mux/muy, couldsee, the
@@ -1274,36 +1286,37 @@ def select_rwep(mon, rng=None):
     raise NotImplementedError("select_rwep: stub until the mon.c port")
 
 
-def select_hwep(mon):
+def select_hwep(mon: MonLike) -> Optional[ObjLike]:
     """STUB (mon.c port): select a hand-to-hand weapon for the monster
     (C: select_hwep; the preference order is HWEP above)."""
     raise NotImplementedError("select_hwep: stub until the mon.c port")
 
 
-def possibly_unwield(mon, polyspot: bool = False):
+def possibly_unwield(mon: MonLike, polyspot: bool = False) -> None:
     """STUB (mon.c port) -- C: possibly_unwield (called after
     polymorphing a monster, robbing it, etc.)."""
     raise NotImplementedError("possibly_unwield: stub until the mon.c port")
 
 
-def mon_wield_item(mon) -> int:
+def mon_wield_item(mon: MonLike) -> int:
     """STUB (mon.c port) -- C: mon_wield_item (returns 1 if the
     monster took time to wield)."""
     raise NotImplementedError("mon_wield_item: stub until the mon.c port")
 
 
-def mwepgone(mon):
+def mwepgone(mon: MonLike) -> None:
     """STUB (mon.c port) -- C: mwepgone (force a monster to stop
     wielding its current weapon)."""
     raise NotImplementedError("mwepgone: stub until the mon.c port")
 
 
-def setmnotwielded(mon, obj):
+def setmnotwielded(mon: MonLike, obj: ObjLike) -> None:
     """STUB (mon.c port) -- C: setmnotwielded."""
     raise NotImplementedError("setmnotwielded: stub until the mon.c port")
 
 
-def special_dmgval(magr, mdef, armask, silverhit_p=None):
+def special_dmgval(magr: MonLike, mdef: MonLike, armask: int,
+                   silverhit_p: Optional[int] = None) -> int:
     """STUB (do_wear.c/worn.c port): blessed/silver damage for a
     non-weapon hit (C: special_dmgval).  Needs the hero equipment
     (which_armor, uleft/uright)."""
@@ -1311,7 +1324,7 @@ def special_dmgval(magr, mdef, armask, silverhit_p=None):
         "special_dmgval: stub until the equipment port")
 
 
-def silver_sears(magr, mdef, silverhit):
+def silver_sears(magr: MonLike, mdef: MonLike, silverhit: int) -> None:
     """STUB (do_wear.c/worn.c port) -- C: silver_sears message."""
     raise NotImplementedError(
         "silver_sears: stub until the equipment port")
@@ -1325,7 +1338,7 @@ SKILL_RANGES: Tuple[Tuple[int, int, str], ...] = (
 )
 
 
-def add_skills_to_menu(win, selectable: bool, speedy: bool):
+def add_skills_to_menu(win, selectable: bool, speedy: bool) -> None:
     """STUB (cmd.c port): write the skills onto a menu (C:
     add_skills_to_menu).  The pure parts it uses (can_advance /
     could_advance / peaked_skill / skill_level_name) are real here."""
@@ -1333,12 +1346,12 @@ def add_skills_to_menu(win, selectable: bool, speedy: bool):
         "add_skills_to_menu: stub until the cmd.c port")
 
 
-def show_skills():
+def show_skills() -> None:
     """STUB (cmd.c port) -- C: show_skills (the #skills dump)."""
     raise NotImplementedError("show_skills: stub until the cmd.c port")
 
 
-def enhance_weapon_skill():
+def enhance_weapon_skill() -> None:
     """STUB (cmd.c port) -- C: enhance_weapon_skill (#enhance).  Uses
     advance_skill() once the menu machinery exists."""
     raise NotImplementedError(
@@ -1346,7 +1359,8 @@ def enhance_weapon_skill():
 
 
 # ------------------------------------------------------------
-# Import-time validation
+# Validation (run by the test suite and `python -m core.weapon`;
+# deliberately NOT at import time)
 # ------------------------------------------------------------
 
 def _validate() -> None:
@@ -1378,12 +1392,13 @@ def _validate() -> None:
         assert 0 <= otyp < NUM_OBJECTS, otyp
 
 
-_validate()
+if __name__ == "__main__":
+    _validate()
 
 
 __all__ = [
     # structural shapes
-    "ObjLike", "MonLike",
+    "ObjLike", "MonLike", "RngLike",
     # skills.h
     "P_ISRESTRICTED", "P_UNSKILLED", "P_BASIC", "P_SKILLED", "P_EXPERT",
     "P_MASTER", "P_GRAND_MASTER", "P_FIRST_WEAPON", "P_LAST_WEAPON",
