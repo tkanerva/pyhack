@@ -172,3 +172,73 @@ def test_distance_attack_classification():
     assert M.distance_atk_type(d.mattk[0].aatyp)   # breath
     g = MONS[M.PM_GOBLIN]
     assert not M.distance_atk_type(g.mattk[0].aatyp)  # weapon
+
+
+def test_validate():
+    # the table self-checks (PM ordering, subset sparsity, field
+    # widths); it runs here and via `python -m core.monst`, not at
+    # import time
+    monst._validate()
+
+
+def test_constants_are_enums():
+    # the C-style names are real enum members, not bare ints
+    assert isinstance(M.S_ORC, M.MonsterClass)
+    assert isinstance(M.S_WORM_TAIL, M.MonsterClass)
+    assert isinstance(M.AT_WEAP, M.AtkType)
+    assert isinstance(M.AD_DRLI, M.DmgType)
+    assert isinstance(M.MR_POISON, M.MR)
+    assert isinstance(M.MR2_LEVITATE, M.MR)
+    assert isinstance(M.M1_FLY, M.M1)
+    assert isinstance(M.M2_UNDEAD, M.M2)
+    assert isinstance(M.M3_INFRAVISION, M.M3)
+    assert isinstance(M.MZ_SMALL, M.MSize)
+    assert isinstance(M.MS_HISS, M.MSound)
+    assert isinstance(M.G_NOGEN, M.Geno)
+    assert isinstance(M.G_IGNORE, M.Geno)
+    assert isinstance(M.G_GENOD, M.MvitalsFlag)
+    assert isinstance(M.NEUTRAL, M.MGender)
+    # and they still behave as plain ints, so C-style arithmetic works
+    assert M.S_ORC == 15
+    assert M.M1_FLY == 1
+    assert M.G_GENO | 2 == 0x22
+
+
+def test_flag_combinations():
+    # IntFlag: combining stays a flag, membership is a subset check,
+    # and the str() of a combination is readable
+    g = MONS[M.PM_GOBLIN]
+    assert isinstance(g.mflags1, M.M1)
+    assert M.M1_HUMANOID in g.mflags1
+    assert M.M1_OMNIVORE in g.mflags1
+    assert not (g.mflags1 & M.M1_FLY)
+    assert "HUMANOID" in str(g.mflags1)
+    # the C-defined combined masks work as masks and equal their
+    # component combinations
+    t = MONS[M.PM_TROLL]
+    assert t.mflags1 & M.M1_REGEN
+    assert M.M1_REGEN in t.mflags1
+    s = MONS[M.PM_GARTER_SNAKE]
+    assert (s.mflags1 & M.M1_NOLIMBS) == M.M1_NOLIMBS
+    assert M.M1_NOLIMBS == (M.M1_NOEYES | M.M1_NOHANDS)
+    assert M.M1_OMNIVORE == (M.M1_CARNIVORE | M.M1_HERBIVORE)
+    assert M.M3_COVETOUS == M.M3_WANTSALL
+    assert M.M3_WAITMASK == (M.M3_WAITFORU | M.M3_CLOSE)
+
+
+def test_enum_field_values():
+    # PerMonst carries enum members in its typed fields
+    c = MONS[M.PM_COCKATRICE]
+    assert isinstance(c.mlet, M.MonsterClass)
+    assert c.mlet == M.S_COCKATRICE
+    assert isinstance(c.mattk[0].aatyp, M.AtkType)
+    assert isinstance(c.mattk[0].adtyp, M.DmgType)
+    assert isinstance(c.mresists, M.MR)
+    assert isinstance(c.mconveys, M.MR)
+    assert c.mresists == (M.MR_POISON | M.MR_STONE)
+    g = MONS[M.PM_GOBLIN]
+    assert isinstance(g.msound, M.MSound)
+    assert isinstance(g.msize, M.MSize)
+    assert isinstance(g.mflags1, M.M1)
+    assert isinstance(g.mflags2, M.M2)
+    assert isinstance(g.mflags3, M.M3)
