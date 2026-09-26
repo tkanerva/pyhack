@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from core.commands import Command, MoveCommand, WaitCommand
+from core.items import wielded_of
 from core.types import World
 
 # The old code lower-cased the key before comparing against "\x1b[A",
@@ -62,8 +63,10 @@ def render(world: World, log: List[str]) -> str:
         lines.append("".join(row))
 
     hero = world.hero
+    weapon = wielded_of(world, hero.id)
+    weapon_name = weapon.name if weapon is not None else "bare hands"
     lines.append("")
-    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | 💥 Damage Taken: {hero.max_hp - hero.hp}")
+    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}")
     lines.append("")
     lines.append("📜 Log:")
     if log:

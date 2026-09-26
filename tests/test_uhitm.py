@@ -8,9 +8,11 @@ AND on the resulting world state after processing / stepping.
 from core import MoveCommand, step
 from core.events import DamageEvent, MessageEvent
 from core.monst import MONS, PM_BAT, PM_GOBLIN, PM_OGRE, PM_ZRUTY
+from core.objects import ObjClass, ObjType
 from core.rules import process_events
-from core.types import DamageType, Monster
+from core.types import DamageType, Item, Monster, ObjectType
 from core.uhitm import backstabbable, hmonas, known_hitum, uhitm
+from core.weapon import P_SKILLED, Skill, Skills
 from conftest import SeqRng, make_hero, make_world
 
 
@@ -102,6 +104,92 @@ def test_process_events_applies_uhitm_damage():
     out = process_events(w, ev, SeqRng())
     assert g.hp == 6
     assert any(isinstance(e, DamageEvent) and e.target == g.id for e in out)
+
+
+# ------------------------------------------------------------
+# the weapon path (the demo's melee-weapon subset)
+# ------------------------------------------------------------
+
+def _sword() -> Item:
+    """The demo's starting weapon (same wiring as worldgen)."""
+    return Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
+                otyp=int(ObjType.SHORT_SWORD),
+                oclass=int(ObjClass.WEAPON))
+
+
+def _hero_with_sword(**kw):
+    """The demo hero (worldgen's wiring): wields the short sword, is
+    P_SKILLED with it, ulevel 1 / ustr 12 / udex 12.  The to-hit bonus
+    that results: weapon_hit_bonus(+2) + abon(12,12,1)(+1) +
+    hitval(short sword)(0) = +3."""
+    hero = make_hero(**kw)
+    hero.ulevel, hero.ustr, hero.udex = 1, 12, 12
+    skills = Skills()
+    skills.skill[int(Skill.P_SHORT_SWORD)] = P_SKILLED
+    skills.max_skill[int(Skill.P_SHORT_SWORD)] = P_SKILLED
+    hero.skills = skills
+    sword = _sword()
+    hero.inventory.append(sword)
+    hero.wielded = sword.id
+    return hero, sword
+
+
+def test_uhitm_weapon_hit_rolls_the_weapon_path():
+    hero, sword = _hero_with_sword()
+    w = make_world(hero=hero)
+    w.items[sword.id] = sword
+    g = _typed(PM_GOBLIN)
+    w.actors[g.id] = g
+    # threshold = 20 - 10 + 3 = 13 ; roll 5 -> hit ; dmg 1d6 -> 4
+    ev = uhitm(w, g.id, SeqRng(5, 4))
+    assert g.hp == 8 and w.hero.hp == 25    # producer mutates nothing
+    de = [e for e in ev if isinstance(e, DamageEvent)]
+    assert len(de) == 1
+    assert de[0].target == g.id and de[0].amount == 4
+    assert de[0].damage_type == DamageType.MELEE and de[0].source == "player"
+    assert any(isinstance(e, MessageEvent)
+               and e.text == "⚔️ You hit goblin for 4 damage with "
+                             "your short sword." for e in ev)
+
+
+def test_uhitm_weapon_threshold_includes_the_bonus():
+    # a roll of 13 hits WITH the +3 bonus (the bare-hand base of 10
+    # would miss it)
+    hero, sword = _hero_with_sword()
+    w = make_world(hero=hero)
+    w.items[sword.id] = sword
+    g = _typed(PM_GOBLIN)
+    w.actors[g.id] = g
+    ev = uhitm(w, g.id, SeqRng(13, 2))
+    assert any(isinstance(e, DamageEvent) and e.amount == 2 for e in ev)
+    # ...and a roll of 14 still misses
+    ev = uhitm(w, g.id, SeqRng(14))
+    assert ev == [MessageEvent("🛡️ You miss.")]
+
+
+def test_uhitm_weapon_miss():
+    hero, sword = _hero_with_sword()
+    w = make_world(hero=hero)
+    w.items[sword.id] = sword
+    g = _typed(PM_GOBLIN)
+    w.actors[g.id] = g
+    # threshold 13 ; roll 20 -> miss (no damage roll is made)
+    ev = uhitm(w, g.id, SeqRng(20))
+    assert ev == [MessageEvent("🛡️ You miss.")]
+
+
+def test_uhitm_no_wielded_weapon_keeps_bare_hand_path():
+    """A typed target + a hero without a wielded weapon stays on the
+    bare-hand path (regression guard for the weapon wiring)."""
+    w = make_world()                       # plain hero, no weapon
+    g = _typed(PM_GOBLIN)
+    w.actors[g.id] = g
+    # threshold = 20 - 10 = 10 ; roll 5 -> hit ; 1d2 -> 2
+    ev = uhitm(w, g.id, SeqRng(5, 2))
+    assert any(isinstance(e, MessageEvent)
+               and e.text == "⚔️ You hit goblin for 2 damage." for e in ev)
+    assert all("with your" not in e.text
+               for e in ev if isinstance(e, MessageEvent))
 
 
 # ------------------------------------------------------------

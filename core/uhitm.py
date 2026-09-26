@@ -13,37 +13,46 @@ Design notes (per the porting guidelines + architecture):
 - The target is a runtime ``Monster`` that carries a ``PerMonst``
   (``mon.mdata``) -- its AC and special-attack data come from the
   ``core.monst`` / ``core.mondata`` port.  The hero is ``world.hero``
-  (a ``Monster`` with ``is_hero=True``) and attacks with its flat stats
-  (``damage`` = 1d``damage`` bare hands); the hero has no wielded weapon
-  in the runtime yet, so the weapon / skill / magic-hit bonuses are not
-  applied (they come with the hero weapon port -- ``core.weapon`` already
-  provides ``hitval`` / ``dmgval`` for that).
+  (a ``Monster`` with ``is_hero=True``).  The hero attacks bare-handed
+  (``damage`` = 1d``damage``), or -- when it wields a weapon -- with the
+  demo's melee-weapon subset built on the committed ``core.weapon``
+  functions (``hitval`` / ``weapon_hit_bonus`` / ``abon`` for to-hit,
+  ``dmgval`` for damage).
 - ``step`` routes a hero->monster hit here only when the *defender* has
   ``mdata is not None``; flat-stat demo monsters keep the simple
   ``rules.melee_attack`` path.  Symmetric with the mhitu hook.
 - RNG: C's ``rnd(n)`` / ``d(n, x)`` are rolled via the runtime
   ``rng.randint`` duck-type (``_rnd`` / ``_dice``), keeping the module
-  deterministic under the existing seeds.
+  deterministic under the existing seeds.  The weapon path reaches
+  ``core.weapon`` through the ``_RngLike`` adapter, which rolls over the
+  same ``randint`` stream -- determinism is preserved.
 
 Included (implemented and tested):
 
-- ``uhitm`` -- the main entry: roll the to-hit (``known_hitum``) and, on
-  a hit, deal the hero's bare-hand damage as a ``DamageEvent``; on a
+- ``uhitm`` -- the main entry: with a wielded weapon, the melee-weapon
+  attack (below); otherwise the bare-hand attack (roll the to-hit and,
+  on a hit, deal the hero's 1d``damage`` as a ``DamageEvent``); on a
   miss, a "You miss." message;
-- ``known_hitum`` -- the to-hit target number (``20 - monster AC`` in the
-  current runtime; the weapon / skill bonus is deferred);
+- ``known_hitum`` -- the bare-hand to-hit base (``20 - monster AC``;
+  the weapon / skill / ability bonus is added on top by the weapon
+  path);
+- ``_weapon_attack`` / ``_weapon_hit_bonus`` -- the demo's
+  melee-weapon subset: to-hit keeps the repo convention and direction
+  (``threshold = 20 - ac + bonus``, hit if ``d20 <= threshold``; a
+  positive bonus is easier to hit, as in C's ``find_roll_to_hit`` +
+  ``tmp > dieroll`` in uhitm.c), damage is ``weapon.dmgval``;
 - ``backstabbable`` -- the pure "can this monster be backstabbed?"
-  predicate (no backstab bonus is applied yet, since the hero has no
-  one-handed weapon);
-- ``hmonas`` -- "is the hero, as a monster, the same type as the target?"
-  (always False until the hero can be polymorphed).
+  predicate (the backstab *bonus* is not applied -- subset, below);
+- ``hmonas`` -- "is the hero, as a monster, the same type as the
+  target?" (always False until the hero can be polymorphed).
 
 STUBs (raise ``NotImplementedError``; the fill-in replaces a stub, not a
 call site -- the C API surface stays visible):
 
 - ``hitum`` / ``hmon_hitmon`` and the ``hmon_hitmon_*`` family -- the
-  full hit handler (weapon damage, poison, silver, jousting, stagger,
-  cleave, ...); needs the hero weapon / equipment machinery;
+  full hit handler beyond the demo's melee-weapon subset (poison,
+  silver, jousting, stagger, cleave, ...); the basic weapon hit now
+  lives in ``_weapon_attack``;
 - ``hitum_cleave`` -- cleaving to adjacent monsters; needs a weapon;
 - ``double_punch`` -- two-weapon combat; needs the hero weapon slots;
 - ``mhitm_really_poison`` / ``theft_petrifies`` -- poisoned /
@@ -63,8 +72,10 @@ call site -- the C API surface stays visible):
 
 Simplifications (documented, not bugs):
 
-- The hero attacks once with bare hands; no multi-strike, cleave,
-  double-punch, or weapon effects (all deferred, above).
+- The hero attacks once, bare-handed or with the wielded weapon; the
+  weapon path is the demo's subset: no backstab bonus, no multi-strike,
+  cleave, double-punch, or weapon special effects (poison, silver,
+  jousting, ... -- all deferred, above).
 - The monster's defensive reactions (``mdefend``: resist, counter-attack,
   slip free) are not modelled here -- a hit simply deals damage.  Those
   come with the per-instance monster model (the mon.c port).
@@ -78,10 +89,12 @@ from __future__ import annotations
 from typing import List, Optional
 
 from .events import DamageEvent, Event, MessageEvent
+from .items import wielded_of
 from .mondata import is_flyer
 from .monst import (Attack, MZ_LARGE, PerMonst, S_BLOB, S_ELEMENTAL, S_EYE,
                     S_FUNGUS, S_JELLY, S_LIGHT, S_VORTEX)
 from .types import DamageType, Monster, World
+from .weapon import Skills, abon, dmgval, hitval, weapon_hit_bonus
 
 # ------------------------------------------------------------
 # RNG adapters (C rnd/d over the runtime rng.randint duck-type)
@@ -99,19 +112,43 @@ def _dice(rng, n: int, x: int) -> int:
     return sum(rng.randint(1, x) for _ in range(n))
 
 
+class _RngLike:
+    """Adapt the runtime ``randint``/``choice`` rng to ``core.weapon``'s
+    ``RngLike`` protocol.
+
+    Every draw falls through to the same underlying ``randint`` stream
+    this module already rolls through (``rnd(n)`` = ``randint(1, n)``,
+    ``d(n, x)`` = n draws of ``randint(1, x)`` -- the same as ``_dice``),
+    so determinism under the existing seeds is preserved.
+    """
+
+    def __init__(self, rng):
+        self._r = rng
+
+    def rnd(self, n: int) -> int:
+        return self._r.randint(1, n)
+
+    def rn2(self, n: int) -> int:
+        return self._r.randint(0, n - 1)
+
+    def d(self, n: int, x: int) -> int:
+        if n <= 0 or x <= 0:
+            return 0
+        return sum(self._r.randint(1, x) for _ in range(n))
+
+
 # ------------------------------------------------------------
 # To-hit (C: known_hitum)
 # ------------------------------------------------------------
 
 def known_hitum(mon: Monster, hero: Monster) -> int:
-    """The target number the hero must roll (d20) at or under to hit
-    ``mon`` (C: known_hitum).
+    """The bare-hand to-hit base: the target number the hero must roll
+    (d20) at or under to hit ``mon`` (C: known_hitum).
 
-    In the current runtime the hero has no weapon or skill, so the bonus
-    is 0 and the target number is simply ``20 - monster AC`` (the same
-    convention the simple ``rules.melee_attack`` path uses).  The full
-    weapon / skill / magic-hit bonus comes with the hero weapon port
-    (``core.weapon`` already provides ``hitval`` / ``dmgval``).
+    This is ``20 - monster AC`` -- the same convention the simple
+    ``rules.melee_attack`` path uses.  When the hero wields a weapon,
+    ``uhitm`` adds the weapon / skill / ability bonus on top (see
+    ``_weapon_hit_bonus``).
     """
     return 20 - mon.mdata.ac
 
@@ -125,9 +162,8 @@ def backstabbable(mon: Monster) -> bool:
     not fly, is not large or bigger, and has a normal body (not an
     amorphous / eye / light / vortex form).
 
-    The backstab *bonus* is not applied yet because the hero has no
-    one-handed weapon; this predicate is provided for the hero weapon
-    port.
+    The backstab *bonus* is not applied (demo subset); this predicate is
+    provided for the full hero weapon port.
     """
     mdat: Optional[PerMonst] = mon.mdata
     if mdat is None:
@@ -153,16 +189,77 @@ def hmonas(mon: Monster, hero: Monster) -> bool:
 
 
 # ------------------------------------------------------------
+# The melee-weapon path (the demo's weapon subset)
+# ------------------------------------------------------------
+
+def _weapon_hit_bonus(hero: Monster, weapon, mon: Monster) -> int:
+    """The hero's total to-hit bonus with ``weapon`` against ``mon``.
+
+    The demo's subset of C's ``find_roll_to_hit``, as a sum of the
+    committed ``core.weapon`` sources (all pure, no rng draws):
+
+    - the weapon's own bonus (``hitval``: enchantment + the table's
+      hitbon + the special weapon-vs-monster sources; 0 for the demo's
+      plain short sword);
+    - the skill bonus (``weapon_hit_bonus`` over ``hero.skills``);
+    - the strength / dexterity / level bonus (``abon`` over the hero's
+      fixed ``ustr`` / ``udex`` / ``ulevel``).
+
+    The backstab bonus is NOT applied (subset; see the module
+    docstring).
+    """
+    skills = hero.skills if hero.skills is not None else Skills()
+    return (weapon_hit_bonus(skills, weapon)
+            + abon(hero.ustr, hero.udex, hero.ulevel)
+            + hitval(weapon, mon, in_pool=False))
+
+
+def _weapon_attack(mon: Monster, hero: Monster, weapon, rng) -> List[Event]:
+    """The hero's melee weapon attack (C: the ``hmon_hitmon_weapon_melee``
+    subset).
+
+    To-hit keeps the repo convention and direction (cross-checked
+    against NetHack's ``find_roll_to_hit`` + the ``tmp > dieroll`` test
+    in uhitm.c: a positive bonus is easier to hit):
+    ``threshold = 20 - mon.mdata.ac + bonus``, hit if ``d20 <=
+    threshold``.  Damage is ``weapon.dmgval`` (one d``wsdam`` roll for
+    the demo's short sword; its special-effect bonus sources do not
+    apply to the plain starting weapon).  No backstab bonus and no
+    weapon special effects (subset; see the module docstring).
+
+    Like ``uhitm`` this is a producer: it returns the event *intents*
+    and mutates nothing.
+    """
+    threshold = known_hitum(mon, hero) + _weapon_hit_bonus(hero, weapon,
+                                                           mon)
+    roll = _rnd(rng, 20)
+    if roll <= threshold:
+        dmg = dmgval(weapon, mon, _RngLike(rng))
+        events: List[Event] = [
+            MessageEvent(f"⚔️ You hit {mon.name} for {dmg} damage with "
+                         f"your {weapon.name}.")
+        ]
+        if dmg > 0:
+            events.append(DamageEvent(target=mon.id, amount=dmg,
+                                      damage_type=DamageType.MELEE,
+                                      source="player"))
+        return events
+    return [MessageEvent("🛡️ You miss.")]
+
+
+# ------------------------------------------------------------
 # The main entry point (C: uhitm)
 # ------------------------------------------------------------
 
 def uhitm(world: World, mon_id: str, rng) -> List[Event]:
     """The hero attacks the monster at ``mon_id`` (C: uhitm).
 
-    Rolls the to-hit (``known_hitum``) and, on a hit, deals the hero's
-    bare-hand damage as a ``DamageEvent``; on a miss, a "You miss."
-    message.  Returns the list of event *intents* -- it does NOT mutate
-    any state; ``rules.process_events`` applies them.  Targets without a
+    With a wielded weapon the hero makes the melee-weapon attack
+    (``_weapon_attack``); otherwise it rolls the bare-hand to-hit
+    (``known_hitum``) and, on a hit, deals 1d``damage`` as a
+    ``DamageEvent``.  On a miss, a "You miss." message.  Returns the
+    list of event *intents* -- it does NOT mutate any state;
+    ``rules.process_events`` applies them.  Targets without a
     ``PerMonst`` type (``mon.mdata is None``) are not handled here; they
     use the simple melee path in ``step``.
     """
@@ -170,6 +267,9 @@ def uhitm(world: World, mon_id: str, rng) -> List[Event]:
     hero = world.hero
     if mon.mdata is None or not mon.alive or not hero.alive:
         return []
+    weapon = wielded_of(world, hero.id)
+    if weapon is not None:
+        return _weapon_attack(mon, hero, weapon, rng)
 
     threshold = known_hitum(mon, hero)
     roll = _rnd(rng, 20)
@@ -243,14 +343,14 @@ def mhitm_mgc_atk_negated(magr: Monster, mdef: Monster,
                           verbosely: bool) -> bool:
     """STUB (C: mhitm_mgc_atk_negated): whether the target's armor /
     protection negates a magical attack.  Needs the equipment /
-    ``magic_negation`` machinery -- the do_wear / artifact ports."""
+    ``magic_negation`` machinery.  The do_wear / artifact ports."""
     raise NotImplementedError("mhitm_mgc_atk_negated: equipment is not ported yet")
 
 
 def gulpum(mon: Monster, mattk: Attack) -> int:
     """STUB (C: gulpum): the monster swallows the hero (the hero-side of
     the swallow, paired with ``mhitu.gulpmu``).  Needs the swallow
-    machinery -- the mon.c / swallow port."""
+    machinery (the mon.c / swallow port)."""
     raise NotImplementedError("gulpum: swallowing is not ported yet")
 
 
@@ -267,14 +367,13 @@ def start_engulf(mon: Monster) -> None:
 
 
 def end_engulf() -> None:
-    """STUB (C: end_engulf): finish engulfing the hero.  Needs the steed /
-    swallow machinery."""
+    """STUB (C: end_engulf): finish engulfing the hero (on a steed)."""
     raise NotImplementedError("end_engulf: the steed is not ported yet")
 
 
 def demonpet() -> None:
-    """STUB (C: demonpet): a demon pet is summoned for the hero.  Needs
-    the pet machinery -- the pet port."""
+    """STUB (C: demonpet): summon a demon pet for the hero.  Needs the
+    pet machinery -- the pet port."""
     raise NotImplementedError("demonpet: pets are not ported yet")
 
 

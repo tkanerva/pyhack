@@ -49,9 +49,9 @@ bus — and a recorded `(Command, [Event])` sequence *is* a replay.
 | `game.py`     | `core/step.py` + `core/worldgen.py` + `main.py` + `ui/console.py` |
 | `player.py`, `monster.py` | `core/types.py` — one `Monster` dataclass; the hero is a monster with `is_hero=True` |
 | `trap.py`     | `core/traps.py` — data + `TRAP_EFFECTS` registry, no actor |
-| `zap.py`      | `core/zap.py`                               |
-| `potion.py`   | `core/potions.py`                           |
-| `spell.py`    | `core/spells.py`                            |
+| `zap.py`      | `core/zap.py` |
+| `potion.py`   | `core/potions.py` |
+| `spell.py`    | `core/spells.py` |
 | `priest.py`, `pray.py` | **not ported yet** (see below) |
 
 ## Behaviour decisions
@@ -90,6 +90,12 @@ emoji log strings.
 - Wands discharge (consume a charge) even when they hit a wall; beams
   stop at the first monster (NetHack behaviour; the old spell.py beam
   hit everything in range).
+- The demo now plays the committed C-port combat in both directions:
+  the demo monsters carry their PerMonst types (goblin / hill orc /
+  bat; monster->hero hits come from the mhitu attack tables) and the
+  hero starts wielding a short sword (the uhitm melee-weapon subset on
+  weapon.py's hitval / dmgval; backstab and the weapon special effects
+  are deferred).
 
 **Intentional simplifications (documented, not bugs):**
 - Monster AI is still a random walk — no awareness/line-of-sight yet.

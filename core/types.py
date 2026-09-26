@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 if TYPE_CHECKING:  # annotation only -- no runtime import cycle
     from .monst import PerMonst
+    from .weapon import Skills
 
 Pos = Tuple[int, int]
 
@@ -181,6 +182,14 @@ class Item:
     wand_type: Optional[WandType] = None
     potion_type: Optional[PotionType] = None
     spell_type: Optional[SpellType] = None
+    # fine object identity (C: struct obj's otyp / oclass / spe): the
+    # coarse `otype` above stays the class-level tag; these carry the
+    # exact core.objects.OBJECTS row (0 = "not fine").  An Item with
+    # them set is directly ObjLike-compatible for core.weapon (it has
+    # otyp / oclass / spe / blessed).
+    otyp: int = 0
+    oclass: int = 0
+    spe: int = 0
 
 
 # ============================================================
@@ -214,6 +223,14 @@ class Monster:
     is_nonliving: bool = False
     is_flying: bool = False
     inventory: List[Item] = field(default_factory=list)
+    # hero combat state (the demo's weapon subset; see core.uhitm and
+    # core.weapon): the hero wields a starting weapon, and its fixed
+    # abilities feed the to-hit / damage bonuses
+    wielded: Optional[str] = None    # id of the wielded item (C: uwep)
+    ulevel: int = 1                  # hero level (fixed in the demo)
+    ustr: int = 12                   # strength (fixed; no STR18)
+    udex: int = 12                   # dexterity (neutral: no bonus swing)
+    skills: Optional["Skills"] = None  # per-hero weapon-skill state
 
 
 # ============================================================
