@@ -16,6 +16,9 @@ that:
 - `Object`      -- one row of the `objects[]` table
                    (struct objclass in objclass.h)
 - `OBJECTS`     -- the table itself, in C order
+- `BASES`       -- per-class base indices (C: svb.bases[] from
+                   init_objects()); the first row of each class, with
+                   a fencepost at [MAXOCLASSES]
 
 Adaptations (documented, not bugs):
 
@@ -34,7 +37,7 @@ Adaptations (documented, not bugs):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum, IntEnum
+from enum import IntEnum
 
 # ------------------------------------------------------------
 # Colors (color.h)
@@ -437,7 +440,8 @@ _OBJTYPE_NAMES = (
     "BLINDING_VENOM", "ACID_VENOM",
 )
 
-ObjType = Enum("ObjType", {n: i for i, n in enumerate(_OBJTYPE_NAMES)})
+ObjType = IntEnum("ObjType", {n: i for i, n in enumerate(_OBJTYPE_NAMES)})
+O = ObjType  # short alias for table lookups
 
 # C enum markers
 LAST_GENERIC = ObjType.GENERIC_VENOM.value
@@ -685,8 +689,9 @@ def _wand(name, typ, prob, cost, mgc, dir, metal, color) -> Object:
 
 
 def _coin(name, prob, metal, worth) -> Object:
-    # COIN(): BITS(1, 1, 0, -, 0, 0, ...); wt=1, nutrition=0, HI_GOLD
-    return Object(name=name, descr="", oclass=ObjClass.COIN, color=HI_GOLD,
+    # COIN(): BITS(1, 1, 0, -, 0, 0, ...); descr is NoDes (None);
+    # wt=1, nutrition=0, HI_GOLD
+    return Object(name=name, descr=None, oclass=ObjClass.COIN, color=HI_GOLD,
                   prob=prob, weight=1, cost=worth,
                   name_known=True, merge=True, material=metal)
 
@@ -937,14 +942,14 @@ OBJECTS: "list[Object]" = [
            900, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_RED),
     _armor("white dragon scale mail", None, 1, 1, 1, Prop.COLD_RES, 0, 5,
            40, 900, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_WHITE),
-    _armor("orange dragon scale mail", None, 1, 1, 1, Prop.SLEEP_RES, 0,
-           5, 40, 900, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_ORANGE),
-    _armor("black dragon scale mail", None, 1, 1, 1, Prop.DISINT_RES, 0,
-           5, 40, 1200, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_BLACK),
+    _armor("orange dragon scale mail", None, 1, 1, 1, Prop.SLEEP_RES, 0, 5,
+           40, 900, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_ORANGE),
+    _armor("black dragon scale mail", None, 1, 1, 1, Prop.DISINT_RES, 0, 5,
+           40, 1200, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_BLACK),
     _armor("blue dragon scale mail", None, 1, 1, 1, Prop.SHOCK_RES, 0, 5,
            40, 900, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_BLUE),
-    _armor("green dragon scale mail", None, 1, 1, 1, Prop.POISON_RES, 0,
-           5, 40, 900, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_GREEN),
+    _armor("green dragon scale mail", None, 1, 1, 1, Prop.POISON_RES, 0, 5,
+           40, 900, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_GREEN),
     _armor("yellow dragon scale mail", None, 1, 1, 1, Prop.ACID_RES, 0, 5,
            40, 900, 1, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_YELLOW),
     _armor("gray dragon scales", None, 1, 0, 1, Prop.ANTIMAGIC, 0, 5, 40,
@@ -957,14 +962,14 @@ OBJECTS: "list[Object]" = [
            500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_RED),
     _armor("white dragon scales", None, 1, 0, 1, Prop.COLD_RES, 0, 5, 40,
            500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_WHITE),
-    _armor("orange dragon scales", None, 1, 0, 1, Prop.SLEEP_RES, 0, 5,
-           40, 500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_ORANGE),
+    _armor("orange dragon scales", None, 1, 0, 1, Prop.SLEEP_RES, 0, 5, 40,
+           500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_ORANGE),
     _armor("black dragon scales", None, 1, 0, 1, Prop.DISINT_RES, 0, 5, 40,
            700, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_BLACK),
     _armor("blue dragon scales", None, 1, 0, 1, Prop.SHOCK_RES, 0, 5, 40,
            500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_BLUE),
-    _armor("green dragon scales", None, 1, 0, 1, Prop.POISON_RES, 0, 5,
-           40, 500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_GREEN),
+    _armor("green dragon scales", None, 1, 0, 1, Prop.POISON_RES, 0, 5, 40,
+           500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_GREEN),
     _armor("yellow dragon scales", None, 1, 0, 1, Prop.ACID_RES, 0, 5, 40,
            500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_YELLOW),
     # other suits
@@ -1210,11 +1215,9 @@ OBJECTS: "list[Object]" = [
     _tool("leash", None, 1, 0, 0, 0, 65, 12, 20, Material.LEATHER,
           HI_LEATHER),
     _tool("stethoscope", None, 1, 0, 0, 0, 25, 4, 75, Material.IRON, HI_METAL),
-    _tool("tinning kit", None, 1, 0, 0, 1, 15, 100, 30, Material.IRON,
-          HI_METAL),
+    _tool("tinning kit", None, 1, 0, 0, 1, 15, 100, 30, Material.IRON, HI_METAL),
     _tool("tin opener", None, 1, 0, 0, 0, 35, 4, 30, Material.IRON, HI_METAL),
-    _tool("can of grease", None, 1, 0, 0, 1, 15, 15, 20, Material.IRON,
-          HI_METAL),
+    _tool("can of grease", None, 1, 0, 0, 1, 15, 15, 20, Material.IRON, HI_METAL),
     _tool("figurine", None, 1, 0, 1, 0, 25, 50, 80, Material.MINERAL,
           HI_MINERAL),
     _tool("magic marker", None, 1, 0, 1, 1, 15, 2, 50, Material.PLASTIC,
@@ -1413,7 +1416,7 @@ OBJECTS: "list[Object]" = [
            1, 1, IMMEDIATE, CLR_ORANGE),
     _spell("cure blindness", "yellow", Skill.P_HEALING_SPELL, 25, 2, 2, 1,
            IMMEDIATE, CLR_YELLOW),
-    _spell("drain life", "velvet", Skill.P_ATTACK_SPELL, 10, 2, 2, 1,
+    _spell("drain life", "velvet", Skill.P_HEALING_SPELL, 10, 2, 2, 1,
            IMMEDIATE, CLR_MAGENTA),
     _spell("slow monster", "light green", Skill.P_ENCHANTMENT_SPELL, 30,
            2, 2, 1, IMMEDIATE, CLR_BRIGHT_GREEN),
@@ -1623,6 +1626,49 @@ OBJECTS: "list[Object]" = [
 
 
 # ------------------------------------------------------------
+# Class base indices (C: svb.bases[] from init_objects())
+#
+# bases[oclass] is the index of the first object of that class in
+# OBJECTS, so a class's rows run bases[oclass] .. bases[oclass+1]-1;
+# bases[MAXOCLASSES] is the fencepost NUM_OBJECTS.
+#
+# Documented deviation from C: the gap-fill (C applies it to every
+# class without rows) is skipped for ILLOBJ, whose base stays at the
+# strange object (0).  C's fill-forward would overwrite it with
+# bases[WEAPON] (18) because the generic placeholders [1..17] are
+# excluded from the scan; the strange object IS the only real
+# ILLOBJ-class object, so 0 is the truthful base (bases[RANDOM]
+# follows it).
+# ------------------------------------------------------------
+
+def _compute_bases() -> "list[int]":
+    bases = [0] * (MAXOCLASSES + 1)
+    first = FIRST_OBJECT
+    prevoclass = -1
+    while first < NUM_OBJECTS:
+        oclass = int(OBJECTS[first].oclass)
+        if oclass < prevoclass:
+            raise ValueError(
+                f"objects[{first}] class #{oclass} not in order!")
+        last = first + 1
+        while last < NUM_OBJECTS and int(OBJECTS[last].oclass) == oclass:
+            last += 1
+        bases[oclass] = first
+        first = last
+        prevoclass = oclass
+    bases[MAXOCLASSES] = NUM_OBJECTS
+    # guarantee no gaps (C: fill forward from the end); the ILLOBJ
+    # gap is the documented deviation above
+    for last in range(MAXOCLASSES - 1, -1, -1):
+        if not bases[last] and last != int(ObjClass.ILLOBJ):
+            bases[last] = bases[last + 1]
+    return bases
+
+
+BASES: "list[int]" = _compute_bases()
+
+
+# ------------------------------------------------------------
 # Import-time sanity checks (C: o_init.c init_objects())
 # ------------------------------------------------------------
 
@@ -1647,6 +1693,11 @@ def _validate() -> None:
     assert OBJECTS[LAST_AMULET].name == "Amulet of Yendor"
     assert OBJECTS[LAST_AMULET - 1].name == \
         "cheap plastic imitation of the Amulet of Yendor"
+    # BASES: first row of every real class, fencepost at the end
+    assert BASES[MAXOCLASSES] == NUM_OBJECTS
+    for cls in range(1, MAXOCLASSES):
+        assert int(OBJECTS[BASES[cls]].oclass) == cls, \
+            f"BASES[{cls}] points at the wrong class"
 
 
 _validate()
@@ -1660,8 +1711,8 @@ def object_type(otyp: "ObjType | int") -> Object:
 
 
 __all__ = [
-    "ObjClass", "Material", "Prop", "Skill", "ObjType", "Object",
-    "OBJECTS", "object_type", "MAXOCLASSES", "NUM_OBJECTS",
+    "ObjClass", "Material", "Prop", "Skill", "ObjType", "O", "Object",
+    "OBJECTS", "BASES", "object_type", "MAXOCLASSES", "NUM_OBJECTS",
     "LAST_GENERIC", "FIRST_OBJECT", "OBJCLASS_HACK", "FIRST_AMULET",
     "LAST_AMULET", "FIRST_SPELL", "LAST_SPELL", "FIRST_REAL_GEM",
     "LAST_REAL_GEM", "FIRST_GLASS_GEM", "LAST_GLASS_GEM",
