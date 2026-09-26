@@ -23,6 +23,7 @@ from core.weapon import (
     skill_init, use_skill, weapon_hit_bonus, weapon_dam_bonus,
     weapon_type,
 )
+import core.weapon as W
 
 
 @dataclass
@@ -524,3 +525,34 @@ def test_stubs_raise():
             raise AssertionError(f"{fn.__name__} did not raise")
         except NotImplementedError:
             pass
+
+
+# ------------------------------------------------------------
+# structural contracts and the module self-check
+# ------------------------------------------------------------
+
+def test_rnglike_shape():
+    # RngLike names exactly the draws the module makes; both the real
+    # RNG (core.rnd.Rng) and the test stand-in provide them
+    from core.rnd import Rng
+    for rng in (Rng(), ScriptedRng(0)):
+        assert callable(rng.rnd)
+        assert callable(rng.rn2)
+        assert callable(rng.d)
+
+
+def test_object_predicates_delegate_to_otyp_tables():
+    # weapon_type()/is_ammo() delegate to the otyp-level tables: the
+    # object view and the table view must agree on every row of
+    # OBJECTS (the DRY guard against the two drifting apart)
+    for otyp in range(len(OBJECTS)):
+        o = FakeObj(otyp, int(OBJECTS[otyp].oclass))
+        assert weapon_type(o) == W._weapon_type_otyp(otyp), otyp
+        assert is_ammo(o) == W._is_ammo_otyp(otyp), otyp
+
+
+def test_validate():
+    # the tables self-check (skill-name indices, preference-table
+    # classes, level-table coverage, extra-damage table rows); it
+    # runs here and via `python -m core.weapon`, not at import time
+    W._validate()
