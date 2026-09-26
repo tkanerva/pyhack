@@ -10,7 +10,9 @@ from core.rnd import Rng
 
 def test_class_probability_totals_are_positive():
     state = ObjTables(Rng(b"probs"))
-    for oclass in range(1, MAXOCLASSES):
+    # real classes only: the ILLOBJ total (strange object + the
+    # generics, all probability 0) is 0 by construction
+    for oclass in range(2, MAXOCLASSES):
         assert state.prob_totals[oclass] > 0, oclass
     assert state.prob_totals[ObjClass.ILLOBJ] == 0  # generics are free
 
@@ -173,7 +175,9 @@ def test_generic_objects_cannot_be_discovered():
 def test_uname_wins_in_typename():
     state = ObjTables(Rng(b"name"))
     t = O.POT_HEALING.value
-    assert typename(state, t) == "purple-red"  # unknown: descr
+    # unknown: the current description (init shuffles the potion
+    # descriptions, so pin the lookup, not a specific string)
+    assert typename(state, t) == state.descr[t]
     discover_object(state, t, True, False)
     assert typename(state, t) == "healing"     # known: real name
     state.uname[t] = "slime"
@@ -181,9 +185,12 @@ def test_uname_wins_in_typename():
 
 
 def test_base_class_order():
-    # classes appear in ascending order in the table (C init_objects check)
+    # classes appear in ascending order in the real table (C
+    # init_objects check scans from MAXOCLASSES; the generic slots
+    # [1..17] have oclass == i by construction, pinned by
+    # tests/test_objects.py::test_generic_slots)
     prev = -1
-    for i in range(1, NUM_OBJECTS):
+    for i in range(MAXOCLASSES, NUM_OBJECTS):
         cls = int(OBJECTS[i].oclass)
         assert cls >= prev, i
         prev = cls

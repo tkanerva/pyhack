@@ -2,11 +2,12 @@
 src/o_init.c).
 
 The static data lives in core.objects (frozen at import time, mirroring
-the C `objects[]` initializer).  This module owns everything the C code
-mutates in that array at runtime, gathered in one per-game `ObjTables`
-state object (no globals, per the pyhack architecture):
+the C `objects[]` initializer), including the per-class base indices
+(BASES, C: svb.bases[] from init_objects()).  This module owns
+everything the C code mutates in that array at runtime, gathered in one
+per-game `ObjTables` state object (no globals, per the pyhack
+architecture):
 
-- `bases`           -- C: svb.bases[], the start index of each class
 - `prob`            -- current oc_prob (setgemprobs() adjusts gems)
 - `prob_totals`     -- C: go.oclass_prob_totals[]
 - `name_known`      -- C: objects[i].oc_name_known (discovered)
@@ -24,41 +25,11 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Set, Tuple
 
-from .objects import (ObjClass, ObjType, OBJECTS,
+from .objects import (ObjClass, ObjType, OBJECTS, BASES,
                      FIRST_OBJECT, LAST_REAL_GEM, MAXOCLASSES,
                      NODIR, IMMEDIATE, NUM_OBJECTS)
 
 O = ObjType  # short alias for table lookups
-
-
-# ------------------------------------------------------------
-# Static: class base indices (C: init_objects() bases[] fill)
-# ------------------------------------------------------------
-
-def _compute_bases() -> List[int]:
-    bases = [0] * (MAXOCLASSES + 2)
-    first = MAXOCLASSES
-    prevoclass = -1
-    while first < NUM_OBJECTS:
-        oclass = int(OBJECTS[first].oclass)
-        if oclass < prevoclass:
-            raise ValueError(
-                f"objects[{first}] class #{oclass} not in order!")
-        last = first + 1
-        while last < NUM_OBJECTS and int(OBJECTS[last].oclass) == oclass:
-            last += 1
-        bases[oclass] = first
-        first = last
-        prevoclass = oclass
-    bases[MAXOCLASSES] = bases[MAXOCLASSES + 1] = NUM_OBJECTS
-    # guarantee no gaps (C: fill forward from the end)
-    for last in range(MAXOCLASSES - 1, -1, -1):
-        if not bases[last]:
-            bases[last] = bases[last + 1]
-    return bases
-
-
-BASES: List[int] = _compute_bases()
 
 
 # ------------------------------------------------------------
