@@ -261,10 +261,10 @@ def is_hallucinating(m: Monster) -> bool:
 def can_see(m: Monster) -> bool:
     """True while the actor's vision is functional (C: !Blind).
 
-    NetHack's cansee() (vision.c) is a full line-of-sight test over
-    tiles; this port has no light, fog or line-of-sight yet, so the
-    only thing that blocks vision is blindness.  Hallucination
-    distorts what the actor sees but does not prevent seeing, so it
-    deliberately does not affect this answer.
+    This answers "can this actor see AT ALL?" -- the line-of-sight
+    questions ("can it see THAT tile?") live in core/vision.py:
+    can_see()/could_see() for the hero, m_can_see()/m_can_see_u() for
+    monsters.  Hallucination distorts what the actor sees but does not
+    prevent seeing, so it deliberately does not affect this answer.
     """
     return not is_blind(m)

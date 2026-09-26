@@ -8,20 +8,20 @@ There is no broadcast bus, no global state, and no I/O.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional, Tuple
 
 from .commands import (CastCommand, Command, MoveCommand, QuaffCommand,
                        ZapCommand)
 from .events import Event, GameOverEvent, MessageEvent
-from .hacklib import is_asleep, is_stuck
+from .hacklib import distmin, is_asleep, is_stuck
 from .mhitu import mattacku
 from .potions import quaff
 from .uhitm import uhitm
-from .rules import (apply_damage, manhattan, melee_attack, process_events,
-                    tick_actor)
+from .rules import (apply_damage, melee_attack, process_events, tick_actor)
 from .spells import cast_spell
 from .traps import check_traps
-from .types import DamageType, World
+from .types import DamageType, Monster, Pos, World
+from .vision import m_can_see_u, vision_recalc
 from .zap import use_wand
 
 
@@ -52,6 +52,11 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
         # WaitCommand: a deliberate pass (no trap re-roll, unlike the old demo)
 
     # --- monster turns ---
+    # Refresh the hero's view before the monster phase: m_can_see_u()
+    # answers "can the monster see the hero?" from the hero's could-see
+    # array (C: vision_recalc() runs after the hero's action and after
+    # the monster move, in moveloop()).
+    vision_recalc(world)
     for mon_id in list(world.actors.keys()):
         if mon_id == "player":
             continue
@@ -125,13 +130,25 @@ def _monster_turn(world: World, mon_id: str, rng) -> List[Event]:
     hero = world.hero
     if is_asleep(mon):
         return []
-    if hero.alive and manhattan(mon.pos, hero.pos) == 1:
-        # a monster next to the hero attacks instead of moving
+    if hero.alive and distmin(mon.pos, hero.pos) == 1:
+        # a monster next to the hero (diagonals included -- C: monsters
+        # act on the 8-adjacent ring) attacks instead of moving
         return _melee_combat(world, mon_id, "player", rng)
     if is_stuck(mon):
         return []
-    # random walk: first free orthogonal tile in random order (old
-    # behaviour, now also refusing to step onto occupied tiles)
+    if hero.alive and m_can_see_u(world, mon):
+        # The monster can see the hero: it steps one tile closer (C:
+        # the chase in monmove.c).  STUB: this is the greedy single
+        # step -- the full mmove() port (opening doors, fleeing,
+        # remembered hero positions, the M2_WANDER behaviour, waking
+        # sleepers by sound) is future work.
+        d = _step_toward(world, mon, hero.pos, rng)
+        if d is not None:
+            mon.pos = (mon.pos[0] + d[0], mon.pos[1] + d[1])
+            return check_traps(world, mon_id, rng)
+    # It cannot see the hero (or no closer tile is free): random walk,
+    # the old behaviour (C: monsters that cannot see the hero wander or
+    # stand still).
     dirs = [(0, 1), (0, -1), (1, 0), (-1, 0)]
     rng.shuffle(dirs)
     for dx, dy in dirs:
@@ -140,6 +157,29 @@ def _monster_turn(world: World, mon_id: str, rng) -> List[Event]:
             mon.pos = dest
             return check_traps(world, mon_id, rng)
     return []
+
+
+def _step_toward(world: World, mon: Monster, target: Pos,
+                 rng) -> Optional[Tuple[int, int]]:
+    """Pick a direction (8-way -- C: monsters may move diagonally) that
+    brings the monster one tile closer to `target`, onto a walkable and
+    unoccupied tile.  Returns the (dx, dy) delta, or None if no such
+    tile exists (the caller falls back to random walking)."""
+    x, y = mon.pos
+    now = distmin((x, y), target)
+    options: List[Pos] = []
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            dest = (x + dx, y + dy)
+            if (distmin(dest, target) < now
+                    and world.map.is_walkable(dest)
+                    and world.monster_at(dest) is None):
+                options.append((dx, dy))
+    if not options:
+        return None
+    return rng.choice(options)
 
 
 def _finish(world: World, events: List[Event]) -> List[Event]:

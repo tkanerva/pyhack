@@ -10,6 +10,13 @@ carries its PerMonst type (core.monst), so monster->hero attacks come
 from the mhitu attack tables, and the hero starts wielding a short sword
 (the weapon subset of core.uhitm on top of core.weapon).  Wiring those
 in adds NO rng draws, so the seeded layout is unchanged.
+
+The grid is now rm-like Tiles (STONE boundary ring, ROOM floor, scattered
+STONE obstacles) instead of the old 0/1 ints, so the vision code
+(core/vision.py) runs on the same substrate the full mklev.c (rooms +
+corridors + doors + furniture) will use when it is ported later.
+STUB: that full level generation is still future work -- the demo
+layout itself (and its rng draw sequence) is unchanged.
 """
 from __future__ import annotations
 
@@ -17,7 +24,9 @@ from typing import List, Optional
 
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType
-from .types import Item, Map, Monster, ObjectType, Pos, Trap, TrapType, World
+from .types import (Item, Map, Monster, ObjectType, Pos, Tile, TerrainType,
+                    Trap, TrapType, World)
+from .vision import vision_init, vision_recalc, vision_reset
 from .weapon import P_SKILLED, Skill, Skills
 
 HERO_POS: Pos = (20, 10)
@@ -27,15 +36,19 @@ HERO_HP = 25
 def generate_map(rng, width: int = 40, height: int = 20,
                  wall_count: int = 15,
                  keep_floor: Optional[List[Pos]] = None) -> Map:
-    tiles = [[1 if (x == 0 or y == 0 or x == width - 1 or y == height - 1) else 0
-              for x in range(width)] for y in range(height)]
+    tiles = [[
+        Tile(typ=TerrainType.STONE)
+        if (x == 0 or y == 0 or x == width - 1 or y == height - 1)
+        else Tile(typ=TerrainType.ROOM)
+        for x in range(width)
+    ] for y in range(height)]
     for _ in range(wall_count):
         x = rng.randint(5, width - 6)
         y = rng.randint(5, height - 6)
-        tiles[y][x] = 1
+        tiles[y][x] = Tile(typ=TerrainType.STONE)
     if keep_floor:
         for pos in keep_floor:
-            tiles[pos[1]][pos[0]] = 0
+            tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.ROOM)
     return Map(tiles)
 
 
@@ -114,6 +127,14 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
     for i in range(3):
         world.actors[f"bat_{i}"] = Monster(
             id=f"bat_{i}", name="Bat", pos=next_pos(),
-            hp=4, max_hp=4, ac=bat.ac, damage=1, is_flying=True,
+            hp=4, max_hp=4, ac=3, damage=1, is_flying=True,
             mdata=bat)
+
+    # vision (C: vision_init() before mklev(), vision_reset() after the
+    # level + objects are in place, vision_recalc() for the first
+    # display).  None of it draws from the rng -- the seeded layout is
+    # unchanged.
+    vision_init(world)
+    vision_reset(world)
+    vision_recalc(world)
     return world

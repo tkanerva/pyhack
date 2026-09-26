@@ -4,8 +4,9 @@ Design in one line: one state object (World), one transition function
 (step), side effects returned as data (Events).  See ARCHITECTURE.md.
 """
 from .types import (
-    DamageType, Direction, Item, Map, Monster, ObjectType,
-    PotionType, SpellType, Trap, TrapType, WandType, World,
+    DamageType, Direction, DoorMask, Item, Map, Monster, ObjectType,
+    PotionType, SpellType, Tile, TerrainType, Trap, TrapType, WandType,
+    World,
 )
 from .events import (
     DamageEvent, DeathEvent, Event, GameOverEvent, MessageEvent,

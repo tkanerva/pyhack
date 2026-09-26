@@ -1,7 +1,8 @@
 """Tests for the spell system."""
 from core import Direction
 from core.spells import cast_spell
-from core.types import Item, ObjectType, SpellType
+from core.types import Item, ObjectType, SpellType, Tile, TerrainType
+from core.vision import set_tile
 from conftest import SeqRng, make_monster, make_world
 
 
@@ -29,8 +30,8 @@ def test_beam_hits_first_monster_only():
 def test_wall_stops_beam():
     w = world_with_book(SpellType.MAGIC_MISSILE,
                         monsters=[make_monster(pos=(10, 4))])
-    # wall at (x=8, y=4); Map.tiles is indexed as tiles[y][x]
-    w.map.tiles[4][8] = 1
+    # wall at (x=8, y=4): replace the tile and refresh the sight rows
+    set_tile(w, (8, 4), Tile(typ=TerrainType.STONE))
     cast_spell(w, "player", "book_0", Direction.E, SeqRng())
     assert w.actors["goblin_0"].hp == 8
 

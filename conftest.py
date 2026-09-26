@@ -4,7 +4,8 @@ Kept at the repo root so that `pytest` puts the root on sys.path
 (making `import core` work) and every test module can do
 `from conftest import ...`.
 """
-from core.types import Map, Monster, Trap, TrapType, World
+from core.types import (Map, Monster, Tile, TerrainType, Trap, TrapType,
+                        World)
 
 MONSTER_STATS = {
     "goblin": dict(name="Goblin", hp=8, max_hp=8, ac=7, damage=2),
@@ -14,9 +15,11 @@ MONSTER_STATS = {
 
 
 def make_map(width=12, height=8, walls=()):
-    tiles = [[0] * width for _ in range(height)]
+    """An all-floor (ROOM) grid with the given wall (STONE) tiles."""
+    tiles = [[Tile(typ=TerrainType.ROOM) for _ in range(width)]
+             for _ in range(height)]
     for x, y in walls:
-        tiles[y][x] = 1
+        tiles[y][x] = Tile(typ=TerrainType.STONE)
     return Map(tiles)
 
 

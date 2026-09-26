@@ -2,16 +2,17 @@
 
 Everything in this module is plain data.  There is no I/O and no
 gameplay logic here -- behaviour lives in core.rules, core.step and the
-system modules (traps, zap, potions, spells).
+system modules (traps, zap, potions, spells, vision).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum, IntEnum, IntFlag, auto
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 if TYPE_CHECKING:  # annotation only -- no runtime import cycle
     from .monst import PerMonst
+    from .vision import HeroVision
     from .weapon import Skills
 
 Pos = Tuple[int, int]
@@ -130,14 +131,153 @@ class Direction(Enum):
 
 
 # ============================================================
-# Map
+# Map (C: levl[][] of struct rm, rm.h)
 # ============================================================
+#
+# The dungeon is a rectangular grid of Tile -- one per level location,
+# the port of C's levl[x][y] (struct rm).  pyhack keeps the row-major
+# indexing it has always used (tiles[y][x], y = row), exactly like the
+# (y,x) convention C's vision code works in.
+#
+# TerrainType keeps the C levl_typ_types VALUES, not auto numbers: the
+# IS_* predicates below are range comparisons, just like the C macros,
+# and must stay in the same order.
+#
+# Level *generation* is still the small demo generator (core/worldgen);
+# the full mklev.c (rooms + corridors + doors + furniture) will later
+# be ported onto this same grid.  Until then the demo level is: STONE
+# boundary ring, ROOM floor, a few scattered STONE obstacles.
+
+class TerrainType(IntEnum):
+    """Level location types (C: levl_typ_types, rm.h)."""
+    STONE = 0
+    VWALL = 1
+    HWALL = 2
+    TLCORNER = 3
+    TRCORNER = 4
+    BLCORNER = 5
+    BRCORNER = 6
+    CROSSWALL = 7
+    TUWALL = 8
+    TDWALL = 9
+    TLWALL = 10
+    TRWALL = 11
+    DBWALL = 12
+    TREE = 13
+    SDOOR = 14
+    SCORR = 15
+    POOL = 16
+    MOAT = 17
+    WATER = 18
+    DRAWBRIDGE_UP = 19
+    LAVAPOOL = 20
+    LAVAWALL = 21
+    IRONBARS = 22
+    DOOR = 23
+    CORR = 24
+    ROOM = 25
+    STAIRS = 26
+    LADDER = 27
+    FOUNTAIN = 28
+    THRONE = 29
+    SINK = 30
+    GRAVE = 31
+    ALTAR = 32
+    ICE = 33
+    DRAWBRIDGE_DOWN = 34
+    AIR = 35
+    CLOUD = 36
+    # C also has MAX_TYPE = 37, MATCH_WALL = 38 (special levels) and the
+    # xFLOOR..xSEA feedback indices (39..46) -- not tile types; they
+    # come with the work that needs them.
+
+
+class DoorMask(IntFlag):
+    """Door state bits (C: rm.flags doormask overloads, rm.h)."""
+    BROKEN = 0x1     # D_BROKEN
+    ISOPEN = 0x2     # D_ISOPEN
+    CLOSED = 0x4     # D_CLOSED
+    LOCKED = 0x8     # D_LOCKED
+    TRAPPED = 0x10   # D_TRAPPED
+
+
+def is_wall(typ: TerrainType) -> bool:
+    """C: IS_WALL -- a wall type (VWALL..DBWALL), stone excluded."""
+    return typ != TerrainType.STONE and typ <= TerrainType.DBWALL
+
+
+def is_stwall(typ: TerrainType) -> bool:
+    """C: IS_STWALL -- stone or a wall type (STONE..DBWALL)."""
+    return typ <= TerrainType.DBWALL
+
+
+def is_obstructed(typ: TerrainType) -> bool:
+    """C: IS_OBSTRUCTED -- absolutely non-accessible terrain
+    (STONE..SCORR)."""
+    return typ < TerrainType.POOL
+
+
+def is_door(typ: TerrainType) -> bool:
+    """C: IS_DOOR."""
+    return typ == TerrainType.DOOR
+
+
+def is_sdoor(typ: TerrainType) -> bool:
+    """C: IS_SDOOR.  A secret door is part of the wall (IS_OBSTRUCTED),
+    so it is never a position you can stand on."""
+    return typ == TerrainType.SDOOR
+
+
+def is_tree(typ: TerrainType) -> bool:
+    """C: IS_TREE -- trees (and stone on arboreal levels; STUB: no
+    arboreal levels yet)."""
+    return typ == TerrainType.TREE
+
+
+def accessible(typ: TerrainType) -> bool:
+    """C: ACCESSIBLE -- a good position (DOOR and up)."""
+    return typ >= TerrainType.DOOR
+
+
+def is_pool(typ: TerrainType) -> bool:
+    """C: IS_POOL."""
+    return TerrainType.POOL <= typ <= TerrainType.DRAWBRIDGE_UP
+
+
+@dataclass
+class Tile:
+    """One level location (C: struct rm, reduced).
+
+    STUB: the remaining rm fields (glyph, seenv, lit, waslit, roomno,
+    edge, candig) are not ported yet -- they come with the display
+    (glyph/seenv), lighting (lit/waslit) and room-aware (roomno/edge)
+    work.  door_mask is only meaningful for DOOR/SDOOR tiles.
+    """
+    typ: TerrainType = TerrainType.ROOM
+    door_mask: DoorMask = DoorMask(0)
+
+    def is_door_open(self) -> bool:
+        """A door is passable unless closed/locked/trapped (C: the
+        doormask tests in does_block() and the movement code)."""
+        return not (self.door_mask
+                    & (DoorMask.CLOSED | DoorMask.LOCKED | DoorMask.TRAPPED))
+
 
 class Map:
-    """Rectangular tile grid.  0 = floor, 1 = wall (old convention kept)."""
+    """Rectangular tile grid: tiles[y][x] is a Tile (C: levl[x][y]).
 
-    def __init__(self, tiles: List[List[int]]):
+    Also owns the level-local sight data of core/vision.py (viz_clear
+    + the left/right pointer rows).  It stays None until vision_init() /
+    vision_reset() have run: new_world() does that, and a bare World
+    built by tests is set up lazily on first vision use.
+    """
+
+    def __init__(self, tiles: List[List[Tile]]):
         self.tiles = tiles
+        # C: viz_clear[][], left_ptrs[][], right_ptrs[][] (vision.c)
+        self.viz_clear: Optional[List[List[bool]]] = None
+        self.left_ptrs: Optional[List[List[int]]] = None
+        self.right_ptrs: Optional[List[List[int]]] = None
 
     @property
     def width(self) -> int:
@@ -150,18 +290,33 @@ class Map:
     def in_bounds(self, pos: Pos) -> bool:
         return 0 <= pos[0] < self.width and 0 <= pos[1] < self.height
 
+    def tile_at(self, pos: Pos) -> Tile:
+        return self.tiles[pos[1]][pos[0]]
+
     def is_wall(self, pos: Pos) -> bool:
-        return self.tiles[pos[1]][pos[0]] == 1
+        """Stone or wall at pos (the old 0/1 grid: 1 meant this)."""
+        return is_stwall(self.tile_at(pos).typ)
 
     def is_walkable(self, pos: Pos) -> bool:
-        return self.in_bounds(pos) and not self.is_wall(pos)
+        """A good position: in bounds, accessible terrain, and (for a
+        door) not closed/locked.  STUB: NetHack also lets you wade into
+        pools, step onto ice, etc. -- that comes with the water work."""
+        if not self.in_bounds(pos):
+            return False
+        tile = self.tile_at(pos)
+        if not accessible(tile.typ):
+            return False
+        if is_door(tile.typ):
+            return tile.is_door_open()
+        return True
 
     def floor_tiles(self) -> List[Pos]:
+        """All walkable positions (spawns, teleports)."""
         return [
             (x, y)
             for y in range(self.height)
             for x in range(self.width)
-            if self.tiles[y][x] == 0
+            if self.is_walkable((x, y))
         ]
 
 
@@ -259,6 +414,9 @@ class World:
     items: "dict[str, Item]" = field(default_factory=dict)
     turn: int = 0
     over: bool = False
+    # the hero's current view (C: gv.viz_array + gv.viz_rmin/rmax);
+    # built by core.vision (vision_recalc), None until first use
+    vision: Optional["HeroVision"] = None
 
     @property
     def hero(self) -> Monster:
@@ -270,3 +428,7 @@ class World:
             if m.alive and m.pos == pos:
                 return m
         return None
+
+    def items_at(self, pos: Pos) -> List[Item]:
+        """Items lying on `pos` (C: the svl.level.objects[x][y] chain)."""
+        return [it for it in self.items.values() if it.pos == pos]

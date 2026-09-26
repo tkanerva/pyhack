@@ -3,6 +3,8 @@ import random
 
 from core import MoveCommand, WaitCommand, step
 from core.events import GameOverEvent, MessageEvent
+from core.types import DoorMask, Tile, TerrainType
+from core.vision import set_tile
 from conftest import SeqRng, make_hero, make_map, make_monster, make_world
 
 
@@ -38,19 +40,86 @@ def test_adjacent_monster_attacks_hero():
     assert any("hits you for 2 damage" in t for t in texts)
 
 
-def test_monster_moves_to_free_tile():
-    w = make_world(monsters=[make_monster(pos=(8, 4))])
-    step(w, WaitCommand(), random.Random(7))
+def test_diagonally_adjacent_monster_attacks():
+    """Monsters act on the 8-adjacent ring (C: distmin == 1), so a
+    diagonal neighbour attacks too."""
+    w = make_world(monsters=[make_monster(pos=(7, 5))])
+    ev = step(w, WaitCommand(), SeqRng(1, 2))  # goblin hits for 2
+    assert w.hero.hp == 23
+    texts = [e.text for e in ev if isinstance(e, MessageEvent)]
+    assert any("hits you for 2 damage" in t for t in texts)
+
+
+# ------------------------------------------------------------
+# monster vision: pursuit (C: the m_canseeu() check in monmove.c)
+# ------------------------------------------------------------
+
+def test_monster_pursues_visible_hero():
+    """The goblin 4 tiles east of the hero can see it: it steps one
+    tile closer (the pursuit direction is preset with SeqRng)."""
+    w = make_world(monsters=[make_monster(pos=(10, 4))])
+    step(w, WaitCommand(), SeqRng((-1, 0)))
+    assert w.actors["goblin_0"].pos == (9, 4)
+
+
+def test_monster_pursuit_can_be_diagonal():
+    """C: monsters may move diagonally (the hero cannot)."""
+    w = make_world(monsters=[make_monster(pos=(10, 4))])
+    step(w, WaitCommand(), SeqRng((-1, -1)))
+    assert w.actors["goblin_0"].pos == (9, 3)
+
+
+def test_blind_monster_wanders_instead_of_pursuing():
+    """A blind goblin next-to-sight distance cannot see the hero: it
+    random-walks (one orthogonal step), it does not pursue (pursuit
+    could step diagonally)."""
+    w = make_world(monsters=[make_monster(pos=(8, 4), blind=3)])
+    step(w, WaitCommand(), random.Random(1))
     m = w.actors["goblin_0"]
     assert abs(m.pos[0] - 8) + abs(m.pos[1] - 4) == 1
     assert w.map.is_walkable(m.pos)
 
 
+def test_monster_wanders_when_it_cannot_see_the_hero():
+    """A wall between goblin and hero: no line of sight, no pursuit --
+    the old random-walk behaviour remains."""
+    w = make_world(map=make_map(walls=((7, 4),)),
+                   monsters=[make_monster(pos=(8, 4))])
+    step(w, WaitCommand(), random.Random(1))
+    m = w.actors["goblin_0"]
+    assert abs(m.pos[0] - 8) + abs(m.pos[1] - 4) == 1
+
+
+def test_monster_pursues_hero_through_open_door():
+    walls = [(5, y) for y in range(8) if y != 4]
+    w = make_world(map=make_map(walls=walls),
+                   hero=make_hero(pos=(2, 4)),
+                   monsters=[make_monster(pos=(8, 4))])
+    set_tile(w, (5, 4), Tile(typ=TerrainType.DOOR, door_mask=DoorMask.ISOPEN))
+    step(w, WaitCommand(), SeqRng((-1, 0)))
+    assert w.actors["goblin_0"].pos == (7, 4)
+
+
+def test_monster_cannot_see_hero_behind_closed_door():
+    walls = [(5, y) for y in range(8) if y != 4]
+    w = make_world(map=make_map(walls=walls),
+                   hero=make_hero(pos=(2, 4)),
+                   monsters=[make_monster(pos=(8, 4))])
+    set_tile(w, (5, 4), Tile(typ=TerrainType.DOOR, door_mask=DoorMask.CLOSED))
+    step(w, WaitCommand(), random.Random(1))
+    m = w.actors["goblin_0"]
+    # no pursuit: one orthogonal random-walk step
+    assert abs(m.pos[0] - 8) + abs(m.pos[1] - 4) == 1
+
+
 def test_monster_does_not_walk_onto_occupied_tile():
     # bat at (7,3): all free neighbours walled off except (7,4),
-    # which is occupied by a goblin -> the bat must stay put
+    # which is occupied by a goblin; the hero is out of the bat's
+    # sight (the wall at (6,3) blocks the diagonal), so no pursuit
+    # -> the bat must stay put
     w = make_world(
         map=make_map(walls=((6, 3), (8, 3), (7, 2))),
+        hero=make_hero(pos=(4, 4)),
         monsters=[
             make_monster(kind="bat", pos=(7, 3)),
             make_monster(pos=(7, 4)),
