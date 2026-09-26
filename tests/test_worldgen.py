@@ -64,8 +64,8 @@ def test_hero_starts_with_a_wielded_short_sword():
     assert sword in hero.inventory
     assert sword.name == "short sword"
     # fine identity: ObjLike-compatible for core.weapon
-    assert sword.otyp == int(ObjType.SHORT_SWORD)
-    assert sword.oclass == int(ObjClass.WEAPON)
+    assert sword.otyp == ObjType.SHORT_SWORD.value
+    assert sword.oclass == ObjClass.WEAPON.value
     assert sword.spe == 0 and not sword.blessed
     assert wielded_of(w, hero.id) is sword
     # the demo monsters go bare-handed

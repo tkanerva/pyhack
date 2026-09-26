@@ -39,8 +39,8 @@ def _hero_with_sword(**kw):
     skills.max_skill[int(Skill.P_SHORT_SWORD)] = P_SKILLED
     hero.skills = skills
     sword = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
-                 otyp=int(ObjType.SHORT_SWORD),
-                 oclass=int(ObjClass.WEAPON))
+                 otyp=ObjType.SHORT_SWORD.value,
+                 oclass=ObjClass.WEAPON.value)
     hero.inventory.append(sword)
     hero.wielded = sword.id
     return hero, sword
@@ -110,8 +110,8 @@ def test_new_world_wires_the_demo_combat():
     hero = w.hero
     assert hero.wielded == "sword_0"
     sword = w.items["sword_0"]
-    assert sword.otyp == int(ObjType.SHORT_SWORD)
-    assert sword.oclass == int(ObjClass.WEAPON)
+    assert sword.otyp == ObjType.SHORT_SWORD.value
+    assert sword.oclass == ObjClass.WEAPON.value
     assert hero.skills.skill[int(Skill.P_SHORT_SWORD)] == P_SKILLED
     assert (hero.ulevel, hero.ustr) == (1, 12)
 

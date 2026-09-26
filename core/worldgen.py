@@ -66,8 +66,8 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
     # the fine identity (ObjLike-compatible for core.weapon) lives on
     # the Item, which is carried and wielded
     sword = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
-                 otyp=int(ObjType.SHORT_SWORD),
-                 oclass=int(ObjClass.WEAPON), spe=0)
+                 otyp=ObjType.SHORT_SWORD.value,
+                 oclass=ObjClass.WEAPON.value, spe=0)
     world.items[sword.id] = sword
     sword.container = "player"
     hero.inventory.append(sword)

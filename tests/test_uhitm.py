@@ -113,8 +113,8 @@ def test_process_events_applies_uhitm_damage():
 def _sword() -> Item:
     """The demo's starting weapon (same wiring as worldgen)."""
     return Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
-                otyp=int(ObjType.SHORT_SWORD),
-                oclass=int(ObjClass.WEAPON))
+                otyp=ObjType.SHORT_SWORD.value,
+                oclass=ObjClass.WEAPON.value)
 
 
 def _hero_with_sword(**kw):

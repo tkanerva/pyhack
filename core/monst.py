@@ -18,19 +18,20 @@ home for all of that:
 - `PM_NAMES` -- the COMPLETE C ordering of all 383 monster types
   (default build: CHARON undefined; MAIL_STRUCTURES always defined in
   5.0 (global.h), so the mail daemon IS in the table; all `#if 0`
-  blocks excluded).  This is recorded even though only a subset of the
-  table is implemented, so the PM_ numbering is fixed once and the
-  remaining ~90% can be completed later without renumbering anything;
-- `MONS` -- the (sparse) table itself: PerMonst at the C index for the
-  implemented subset, None elsewhere;
+  blocks excluded).  This is recorded even though only a subset of
+  the table is implemented, so the PM_ numbering is fixed once and
+  the remaining ~90% can be completed later without renumbering
+  anything;
+- `MONS` -- the (sparse) table itself: PerMonst at the C index for
+  the implemented subset, None elsewhere;
 - table accessors (monsndx, monclass, monname, defch, is_golem,
   is_dragon).
 
 Core-subset policy (per project decision): only the ~10% of monsters
-needed to build and play the core game is transcribed here (the demo's
-goblin/orc/bat, low-level dungeon staples, and the carriers of the
-special-attack mechanics: petrify, drain, steal, stick, breath, ...).
-The subset is `SUBSET_PM` below.
+needed to build and play the core game is transcribed here (the
+demo's goblin/orc/bat, low-level dungeon staples, and the carriers of
+the special-attack mechanics: petrify, drain, steal, stick, breath,
+...).  The subset is `SUBSET_PM` below.
 
 The table is checked by `_validate()`.  It runs from the test suite
 (tests/test_monst.py) and via `python -m core.monst`, NOT at import
@@ -50,7 +51,7 @@ time, so importing this module has no side effects.
   worm tail, so classes are not contiguous in the table.
 - MSound.FERRY (45) is not in the pinned monflag.h (rev 1.33): its
   only user is the #ifdef CHARON ferryman, which the default build
-  excludes.  Kept (with this note) so a later pass that adds
+  excludes.  Kept with this note so a later pass that adds
   Charon doesn't have to invent a number.
 """
 from __future__ import annotations
@@ -853,7 +854,8 @@ class PerMonst:
     mcolor: int
 
 
-NO_ATK = Attack(AtkType.NONE, DmgType.NONE, 0, 0)
+# C: NO_ATTK -- the all-zero no-attack row (monst.c)
+NO_ATK = Attack(AtkType.NONE, DmgType.PHYS, 0, 0)
 
 
 def _nam(name: str) -> tuple[str | None, str | None, str]:
@@ -1201,8 +1203,8 @@ MONS[PM_CENTIPEDE] = _mon(
     Attack(AT_BITE, AD_DRST, 1, 3), NO_ATK, NO_ATK, NO_ATK, NO_ATK,
     NO_ATK,
     50, 50, MS_SILENT, MZ_TINY, MR_POISON, MR_POISON,
-    M1_CONCEAL | M1_ANIMAL | M1_NOHANDS | M1_OVIPAROUS | M1_CARNIVORE,
-    M2_HOSTILE, 0, 4, 11)
+    M1_CONCEAL | M1_ANIMAL | M1_NOHANDS | M1_POIS, M2_HOSTILE,
+    M3_INFRAVISIBLE, 4, 11)
 
 MONS[PM_GIANT_SPIDER] = _mon(
     96, S_SPIDER, "giant spider",
@@ -1210,7 +1212,7 @@ MONS[PM_GIANT_SPIDER] = _mon(
     Attack(AT_BITE, AD_DRST, 2, 4), NO_ATK, NO_ATK, NO_ATK, NO_ATK,
     NO_ATK,
     200, 100, MS_SILENT, MZ_LARGE, MR_POISON, MR_POISON,
-    M1_ANIMAL | M1_NOHANDS | M1_OVIPAROUS | M1_POIS | M1_CARNIVORE,
+    M1_ANIMAL | M1_NOHANDS | M1_POIS | M1_CARNIVORE,
     M2_HOSTILE | M2_STRONG, 0, 7, 5)
 
 MONS[PM_XAN] = _mon(
@@ -1327,7 +1329,7 @@ MONS[PM_GARTER_SNAKE] = _mon(
     NO_ATK,
     50, 60, MS_HISS, MZ_TINY, 0, 0,
     M1_SWIM | M1_CONCEAL | M1_NOLIMBS | M1_ANIMAL | M1_SLITHY
-        | M1_OVIPAROUS | M1_CARNIVORE | M1_NOTAKE,
+        | M1_CARNIVORE | M1_NOTAKE,
     0, 0, 3, 2)
 
 MONS[PM_SNAKE] = _mon(
@@ -1336,8 +1338,8 @@ MONS[PM_SNAKE] = _mon(
     Attack(AT_BITE, AD_DRST, 1, 6), NO_ATK, NO_ATK, NO_ATK, NO_ATK,
     NO_ATK,
     100, 80, MS_HISS, MZ_SMALL, MR_POISON, MR_POISON,
-    M1_SWIM | M1_CONCEAL | M1_NOLIMBS | M1_ANIMAL | M1_SLITHY | M1_POIS
-        | M1_OVIPAROUS | M1_CARNIVORE | M1_NOTAKE,
+    M1_SWIM | M1_CONCEAL | M1_NOLIMBS | M1_ANIMAL | M1_SLITHY
+        | M1_POIS | M1_CARNIVORE | M1_NOTAKE,
     M2_HOSTILE, 0, 6, 3)
 
 MONS[PM_TROLL] = _mon(
@@ -1366,7 +1368,7 @@ MONS[PM_WRAITH] = _mon(
     6, 12, 4, 15, -6, G_GENO | 2,
     Attack(AT_TUCH, AD_DRLI, 1, 6), NO_ATK, NO_ATK, NO_ATK, NO_ATK,
     NO_ATK,
-    WT_ETHEREAL, 0, MS_SILENT, MZ_HUMAN,
+    WT_ETHEREAL, 0, MS_WAIL, MZ_HUMAN,
     MR_COLD | MR_SLEEP | MR_POISON | MR_STONE, 0,
     M1_BREATHLESS | M1_FLY | M1_HUMANOID | M1_UNSOLID,
     M2_UNDEAD | M2_STALK | M2_HOSTILE, 0, 8, 0)
@@ -1376,9 +1378,9 @@ MONS[PM_OWLBEAR] = _mon(
     5, 12, 5, 0, 0, G_GENO | 3,
     Attack(AT_CLAW, AD_PHYS, 1, 6), Attack(AT_CLAW, AD_PHYS, 1, 6),
     Attack(AT_HUGS, AD_PHYS, 2, 8), NO_ATK, NO_ATK, NO_ATK,
-    1700, 700, MS_ROAR, MZ_LARGE, 0, 0,
+    1700, 700, MS_GRUNT, MZ_LARGE, 0, 0,
     M1_ANIMAL | M1_HUMANOID | M1_CARNIVORE,
-    M2_HOSTILE | M2_STRONG | M2_NASTY, M3_INFRAVISIBLE, 7, 3)
+    M2_STRONG | M2_NASTY, M3_INFRAVISIBLE, 7, 3)
 
 MONS[PM_KOBOLD_ZOMBIE] = _mon(
     239, S_ZOMBIE, "kobold zombie",
@@ -1401,11 +1403,11 @@ MONS[PM_HUMAN_ZOMBIE] = _mon(
 
 MONS[PM_GHOUL] = _mon(
     246, S_ZOMBIE, "ghoul",
-    3, 6, 10, 0, -2, G_GENO | G_NOCORPSE | 1,
+    3, 6, 10, 0, -2, G_GENO | G_SGROUP | G_NOCORPSE | 1,
     Attack(AT_CLAW, AD_PLYS, 1, 2), Attack(AT_CLAW, AD_PHYS, 1, 3),
     NO_ATK, NO_ATK, NO_ATK, NO_ATK,
     400, 50, MS_SILENT, MZ_SMALL, MR_COLD | MR_SLEEP | MR_POISON, 0,
-    M1_BREATHLESS | M1_MINDLESS | M1_HUMANOID | M1_POIS | M1_OMNIVORE,
+    M1_BREATHLESS | M1_MINDLESS | M1_HUMANOID,
     M2_UNDEAD | M2_WANDER | M2_HOSTILE, M3_INFRAVISION, 5, 0)
 
 MONS[PM_SKELETON] = _mon(
@@ -1445,7 +1447,7 @@ MONS[PM_GHOST] = _mon(
     10, 3, -5, 50, -5, G_NOCORPSE | G_NOGEN,
     Attack(AT_TUCH, AD_PHYS, 1, 1), NO_ATK, NO_ATK, NO_ATK, NO_ATK,
     NO_ATK,
-    WT_HUMAN, 0, MS_SILENT, MZ_HUMAN,
+    WT_HUMAN, 0, MS_SQAWK, MZ_HUMAN,
     MR_COLD | MR_DISINT | MR_SLEEP | MR_POISON | MR_STONE, 0,
     M1_FLY | M1_BREATHLESS | M1_WALLWALK | M1_HUMANOID | M1_UNSOLID,
     M2_NOPOLY | M2_UNDEAD | M2_STALK | M2_HOSTILE, M3_INFRAVISION,
@@ -1549,7 +1551,7 @@ def _validate() -> None:
         assert 0 <= m.mflags1 <= 0xFFFFFFFF
         assert 0 <= m.mflags2 <= 0xFFFFFFFF
         assert 0 <= m.mflags3 <= 0xFFFF
-        assert 0 <= m.msound <= 63
+        assert m.msound <= 63
         assert 0 <= m.msize <= 7
         for v in (m.mlevel, m.mmove, m.ac, m.mr):
             assert -128 <= v <= 127
@@ -1575,9 +1577,9 @@ __all__ = [
     "S_VORTEX", "S_WORM", "S_XAN", "S_LIGHT", "S_ZRUTY", "S_ANGEL",
     "S_BAT", "S_CENTAUR", "S_DRAGON", "S_ELEMENTAL", "S_FUNGUS",
     "S_GNOME", "S_GIANT", "S_INVISIBLE", "S_JABBERWOCK", "S_KOP",
-    "S_LICH", "S_MUMMY", "S_NAGA", "S_OGRE", "S_PUDDING",
-    "S_QUANTMECH", "S_RUSTMONST", "S_SNAKE", "S_TROLL", "S_UMBER",
-    "S_VAMPIRE", "S_WRAITH", "S_XORN", "S_YETI", "S_ZOMBIE",
+    "S_LICH", "S_MUMMY", "S_NAGA", "S_OGRE", "S_PUDDING", "S_QUANTMECH",
+    "S_RUSTMONST", "S_SNAKE", "S_TROLL", "S_UMBER", "S_VAMPIRE",
+    "S_WRAITH", "S_XORN", "S_YETI", "S_ZOMBIE",
     "S_HUMAN", "S_GHOST", "S_GOLEM", "S_DEMON", "S_EEL", "S_LIZARD",
     "S_WORM_TAIL", "S_MIMIC_DEF", "MAXMCLASSES", "DEFCHARS",
     # attacks
