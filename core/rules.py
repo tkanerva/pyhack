@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import List
 
 from .events import DamageEvent, DeathEvent, Event, MessageEvent, StatusEvent
+from .hacklib import (is_asleep, is_blind, is_confused, is_hallucinating,
+                      is_poisoned, is_stuck)
 from .types import DamageType, Direction, Monster, Pos, World
 
 ORTHOGONAL: List[Pos] = [(0, 1), (0, -1), (1, 0), (-1, 0)]
@@ -160,6 +162,24 @@ def apply_confusion(world: World, target_id: str, duration: int) -> List[Event]:
     return events
 
 
+def apply_blind(world: World, target_id: str, duration: int) -> List[Event]:
+    t = world.actors[target_id]
+    t.blind = max(t.blind, duration)
+    events: List[Event] = [StatusEvent(target_id, "blind", duration)]
+    events.append(MessageEvent("👁️ You are blinded!" if t.is_hero
+                               else f"👁️ {t.name} is blinded!"))
+    return events
+
+
+def apply_hallucination(world: World, target_id: str, duration: int) -> List[Event]:
+    t = world.actors[target_id]
+    t.hallucinating = max(t.hallucinating, duration)
+    events: List[Event] = [StatusEvent(target_id, "hallucination", duration)]
+    events.append(MessageEvent("🌀 You feel hallucinations!" if t.is_hero
+                               else f"🌀 {t.name} is hallucinating!"))
+    return events
+
+
 def teleport_to_floor(world: World, target_id: str, rng) -> List[Event]:
     """Teleport to a random floor tile.  Always in bounds and on floor
     (the old trap.py teleported to a hard-coded 80x22 area regardless of
@@ -177,22 +197,31 @@ def teleport_to_floor(world: World, target_id: str, rng) -> List[Event]:
 
 
 def tick_actor(world: World, actor_id: str, rng) -> List[Event]:
-    """Per-turn status upkeep: sleep/stuck/confusion tick down, poison
-    deals 1 damage per turn (NetHack simplification: poison does 1d4
-    every 4 rounds)."""
+    """Per-turn status upkeep: every active status ticks down by one
+    turn, and poison deals 1 damage per turn (NetHack simplification:
+    poison does 1d4 every 4 rounds).
+
+    Status reads go through the core.hacklib query functions (no raw
+    `m.confused > 0` style checks); the decrements below are the only
+    place a status counter is reduced.
+    """
     a = world.actors[actor_id]
     if not a.alive:
         return []
     events: List[Event] = []
-    if a.sleeping > 0:
+    if is_asleep(a):
         a.sleeping -= 1
         if a.is_hero:
             events.append(MessageEvent("💤 You are asleep."))
-    if a.stuck > 0:
+    if is_stuck(a):
         a.stuck -= 1
-    if a.confused > 0:
+    if is_confused(a):
         a.confused -= 1
-    if a.poisoned > 0:
+    if is_blind(a):
+        a.blind -= 1
+    if is_hallucinating(a):
+        a.hallucinating -= 1
+    if is_poisoned(a):
         a.poisoned -= 1
         events += apply_damage(world, actor_id, 1, DamageType.POISON,
                                "poison", message=False)
@@ -217,3 +246,54 @@ def find_target_in_line(world: World, start: Pos, direction: Direction,
         if m is not None:
             return m, False
     return None, False
+
+
+# ------------------------------------------------------------
+# Event processing (the pure-core side of the event-producing systems)
+# ------------------------------------------------------------
+
+def _apply_status_event(world: World, e: StatusEvent, rng) -> List[Event]:
+    """Route one produced StatusEvent to its status setter (the single
+    place a status changes).  Returns the concrete events the setter
+    emits (its own StatusEvent + message), which replace the intent."""
+    if e.effect == "sleep":
+        return put_to_sleep(world, e.target, e.duration)
+    if e.effect == "stuck":
+        return apply_stuck(world, e.target, e.duration)
+    if e.effect == "poison":
+        return apply_poison(world, e.target, e.duration)
+    if e.effect == "confusion":
+        return apply_confusion(world, e.target, e.duration)
+    if e.effect == "blind":
+        return apply_blind(world, e.target, e.duration)
+    if e.effect == "hallucination":
+        return apply_hallucination(world, e.target, e.duration)
+    if e.effect == "teleport":
+        return teleport_to_floor(world, e.target, rng)
+    return [e]  # unknown effect: pass through untouched
+
+
+def process_events(world: World, events: List[Event], rng) -> List[Event]:
+    """Run produced events through the state-mutation choke points.
+
+    This is the "pure functional core" half of the event-producing
+    systems (``mhitu`` and friends): they emit ``DamageEvent`` /
+    ``StatusEvent`` *intents* without touching state, and this function
+    applies them.  A ``DamageEvent`` goes through ``apply_damage`` (the
+    only way an actor loses HP -- called with ``message=False`` because
+    the producer already emitted the specific flavour line); a
+    ``StatusEvent`` goes through the status setters; everything else
+    (messages, deaths, game-over) passes through.  Returns the final
+    event list -- each intent is replaced by the concrete events the
+    choke point emits, so nothing is double-counted.
+    """
+    out: List[Event] = []
+    for e in events:
+        if isinstance(e, DamageEvent):
+            out += apply_damage(world, e.target, e.amount, e.damage_type,
+                                e.source, message=False)
+        elif isinstance(e, StatusEvent):
+            out += _apply_status_event(world, e, rng)
+        else:
+            out.append(e)
+    return out

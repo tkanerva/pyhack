@@ -4,9 +4,11 @@ C idioms that now use stdlib/inflect (digit -> str.isdigit, highc ->
 str.upper, strncmpi -> str.lower comparisons, isqrt -> math.isqrt,
 makeplural -> inflect.plural, ...) are tested through the stdlib/
 inflect itself, so the suite covers only what this module still
-implements: the NetHack-specific and stdlib-less helpers.
+implements: the NetHack-specific and stdlib-less helpers, plus the
+status query functions (is_blind / is_confused / can_see / ...).
 """
 from core import hacklib as h
+from conftest import make_monster
 
 
 def test_letter_includes_at():
@@ -107,3 +109,39 @@ def test_geometry():
     assert h.swapbits(0b1001, 0, 3) == 0b1001  # both set: no change
     assert h.swapbits(0b0001, 0, 3) == 0b1000
     assert h.swapbits(0b1000, 0, 3) == 0b0001
+
+
+# ------------------------------------------------------------
+# Status queries
+# ------------------------------------------------------------
+
+def test_status_queries_false_on_a_fresh_actor():
+    m = make_monster()
+    assert not h.is_asleep(m)
+    assert not h.is_stuck(m)
+    assert not h.is_poisoned(m)
+    assert not h.is_confused(m)
+    assert not h.is_blind(m)
+    assert not h.is_hallucinating(m)
+    assert h.can_see(m)
+
+
+def test_status_queries_true_while_the_counter_is_positive():
+    m = make_monster(sleeping=3, stuck=10, poisoned=2,
+                     confused=20, blind=5, hallucinating=30)
+    assert h.is_asleep(m)
+    assert h.is_stuck(m)
+    assert h.is_poisoned(m)
+    assert h.is_confused(m)
+    assert h.is_blind(m)
+    assert h.is_hallucinating(m)
+    assert not h.can_see(m)
+
+
+def test_can_see_ignores_hallucination():
+    # hallucination distorts vision, it does not remove it
+    m = make_monster(hallucinating=10)
+    assert h.is_hallucinating(m)
+    assert h.can_see(m)
+    m.blind = 1
+    assert not h.can_see(m)

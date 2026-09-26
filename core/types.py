@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
+
+if TYPE_CHECKING:  # annotation only -- no runtime import cycle
+    from .monst import PerMonst
 
 Pos = Tuple[int, int]
 
@@ -195,10 +198,16 @@ class Monster:
     damage: int = 2            # melee damage = 1d`damage`
     alive: bool = True
     is_hero: bool = False
+    mdata: Optional["PerMonst"] = None  # permonst type (C: mtmp->data);
+    # None for the flat-stat demo monsters (they use the simple melee
+    # path); set for monsters that go through the C-port systems
+    # (mhitu, ...)
     sleeping: int = 0          # turns of sleep remaining
     stuck: int = 0             # turns of stuck remaining (web / pit)
     poisoned: int = 0          # turns of poison remaining
     confused: int = 0          # turns of confusion remaining
+    blind: int = 0             # turns of blindness remaining
+    hallucinating: int = 0     # turns of hallucination remaining
     is_undead: bool = False
     is_demon: bool = False
     is_golem: bool = False

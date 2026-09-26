@@ -2,6 +2,7 @@
 import random
 
 from core.events import DamageEvent, DeathEvent
+from core.hacklib import is_blind, is_hallucinating
 from core.rules import (apply_damage, heal, hit_chance, melee_attack,
                         resists, roll, tick_actor, teleport_to_floor)
 from core.types import DamageType
@@ -77,3 +78,17 @@ def test_tick_actor_poison_deals_one_damage():
     assert w.hero.poisoned == 1
     assert any(isinstance(e, DamageEvent) and e.damage_type == DamageType.POISON
                for e in events)
+
+
+def test_tick_actor_blindness_and_hallucination_decrement():
+    w = make_world()
+    w.hero.blind = 2
+    w.hero.hallucinating = 3
+    tick_actor(w, "player", SeqRng())
+    assert w.hero.blind == 1
+    assert w.hero.hallucinating == 2
+    assert is_blind(w.hero)
+    assert is_hallucinating(w.hero)
+    tick_actor(w, "player", SeqRng())
+    assert not is_blind(w.hero)
+    assert not is_hallucinating(w.hero)

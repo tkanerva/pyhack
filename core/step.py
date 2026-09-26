@@ -13,8 +13,12 @@ from typing import List
 from .commands import (CastCommand, Command, MoveCommand, QuaffCommand,
                        ZapCommand)
 from .events import Event, GameOverEvent, MessageEvent
+from .hacklib import is_asleep, is_stuck
+from .mhitu import mattacku
 from .potions import quaff
-from .rules import apply_damage, manhattan, melee_attack, tick_actor
+from .uhitm import uhitm
+from .rules import (apply_damage, manhattan, melee_attack, process_events,
+                    tick_actor)
 from .spells import cast_spell
 from .traps import check_traps
 from .types import DamageType, World
@@ -26,7 +30,7 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
         return []
 
     hero = world.hero
-    was_asleep = hero.sleeping > 0
+    was_asleep = is_asleep(hero)
     events: List[Event] = []
 
     # --- player turn ---
@@ -35,7 +39,7 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
         return _finish(world, events)
     if not was_asleep:
         if isinstance(cmd, MoveCommand):
-            if world.hero.stuck > 0:
+            if is_stuck(world.hero):
                 events.append(MessageEvent("🕸️ You are stuck and cannot move."))
             else:
                 events += _do_move(world, "player", cmd.dx, cmd.dy, rng)
@@ -83,6 +87,20 @@ def _do_move(world: World, actor_id: str, dx: int, dy: int, rng) -> List[Event]:
 def _melee_combat(world: World, attacker_id: str, defender_id: str, rng) -> List[Event]:
     attacker = world.actors[attacker_id]
     defender = world.actors[defender_id]
+    # The rich C-port combat paths, both opt-in via a PerMonst type
+    # (mdata): mattacku (mhitu.c) for monster->hero, uhitm (uhitm.c) for
+    # hero->monster.  Both are producers -- they emit
+    # DamageEvent/StatusEvent/MessageEvent intents without touching state
+    # -- and process_events (the pure core) applies them through the
+    # state-mutation choke points.  Flat-stat demo monsters (mdata is
+    # None) fall through to the simple path below.
+    if (not attacker.is_hero and defender.is_hero
+            and attacker.mdata is not None):
+        # monster hits hero (port of src/mhitu.c): producer + processor
+        return process_events(world, mattacku(world, attacker_id, rng), rng)
+    if attacker.is_hero and defender.mdata is not None:
+        # hero hits monster (port of src/uhitm.c): producer + processor
+        return process_events(world, uhitm(world, defender_id, rng), rng)
     dmg = melee_attack(rng, attacker, defender)
     if dmg <= 0:
         if defender.is_hero:
@@ -105,12 +123,12 @@ def _melee_combat(world: World, attacker_id: str, defender_id: str, rng) -> List
 def _monster_turn(world: World, mon_id: str, rng) -> List[Event]:
     mon = world.actors[mon_id]
     hero = world.hero
-    if mon.sleeping > 0:
+    if is_asleep(mon):
         return []
     if hero.alive and manhattan(mon.pos, hero.pos) == 1:
         # a monster next to the hero attacks instead of moving
         return _melee_combat(world, mon_id, "player", rng)
-    if mon.stuck > 0:
+    if is_stuck(mon):
         return []
     # random walk: first free orthogonal tile in random order (old
     # behaviour, now also refusing to step onto occupied tiles)
