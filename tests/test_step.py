@@ -1,10 +1,13 @@
 """Tests for step(): one command in, world + events out."""
 import random
 
-from core import MoveCommand, WaitCommand, step
+from core import (MoveCommand, PickupCommand, TakeOffCommand, WaitCommand,
+                  WearCommand, step)
 from core.events import GameOverEvent, MessageEvent
-from core.types import DoorMask, Tile, TerrainType
+from core.objects import ObjClass, ObjType, W_ARM
+from core.types import DoorMask, Item, ObjectType, Tile, TerrainType
 from core.vision import set_tile
+from core.worn import uac
 from conftest import SeqRng, make_hero, make_map, make_monster, make_world
 
 
@@ -181,3 +184,67 @@ def test_same_seed_same_game():
 
     assert play(42) == play(42)
     assert play(42) != play(1337)
+
+
+# ------------------------------------------------------------
+# wear / take off / pickup through step (PLAN-ARMOR.md Phase 2)
+# ------------------------------------------------------------
+
+def _kit_item(i: int, otyp: ObjType, name: str, **kw) -> Item:
+    it = Item(id=f"kit_{i}", otype=ObjectType.ARMOR, name=name,
+              otyp=otyp.value, oclass=ObjClass.ARMOR.value, **kw)
+    it.container = "player"
+    return it
+
+
+def test_step_wear_command_wears_and_drops_ac():
+    mail = _kit_item(0, ObjType.CHAIN_MAIL, "chain mail")
+    w = make_world(hero=make_hero(ac=10), items=[mail])
+    assert uac(w, w.hero) == 10
+    ev = step(w, WearCommand(mail.id), SeqRng())
+    assert mail.owornmask == W_ARM
+    assert uac(w, w.hero) == 5
+    assert any(isinstance(e, MessageEvent)
+               and e.text == "You are now wearing the chain mail."
+               for e in ev)
+
+
+def test_step_takeoff_command():
+    mail = _kit_item(0, ObjType.CHAIN_MAIL, "chain mail", owornmask=W_ARM)
+    w = make_world(hero=make_hero(ac=10), items=[mail])
+    assert uac(w, w.hero) == 5
+    ev = step(w, TakeOffCommand(mail.id), SeqRng())
+    assert mail.owornmask == 0
+    assert uac(w, w.hero) == 10
+    assert any(isinstance(e, MessageEvent)
+               and e.text == "You were wearing the chain mail." for e in ev)
+
+
+def test_step_wear_refusal_consumes_no_state():
+    mail = _kit_item(0, ObjType.CHAIN_MAIL, "chain mail", owornmask=W_ARM)
+    w = make_world(hero=make_hero(ac=10), items=[mail])
+    # wearing the already-worn mail refuses
+    ev = step(w, WearCommand(mail.id), SeqRng())
+    assert any(isinstance(e, MessageEvent)
+               and e.text == "You are already wearing that." for e in ev)
+    assert uac(w, w.hero) == 5
+
+
+def test_step_pickup_command():
+    helm = _kit_item(1, ObjType.ELVEN_LEATHER_HELM, "elven leather helm",
+                     pos=(6, 4))
+    helm.container = None  # on the floor, not carried
+    w = make_world(items=[helm])
+    ev = step(w, PickupCommand(), SeqRng())
+    assert helm.pos is None and helm.container == "player"
+    assert helm in w.hero.inventory
+    assert any(isinstance(e, MessageEvent)
+               and e.text == "You pick up the elven leather helm."
+               for e in ev)
+    # and the picked-up gear can be worn in the same turn sequence
+    ev = step(w, WearCommand(helm.id), SeqRng())
+    assert helm.owornmask == 4  # W_ARMH
+    assert uac(w, w.hero) == 4  # 5 - the helm's bonus of 1
+    assert any(isinstance(e, MessageEvent)
+               and e.text == "You are now wearing the elven leather helm."
+               for e in ev)

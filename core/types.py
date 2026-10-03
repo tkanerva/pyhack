@@ -345,6 +345,11 @@ class Item:
     otyp: int = 0
     oclass: int = 0
     spe: int = 0
+    # worn state (C: obj->owornmask, prop.h bitmask): the W_* slot bits
+    # this item currently occupies (0 = not worn).  The slot occupant is
+    # found by scanning the carrier's inventory (core.worn.which_armor /
+    # setworn) -- one mechanism for hero and future monsters.
+    owornmask: int = 0
 
 
 # ============================================================
@@ -358,7 +363,9 @@ class Monster:
     pos: Pos
     hp: int
     max_hp: int
-    ac: int
+    ac: int                    # BASE (body) armor class (C: mons[].ac).
+    # The effective AC is computed, never cached: core.worn.uac()
+    # subtracts the worn gear (the find_ac computation, PLAN-ARMOR.md).
     damage: int = 2            # melee damage = 1d`damage`
     alive: bool = True
     is_hero: bool = False

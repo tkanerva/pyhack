@@ -36,4 +36,25 @@ class CastCommand:
     direction: Direction
 
 
-Command = Union[MoveCommand, WaitCommand, ZapCommand, QuaffCommand, CastCommand]
+@dataclass(frozen=True)
+class WearCommand:
+    """Wear / put on an armor, ring or amulet (C: 'W' and 'P' both
+    funnel into accessory_or_armor_on -- one command pair, PLAN-ARMOR.md
+    decision 5)."""
+    item_id: str
+
+
+@dataclass(frozen=True)
+class TakeOffCommand:
+    """Take off / remove an armor, ring or amulet (C: 'T' and 'R' both
+    funnel into armor_or_accessory_off)."""
+    item_id: str
+
+
+@dataclass(frozen=True)
+class PickupCommand:
+    """Pick up the topmost item on the hero's tile (C: 'g')."""
+
+
+Command = Union[MoveCommand, WaitCommand, ZapCommand, QuaffCommand,
+                CastCommand, WearCommand, TakeOffCommand, PickupCommand]

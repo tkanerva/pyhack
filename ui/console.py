@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from core.commands import Command, MoveCommand, WaitCommand
+from core.commands import (Command, MoveCommand, PickupCommand,
+                           TakeOffCommand, WaitCommand, WearCommand)
 from core.items import wielded_of
 from core.types import World
+from core.worn import W_ACCESSORY, W_ARMOR, uac
 
 # The old code lower-cased the key before comparing against "\x1b[A",
 # so arrow keys never matched.  Compare lowercase consistently now.
@@ -22,15 +24,56 @@ ARROWS = {
 }
 
 
-def read_command(prompt: str = "Move: ") -> Optional[Command]:
-    """Returns None to quit."""
+def _item_by_letter(world: World, letter: str) -> Optional[str]:
+    """The inventory item of the hero carrying letter `a`, `b`, ...
+    (inventory order), or None."""
+    inv = world.hero.inventory
+    idx = ord(letter) - ord("a")
+    if 0 <= idx < len(inv):
+        return inv[idx].id
+    return None
+
+
+def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
+    """Returns None to quit.
+
+    Keys: WASD / arrows to move, `g` to pick up, `w<letter>` to wear,
+    `t<letter>` to take off (the letters are the inventory letters
+    shown in the screen's inventory line), `q` to quit; anything else
+    is a wait.
+    """
     key = input(prompt).strip().lower()
     if key == "q":
         return None
+    if key == "g":
+        return PickupCommand()
+    if len(key) == 2 and key[0] in ("w", "t") and key[1].isalpha():
+        item_id = _item_by_letter(world, key[1])
+        if item_id is not None:
+            if key[0] == "w":
+                return WearCommand(item_id)
+            return TakeOffCommand(item_id)
     if key in ARROWS:
         dx, dy = ARROWS[key]
         return MoveCommand(dx, dy)
     return WaitCommand()
+
+
+def _inventory_line(world: World) -> str:
+    """The inventory line: carried items with their letter in
+    inventory order, worn items marked *worn* (the AC of the worn gear
+    is on the status line above)."""
+    inv = world.hero.inventory
+    if not inv:
+        return "🎒 (empty)"
+    parts = []
+    for i, it in enumerate(inv):
+        letter = chr(ord("a") + i)
+        if it.owornmask & (W_ARMOR | W_ACCESSORY):
+            parts.append(f"[{letter}: {it.name} *worn*]")
+        else:
+            parts.append(f"[{letter}: {it.name}]")
+    return "🎒 " + " ".join(parts)
 
 
 def render(world: World, log: List[str]) -> str:
@@ -65,8 +108,9 @@ def render(world: World, log: List[str]) -> str:
     hero = world.hero
     weapon = wielded_of(world, hero.id)
     weapon_name = weapon.name if weapon is not None else "bare hands"
-    lines.append("")
-    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}")
+    # the effective AC is the computed core.worn.uac (base - worn gear)
+    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}")
+    lines.append(_inventory_line(world))
     lines.append("")
     lines.append("📜 Log:")
     if log:

@@ -11,6 +11,13 @@ from the mhitu attack tables, and the hero starts wielding a short sword
 (the weapon subset of core.uhitm on top of core.weapon).  Wiring those
 in adds NO rng draws, so the seeded layout is unchanged.
 
+The hero also runs the defence system (core.worn, PLAN-ARMOR.md):
+base AC 10 (HERO_BASE_AC, C mons[PM_HUMAN].ac) wearing chain mail ->
+effective AC 5, the old demo's defence; a leather cloak, leather
+gloves and a ring of protection (+1) ride carried, and six floor
+armours (FLOOR_ARMOR, one of them cursed) wait on fixed tiles.  None
+of it adds an rng draw, so the seeded layout is still unchanged.
+
 The grid is now rm-like Tiles (STONE boundary ring, ROOM floor, scattered
 STONE obstacles) instead of the old 0/1 ints, so the vision code
 (core/vision.py) runs on the same substrate the full mklev.c (rooms +
@@ -20,10 +27,10 @@ layout itself (and its rng draw sequence) is unchanged.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
-from .objects import ObjClass, ObjType
+from .objects import ObjClass, ObjType, W_ARM
 from .types import (Item, Map, Monster, ObjectType, Pos, Tile, TerrainType,
                     Trap, TrapType, World)
 from .vision import vision_init, vision_recalc, vision_reset
@@ -31,6 +38,29 @@ from .weapon import P_SKILLED, Skill, Skills
 
 HERO_POS: Pos = (20, 10)
 HERO_HP = 25
+
+# The hero's BASE (body) armor class.  C: mons[PM_HUMAN].ac -- the human
+# row is not in core.monst's SUBSET_PM, so a named constant (PLAN-
+# ARMOR.md decision 2).  The effective AC is computed from the worn gear
+# (core.worn.uac): the hero starts wearing chain mail (a_ac 5), so the
+# demo's effective defence is 10 - 5 = 5, exactly the old demo's AC.
+HERO_BASE_AC = 10
+
+# The demo floor armour (PLAN-ARMOR.md Phase 2): (position, name, otype,
+# cursed) at FIXED positions -- they are reserved via
+# generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
+# added and the seed-42 layout, trap / monster placement and every
+# seeded test are untouched.  The last piece is cursed (PLAN-ARMOR.md
+# risk 3, default yes): it makes the "You can't. It is cursed." doff
+# path reachable in play.
+FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
+    ((15, 7), "leather armor", ObjType.LEATHER_ARMOR, False),
+    ((25, 7), "elven leather helm", ObjType.ELVEN_LEATHER_HELM, False),
+    ((15, 13), "low boots", ObjType.LOW_BOOTS, False),
+    ((25, 13), "small shield", ObjType.SMALL_SHIELD, False),
+    ((20, 15), "leather jacket", ObjType.LEATHER_JACKET, False),
+    ((20, 6), "leather cloak", ObjType.LEATHER_CLOAK, True),  # cursed
+]
 
 
 def generate_map(rng, width: int = 40, height: int = 20,
@@ -65,12 +95,14 @@ def _hero_skills() -> Skills:
 
 
 def new_world(rng, width: int = 40, height: int = 20) -> World:
-    m = generate_map(rng, width, height, keep_floor=[HERO_POS])
+    m = generate_map(rng, width, height,
+                     keep_floor=[HERO_POS]
+                     + [p for p, _, _, _ in FLOOR_ARMOR])
     world = World(map=m)
 
     hero = Monster(
         id="player", name="Hero", pos=HERO_POS,
-        hp=HERO_HP, max_hp=HERO_HP, ac=5, damage=2, is_hero=True,
+        hp=HERO_HP, max_hp=HERO_HP, ac=HERO_BASE_AC, damage=2, is_hero=True,
         ulevel=1, ustr=12, udex=12,
         skills=_hero_skills())
     world.actors["player"] = hero
@@ -85,6 +117,46 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
     sword.container = "player"
     hero.inventory.append(sword)
     hero.wielded = sword.id
+
+    # the demo's starting kit (PLAN-ARMOR.md Phase 2): chain mail WORN
+    # (effective AC 5 -- the demo's old defence), plus a leather cloak,
+    # leather gloves and a ring of protection (+1) carried.  No rng
+    # draws; the seeded layout is unchanged.
+    mail = Item(id="mail_0", otype=ObjectType.ARMOR, name="chain mail",
+                otyp=ObjType.CHAIN_MAIL.value, oclass=ObjClass.ARMOR.value)
+    mail.container = "player"
+    mail.owornmask = W_ARM
+    hero.inventory.append(mail)
+    world.items[mail.id] = mail
+
+    cloak = Item(id="cloak_0", otype=ObjectType.ARMOR, name="leather cloak",
+                 otyp=ObjType.LEATHER_CLOAK.value,
+                 oclass=ObjClass.ARMOR.value)
+    cloak.container = "player"
+    hero.inventory.append(cloak)
+    world.items[cloak.id] = cloak
+
+    gloves = Item(id="gloves_0", otype=ObjectType.ARMOR,
+                  name="leather gloves", otyp=ObjType.LEATHER_GLOVES.value,
+                  oclass=ObjClass.ARMOR.value)
+    gloves.container = "player"
+    hero.inventory.append(gloves)
+    world.items[gloves.id] = gloves
+
+    ring = Item(id="ring_0", otype=ObjectType.RING,
+                name="ring of protection (+1)",
+                otyp=ObjType.RIN_PROTECTION.value,
+                oclass=ObjClass.RING.value, spe=1)
+    ring.container = "player"
+    hero.inventory.append(ring)
+    world.items[ring.id] = ring
+
+    # the demo floor armour (fixed positions, see FLOOR_ARMOR above)
+    for i, (pos, name, otyp, cursed) in enumerate(FLOOR_ARMOR):
+        it = Item(id=f"armor_{i}", otype=ObjectType.ARMOR, name=name,
+                  otyp=otyp.value, oclass=ObjClass.ARMOR.value, pos=pos,
+                  cursed=cursed)
+        world.items[it.id] = it
 
     floor = [p for p in m.floor_tiles() if p != HERO_POS]
 

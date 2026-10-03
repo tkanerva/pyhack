@@ -13,7 +13,7 @@ from .events import (
     StatusEvent, TrapSeenEvent, TrapTriggeredEvent, ZapEvent,
 )
 from .commands import (
-    CastCommand, Command, MoveCommand, QuaffCommand, WaitCommand,
-    ZapCommand,
+    CastCommand, Command, MoveCommand, PickupCommand, QuaffCommand,
+    TakeOffCommand, WaitCommand, WearCommand, ZapCommand,
 )
 from .step import step

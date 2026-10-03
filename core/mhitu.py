@@ -34,12 +34,15 @@ Included (implemented and tested):
   pure-data substitutions that need no unported state (the
   "two consecutive disease attacks" rule);
 - ``mattacku`` -- the main loop: for each of the monster's attacks,
-  roll the hit differential (C: ``tmp = AC + 10 + m_lev``, -2 if
-  trapped) and dispatch to ``hitmu`` / ``missmu`` / ``explmu``;
+  roll the hit differential (C: ``tmp = AC_VALUE(uac) + 10 + m_lev``,
+  -2 if trapped; the effective AC is the computed ``core.worn.uac``,
+  and AC_VALUE draws only when it is negative) and dispatch to
+  ``hitmu`` / ``missmu`` / ``explmu``;
 - ``hitmu`` -- a successful hit: base damage ``d(damn, damd)`` (+ the
-  undead-at-midnight extra), the negative-AC damage reduction, the
-  damage type, and any disease/confusion/sleep status the attack
-  carries -- emitted as a ``DamageEvent`` + ``StatusEvent``s;
+  undead-at-midnight extra), the negative-AC damage reduction (read
+  from the computed ``core.worn.uac``), the damage type, and any
+  disease/confusion/sleep status the attack carries -- emitted as a
+  ``DamageEvent`` + ``StatusEvent``s;
 - ``missmu`` -- the "misses!" / "just misses!" message;
 - ``explmu`` -- an exploder (e.g. yellow light) detonates: the hero is
   blinded / hallucinates / takes elemental damage, and the attacker
@@ -105,6 +108,7 @@ from .monst import (
     distance_atk_type,
 )
 from .types import DamageType, Monster, World
+from .worn import ac_value, uac
 
 # ------------------------------------------------------------
 # Attack outcome codes (C: M_ATTK_* in hack.h / mhitm.h)
@@ -295,8 +299,10 @@ def hitmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
         dmg += _dice(rng, mattk.damn, mattk.damd)
 
     # negative armor class reduces damage instead of fully protecting
-    if dmg and hero.ac < 0:
-        dmg -= _rnd(rng, -hero.ac)
+    # (C: hitmu reads the computed u.uac, not the base body AC)
+    hero_ac = uac(world, hero)
+    if dmg and hero_ac < 0:
+        dmg -= _rnd(rng, -hero_ac)
         if dmg < 1:
             dmg = 1
 
@@ -429,10 +435,14 @@ def mattacku(world: World, mon_id: str, rng, midnight: bool = False) -> List[Eve
         return []
     mdat: PerMonst = mon.mdata
 
-    # hit differential (C: mattacku): AC + 10 + monster level, -2 if the
-    # monster is trapped.  No LOS / Invis / displacement in the runtime,
-    # so the "can't see you" and "multi-strike" adjustments are omitted.
-    tmp = hero.ac + 10 + mdat.mlevel
+    # hit differential (C: mattacku): AC_VALUE(uac) + 10 + monster
+    # level, -2 if the monster is trapped.  The effective AC is the
+    # computed core.worn.uac (base - worn gear), and AC_VALUE makes the
+    # single auditable draw only when it is negative (the
+    # PLAN-ARMOR.md determinism note).  No LOS / Invis / displacement in
+    # the runtime, so the "can't see you" and "multi-strike"
+    # adjustments are omitted.
+    tmp = ac_value(uac(world, hero), rng) + 10 + mdat.mlevel
     if is_stuck(mon):
         tmp -= 2
     if tmp <= 0:

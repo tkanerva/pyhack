@@ -3,9 +3,10 @@ import random
 
 from core.items import wielded_of
 from core.monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
-from core.objects import ObjClass, ObjType
+from core.objects import ObjClass, ObjType, W_ARM
 from core.weapon import P_SKILLED, Skill
-from core.worldgen import new_world
+from core.worn import uac, which_armor
+from core.worldgen import FLOOR_ARMOR, HERO_BASE_AC, new_world
 
 
 def test_layout_counts():
@@ -82,6 +83,53 @@ def test_hero_skills_and_fixed_abilities():
     # the demo hero starts skilled with its starting weapon
     assert hero.skills.skill[int(Skill.P_SHORT_SWORD)] == P_SKILLED
     assert hero.skills.max_skill[int(Skill.P_SHORT_SWORD)] == P_SKILLED
+
+
+# ------------------------------------------------------------
+# defence wiring (PLAN-ARMOR.md): base AC 10 + starting kit + floor
+# armour
+# ------------------------------------------------------------
+
+def test_hero_defence_is_computed():
+    """The hero starts with base AC 10 (C mons[PM_HUMAN].ac; the human
+    row is not in the monst subset, so HERO_BASE_AC) wearing chain
+    mail: effective AC 5, the old demo's defence (PLAN-ARMOR.md
+    decision 2)."""
+    w = new_world(random.Random(42))
+    hero = w.hero
+    assert hero.ac == HERO_BASE_AC == 10  # the BASE (body) AC
+    mail = which_armor(w, hero, W_ARM)
+    assert mail is not None and mail.name == "chain mail"
+    assert mail.owornmask == W_ARM
+    assert uac(w, hero) == 5
+    # the rest of the kit is carried, unworn
+    by_name = {it.name: it for it in hero.inventory}
+    assert by_name["leather cloak"].owornmask == 0
+    assert by_name["leather gloves"].owornmask == 0
+    ring = by_name["ring of protection (+1)"]
+    assert ring.owornmask == 0 and ring.spe == 1
+    # the inventory order is the UI's letter order:
+    # a=sword b=mail c=cloak d=gloves e=ring
+    assert [it.name for it in hero.inventory] == [
+        "short sword", "chain mail", "leather cloak",
+        "leather gloves", "ring of protection (+1)"]
+
+
+def test_floor_armour_lies_on_floor_tiles():
+    """The demo floor armours sit on their fixed positions (walkable,
+    never the hero's tile) and are carried by nobody; the last one is
+    the cursed piece (PLAN-ARMOR.md risk 3)."""
+    w = new_world(random.Random(42))
+    for pos, name, otyp, cursed in FLOOR_ARMOR:
+        assert pos != (20, 10)
+        assert w.map.is_walkable(pos)
+        items = w.items_at(pos)
+        assert len(items) == 1, pos
+        it = items[0]
+        assert it.name == name and it.otyp == otyp.value
+        assert it.cursed is cursed
+        assert it.pos == pos and it.container is None
+        assert it.owornmask == 0
 
 
 def test_new_world_makes_no_new_rng_draws():

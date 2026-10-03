@@ -14,8 +14,11 @@ from core.monst import (AD_ACID, AD_DISE, AD_DRST, AD_FIRE, AD_PHYS, AD_SEDU,
                         AD_SLEE, MONS, PM_CENTIPEDE, PM_GOBLIN, PM_WOOD_NYMPH,
                         PM_YELLOW_LIGHT, PM_ZRUTY, Attack, AT_BITE, AT_CLAW,
                         AT_EXPL, AD_BLND)
+from core.objects import OBJECTS, ObjType, W_ARM, W_ARMC, W_ARMF, W_ARMG,
+    W_ARMH, W_ARMS, W_RINGL
 from core.rules import process_events
-from core.types import DamageType, Monster
+from core.types import DamageType, Item, Monster, ObjectType
+from core.worn import uac
 from conftest import SeqRng, make_hero, make_world
 
 
@@ -264,3 +267,76 @@ def test_step_flat_monster_keeps_simple_path():
     assert w.hero.hp == 23
     assert any(isinstance(e, MessageEvent) and "hits you for 2 damage" in e.text
                for e in ev)
+
+
+# ------------------------------------------------------------
+# defence integration (PLAN-ARMOR.md): the hit differential reads the
+# COMPUTED effective AC (core.worn.uac), and AC_VALUE draws only when
+# it is negative
+# ------------------------------------------------------------
+
+def _add_gear(w, otyp: ObjType, mask: int, name: str, spe: int = 0) -> Item:
+    """Carry a fine-identity gear item on the hero, pre-worn with
+    `mask`."""
+    it = Item(id=f"gear_{otyp.name}", otype=ObjectType.ARMOR,
+              name=name, otyp=otyp.value,
+              oclass=int(OBJECTS[otyp.value].oclass), spe=spe,
+              owornmask=mask, container="player")
+    w.hero.inventory.append(it)
+    w.items[it.id] = it
+    return it
+
+
+def test_mattacku_geared_hero_uses_effective_ac():
+    """Chain-mail hero (base 10, effective 5) vs the goblin (mlevel
+    0): threshold 15 -- the same number the old raw-AC formula gave,
+    but now through uac (the demo keeps its balance; PLAN-ARMOR.md
+    decision 2)."""
+    w = make_world(hero=make_hero(ac=10))
+    _add_gear(w, ObjType.CHAIN_MAIL, W_ARM, "chain mail")
+    assert uac(w, w.hero) == 5
+    g = _typed(PM_GOBLIN)
+    w.actors[g.id] = g
+    hit = mattacku(w, g.id, SeqRng(14, 3))    # roll 14 -> hit; d(1,4)=3
+    assert any(isinstance(e, DamageEvent) and e.amount == 3 for e in hit)
+    assert any(isinstance(e, MessageEvent) and e.text == "goblin hits!"
+               for e in hit)
+    near = mattacku(w, g.id, SeqRng(15))      # roll 15 == tmp -> near miss
+    assert any(isinstance(e, MessageEvent) and "just misses" in e.text
+               for e in near)
+    miss = mattacku(w, g.id, SeqRng(16))      # roll 16 -> miss
+    assert any(isinstance(e, MessageEvent) and "misses you" in e.text
+               and "just" not in e.text for e in miss)
+
+
+def test_mattacku_negative_ac_rolls_ac_value_first():
+    """Full gear + a +2 ring pushes the hero to effective AC -2: the
+    AC_VALUE draw precedes the d(20) hit roll, and hitmu's damage
+    reduction reads the computed AC (the PLAN-ARMOR.md determinism
+    note: the draw appears exactly when the new behaviour is being
+    exercised)."""
+    w = make_world(hero=make_hero(ac=10))
+    for mask, otyp, name in (
+        (W_ARM, ObjType.CHAIN_MAIL, "chain mail"),        # 5
+        (W_ARMC, ObjType.ELVEN_CLOAK, "elven cloak"),     # 1
+        (W_ARMH, ObjType.HELMET, "helmet"),               # 1
+        (W_ARMS, ObjType.SMALL_SHIELD, "small shield"),   # 1
+        (W_ARMG, ObjType.LEATHER_GLOVES, "leather gloves"),  # 1
+        (W_ARMF, ObjType.LOW_BOOTS, "low boots"),         # 1
+    ):
+        _add_gear(w, otyp, mask, name)
+    _add_gear(w, ObjType.RIN_PROTECTION, W_RINGL, "ring of protection",
+              spe=2)  # effective AC: 10 - 10 - 2 = -2
+    g = _typed(PM_GOBLIN)
+    w.actors[g.id] = g
+    # draws: ac_value(-2) = -rnd(2) -> 2 (so -2); d20 roll 7 <= tmp 8
+    # -> hit; d(1,4) = 4; reduction rnd(2) = 1 -> 3
+    ev = mattacku(w, g.id, SeqRng(2, 7, 4, 1))
+    assert any(isinstance(e, DamageEvent) and e.amount == 3 for e in ev)
+    assert any(isinstance(e, MessageEvent) and e.text == "goblin hits!"
+               for e in ev)
+    # a miss: only the AC_VALUE + hit draws happen
+    rng = SeqRng(2, 16, 99, 99)
+    ev = mattacku(w, g.id, rng)
+    assert not any(isinstance(e, DamageEvent) for e in ev)
+    assert rng._values == [99, 99]

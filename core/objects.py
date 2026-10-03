@@ -208,6 +208,37 @@ class Prop(IntEnum):
 
 
 # ------------------------------------------------------------
+# Worn-slot masks (prop.h)
+# ------------------------------------------------------------
+# The worn state lives on the item itself (Item.owornmask): a bitmask
+# over these W_* bits.  core.worn scans the carrier's inventory for the
+# bits (which_armor / setworn) -- the exact C mechanism (prop.h +
+# src/worn.c), used for the hero and future monsters alike.  C values
+# preserved exactly.
+
+W_ARM = 0x00000001      # Body armor
+W_ARMC = 0x00000002     # Cloak
+W_ARMH = 0x00000004     # Helmet/hat
+W_ARMS = 0x00000008     # Shield
+W_ARMG = 0x00000010     # Gloves/gauntlets
+W_ARMF = 0x00000020     # Footwear
+W_ARMU = 0x00000040     # Undershirt
+W_ARMOR = W_ARM | W_ARMC | W_ARMH | W_ARMS | W_ARMG | W_ARMF | W_ARMU
+
+W_WEP = 0x00000100      # Wielded weapon
+W_QUIVER = 0x00000200   # Quiver for (f)iring ammo
+W_SWAPWEP = 0x00000400  # Secondary weapon
+W_WEAPONS = W_WEP | W_SWAPWEP | W_QUIVER
+
+W_AMUL = 0x00010000     # Amulet
+W_RINGL = 0x00020000    # Left ring
+W_RINGR = 0x00040000    # Right ring
+W_RING = W_RINGL | W_RINGR
+W_TOOL = 0x00080000     # Eyewear
+W_ACCESSORY = W_RING | W_AMUL | W_TOOL
+
+
+# ------------------------------------------------------------
 # Skills (skills.h) -- used as oc_subtyp (oc_skill / oc_armcat)
 # ------------------------------------------------------------
 
@@ -962,16 +993,16 @@ OBJECTS: "list[Object]" = [
            500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_RED),
     _armor("white dragon scales", None, 1, 0, 1, Prop.COLD_RES, 0, 5, 40,
            500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_WHITE),
-    _armor("orange dragon scales", None, 1, 0, 1, Prop.SLEEP_RES, 0, 5, 40,
-           500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_ORANGE),
-    _armor("black dragon scales", None, 1, 0, 1, Prop.DISINT_RES, 0, 5, 40,
-           700, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_BLACK),
+    _armor("orange dragon scales", None, 1, 0, 1, Prop.SLEEP_RES, 0, 5,
+           40, 500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_ORANGE),
+    _armor("black dragon scales", None, 1, 0, 1, Prop.DISINT_RES, 0, 5,
+           40, 700, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_BLACK),
     _armor("blue dragon scales", None, 1, 0, 1, Prop.SHOCK_RES, 0, 5, 40,
            500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_BLUE),
-    _armor("green dragon scales", None, 1, 0, 1, Prop.POISON_RES, 0, 5, 40,
-           500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_GREEN),
-    _armor("yellow dragon scales", None, 1, 0, 1, Prop.ACID_RES, 0, 5, 40,
-           500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_YELLOW),
+    _armor("green dragon scales", None, 1, 0, 1, Prop.POISON_RES, 0, 5,
+           40, 500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_GREEN),
+    _armor("yellow dragon scales", None, 1, 0, 1, Prop.ACID_RES, 0, 5,
+           40, 500, 7, 0, ARM_SUIT, Material.DRAGON_HIDE, CLR_YELLOW),
     # other suits
     _armor("plate mail", None, 1, 0, 1, 0, 40, 5, 450, 600, 3, 2, ARM_SUIT,
            Material.IRON, HI_METAL),
@@ -1436,8 +1467,8 @@ OBJECTS: "list[Object]" = [
            5, 1, IMMEDIATE, CLR_MAGENTA),
     _spell("haste self", "purple", Skill.P_ESCAPE_SPELL, 33, 4, 3, 1, NODIR,
            CLR_MAGENTA),
-    _spell("detect unseen", "violet", Skill.P_DIVINATION_SPELL, 20, 4, 3,
-           1, NODIR, CLR_MAGENTA),
+    _spell("detect unseen", "violet", Skill.P_ESCAPE_SPELL, 20, 4, 3, 1,
+           NODIR, CLR_MAGENTA),
     _spell("levitation", "tan", Skill.P_ESCAPE_SPELL, 20, 4, 4, 1, NODIR,
            CLR_BROWN),
     _spell("extra healing", "plaid", Skill.P_HEALING_SPELL, 27, 5, 3, 1,
@@ -1446,8 +1477,8 @@ OBJECTS: "list[Object]" = [
            5, 4, 1, NODIR, CLR_BROWN),
     _spell("invisibility", "dark brown", Skill.P_ESCAPE_SPELL, 20, 5, 4, 1,
            NODIR, CLR_BROWN),
-    _spell("detect treasure", "gray", Skill.P_DIVINATION_SPELL, 20, 5, 4,
-           1, NODIR, CLR_GRAY),
+    _spell("detect treasure", "gray", Skill.P_DIVINATION_SPELL, 20, 5, 4, 1,
+           NODIR, CLR_GRAY),
     _spell("remove curse", "wrinkled", Skill.P_CLERIC_SPELL, 25, 5, 3, 1,
            NODIR, HI_PAPER),
     _spell("magic mapping", "dusty", Skill.P_DIVINATION_SPELL, 18, 7, 5,
@@ -1719,6 +1750,9 @@ __all__ = [
     "NODIR", "IMMEDIATE", "RAY", "PIERCE", "SLASH", "WHACK",
     "ARM_SUIT", "ARM_SHIELD", "ARM_HELM", "ARM_GLOVES", "ARM_BOOTS",
     "ARM_CLOAK", "ARM_SHIRT",
+    "W_ARM", "W_ARMC", "W_ARMH", "W_ARMS", "W_ARMG", "W_ARMF", "W_ARMU",
+    "W_ARMOR", "W_WEP", "W_QUIVER", "W_SWAPWEP", "W_WEAPONS", "W_AMUL",
+    "W_RINGL", "W_RINGR", "W_RING", "W_TOOL", "W_ACCESSORY",
     "CLR_BLACK", "CLR_RED", "CLR_GREEN", "CLR_BROWN", "CLR_BLUE",
     "CLR_MAGENTA", "CLR_CYAN", "CLR_GRAY", "NO_COLOR", "CLR_ORANGE",
     "CLR_BRIGHT_GREEN", "CLR_YELLOW", "CLR_BRIGHT_BLUE",
