@@ -17,6 +17,8 @@ turn. The core has **no I/O, no global state, and no broadcast bus**:
         +-- zaps                       (zap.py)
         +-- potions                    (potions.py)
         +-- spells                     (spells.py)
+        +-- wear / take off            (worn.py: slots + AC computation)
+        +-- pickup                     (pickup.py: the pickobj subset)
         +-- rules                      (rules.py: dice, resist,
                                         apply_damage, tick_actor)
 ```
@@ -80,6 +82,19 @@ emoji log strings.
   is dropped.
 
 **Added (NetHack-faithful, small):**
+- The defence system (PLAN-ARMOR.md, Phases 1-2): worn state is the C
+  mechanism -- `Item.owornmask` (prop.h bitmask) + an inventory scan
+  (`worn.which_armor` / `setworn`); `Monster.ac` is the BASE body AC
+  and the effective AC is the computed `worn.uac()` (C `find_ac`:
+  base - the seven slots' ARM_BONUS - the spe of worn rings of
+  protection - 2 for a worn amulet of guarding, clamped to +/-99).
+  `mattacku`'s differential reads `AC_VALUE(uac)` (the roll happens
+  only for negative AC) and `hitmu`'s damage reduction reads the same
+  computed AC.  The hero (base AC 10) starts wearing chain mail --
+  effective AC 5, the old demo's defence; a cloak, gloves and a ring
+  of protection ride carried, and six floor armours (one cursed)
+  can be picked up (`g`), worn (`w<letter>`) and taken off
+  (`t<letter>`).
 - Bump-to-attack: walking into a monster attacks it (the old demo had
   no hero attack at all, so the game was a death-watching exercise).
   Hero melee uses the same hit formula with 1d2 damage.
@@ -96,6 +111,11 @@ emoji log strings.
   hero starts wielding a short sword (the uhitm melee-weapon subset on
   weapon.py's hitval / dmgval; backstab and the weapon special effects
   are deferred).
+- The worn-gear side effects (stealth boots, cloaks of protection,
+  dragon-scale resistances, ...) are STUBs in `worn.py` pending the
+  intrinsic/extrinsic property system (PLAN-ARMOR.md decision 7 and
+  Phase 4/5); the AC effect of gear is already live via the computed
+  `uac`.
 
 **Intentional simplifications (documented, not bugs):**
 - Monster AI is still a random walk — no awareness/line-of-sight yet.
@@ -129,3 +149,6 @@ emoji log strings.
 3. Monster awareness/LOS for chases.
 4. If the system/entity matrix grows, evolve into a lightweight ECS —
    the events-out design stays the same.
+
+
+---

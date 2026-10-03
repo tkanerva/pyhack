@@ -21,15 +21,17 @@ def main() -> None:
     log: List[str] = []
 
     print("🎮 PyHack — functional core, events out")
-    print("   WASD/Arrows to move | Q to quit")
+    print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | Q to quit")
     print("   Bump into a monster to attack it!")
     print("   Traps trigger when you step on them (30% chance).")
+    print("   The AC on the status line is the computed effective AC")
+    print("   (base 10 - your worn gear; wear the floor armour!).")
     print()
 
     while not world.over:
         os.system("cls" if os.name == "nt" else "clear")
         print(render(world, log))
-        cmd = read_command()
+        cmd = read_command(world)
         if cmd is None:
             break
         events = step(world, cmd, rng)
