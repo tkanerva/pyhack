@@ -8,6 +8,11 @@ a PerMonst from core.monst.  The per-game state lives in one
 array plus the global move counter), per the pyhack architecture of no
 globals.
 
+The PM_ anchor table (one constant per monster type the name-specific
+predicates refer to) lives in mondata_data.py so this module stays
+readable; it is imported back below, resolved from PM_NAMES at import
+time so a renumbering would break loudly.
+
 Dropped / deferred (documented, not bugs):
 
 - name_to_mon / name_to_monplus / name_to_monclass: need the title
@@ -74,97 +79,37 @@ from .monst import (
 )
 
 # ------------------------------------------------------------
-# PM_ anchors referenced by name-specific predicates below.  Resolved
-# from PM_NAMES at import time so a renumbering would break loudly.
-# ------------------------------------------------------------
+# PM_ anchors referenced by name-specific predicates below.  The
+# table itself lives in mondata_data.py (extracted for readability);
+# the constants are resolved from PM_NAMES at import time so a
+# renumbering would break loudly.
+from .mondata_data import (  # noqa: E402
+    PM_AIR_ELEMENTAL, PM_BABY_GOLD_DRAGON, PM_BABY_LONG_WORM,
+    PM_BABY_PURPLE_WORM, PM_BLACK_LIGHT, PM_BLACK_PUDDING,
+    PM_BLACK_UNICORN, PM_CHICKATRICE, PM_CYCLOPS, PM_DEATH, PM_DWARF,
+    PM_ELF, PM_FAMINE, PM_PESTILENCE, PM_FIRE_ELEMENTAL, PM_FIRE_VORTEX,
+    PM_FLAMING_SPHERE, PM_FLOATING_EYE, PM_GOLD_DRAGON, PM_GOLD_GOLEM,
+    PM_HORNED_DEVIL, PM_HUMAN, PM_KI_RIN, PM_LEATHER_GOLEM,
+    PM_LONG_WORM, PM_MASTER_MIND_FLAYER, PM_MEDUSA, PM_MIND_FLAYER,
+    PM_MINOTAUR, PM_MANES, PM_BALROG, PM_ASMODEUS, PM_GREMLIN,
+    PM_HORSE, PM_WARHORSE, PM_PONY, PM_PIRANHA, PM_PURPLE_WORM,
+    PM_ROCK_MOLE, PM_WOODCHUCK, PM_RAVEN, PM_SALAMANDER, PM_SHADE,
+    PM_SHOCKING_SPHERE, PM_STALKER, PM_STRAW_GOLEM, PM_PAPER_GOLEM,
+    PM_WOOD_GOLEM, PM_IRON_GOLEM, PM_FLESH_GOLEM, PM_GHOUL,
+    PM_SKELETON, PM_TENGU, PM_VAMPIRE_BAT, PM_WHITE_UNICORN,
+    PM_GRAY_UNICORN, PM_GIANT, PM_ORC, PM_ETTIN, PM_GNOME, PM_KOBOLD,
+    PM_KOBOLD_ZOMBIE, PM_KOBOLD_MUMMY, PM_DWARF_ZOMBIE,
+    PM_DWARF_MUMMY, PM_GNOME_ZOMBIE, PM_GNOME_MUMMY, PM_ORC_ZOMBIE,
+    PM_ORC_MUMMY, PM_ELF_ZOMBIE, PM_ELF_MUMMY, PM_HUMAN_ZOMBIE,
+    PM_HUMAN_MUMMY, PM_ETTIN_ZOMBIE, PM_ETTIN_MUMMY, PM_GIANT_ZOMBIE,
+    PM_GIANT_MUMMY, PM_WATCHMAN, PM_WATCH_CAPTAIN, PM_ARCHEOLOGIST,
+    PM_WIZARD, PM_BAT, PM_GIANT_BAT, PM_VAMPIRE, PM_VAMPIRE_LEADER,
+    PM_COCKATRICE,
+)
+
 
 def _pm(name: str) -> int:
     return PM_NAMES.index(name)
-
-PM_AIR_ELEMENTAL = _pm("air elemental")
-PM_BABY_GOLD_DRAGON = _pm("baby gold dragon")
-PM_BABY_LONG_WORM = _pm("baby long worm")
-PM_BABY_PURPLE_WORM = _pm("baby purple worm")
-PM_BLACK_LIGHT = _pm("black light")
-PM_BLACK_PUDDING = _pm("black pudding")
-PM_BLACK_UNICORN = _pm("black unicorn")
-PM_CHICKATRICE = _pm("chickatrice")
-PM_CYCLOPS = _pm("Cyclops")
-PM_DEATH = _pm("Death")
-PM_DWARF = _pm("dwarf")
-PM_ELF = _pm("elf")
-PM_FAMINE = _pm("Famine")
-PM_FIRE_ELEMENTAL = _pm("fire elemental")
-PM_FIRE_VORTEX = _pm("fire vortex")
-PM_FLAMING_SPHERE = _pm("flaming sphere")
-PM_FLOATING_EYE = _pm("floating eye")
-PM_GOLD_DRAGON = _pm("gold dragon")
-PM_GOLD_GOLEM = _pm("gold golem")
-PM_HORNED_DEVIL = _pm("horned devil")
-PM_HUMAN = _pm("human")
-PM_KI_RIN = _pm("ki-rin")
-PM_LEATHER_GOLEM = _pm("leather golem")
-PM_LONG_WORM = _pm("long worm")
-PM_MASTER_MIND_FLAYER = _pm("master mind flayer")
-PM_MEDUSA = _pm("Medusa")
-PM_MIND_FLAYER = _pm("mind flayer")
-PM_MINOTAUR = _pm("minotaur")
-PM_MANES = _pm("manes")
-PM_BALROG = _pm("balrog")
-PM_ASMODEUS = _pm("Asmodeus")
-PM_GREMLIN = _pm("gremlin")
-PM_HORSE = _pm("horse")
-PM_WARHORSE = _pm("warhorse")
-PM_PONY = _pm("pony")
-PM_PIRANHA = _pm("piranha")
-PM_PURPLE_WORM = _pm("purple worm")
-PM_ROCK_MOLE = _pm("rock mole")
-PM_WOODCHUCK = _pm("woodchuck")
-PM_RAVEN = _pm("raven")
-PM_SALAMANDER = _pm("salamander")
-PM_SHADE = _pm("shade")
-PM_SHOCKING_SPHERE = _pm("shocking sphere")
-PM_STALKER = _pm("stalker")
-PM_STRAW_GOLEM = _pm("straw golem")
-PM_PAPER_GOLEM = _pm("paper golem")
-PM_WOOD_GOLEM = _pm("wood golem")
-PM_IRON_GOLEM = _pm("iron golem")
-PM_FLESH_GOLEM = _pm("flesh golem")
-PM_GHOUL = _pm("ghoul")
-PM_SKELETON = _pm("skeleton")
-PM_TENGU = _pm("tengu")
-PM_VAMPIRE_BAT = _pm("vampire bat")
-PM_WHITE_UNICORN = _pm("white unicorn")
-PM_GRAY_UNICORN = _pm("gray unicorn")
-PM_GIANT = _pm("giant")
-PM_ORC = _pm("orc")
-PM_ETTIN = _pm("ettin")
-PM_GNOME = _pm("gnome")
-PM_KOBOLD = _pm("kobold")
-PM_KOBOLD_ZOMBIE = _pm("kobold zombie")
-PM_KOBOLD_MUMMY = _pm("kobold mummy")
-PM_DWARF_ZOMBIE = _pm("dwarf zombie")
-PM_DWARF_MUMMY = _pm("dwarf mummy")
-PM_GNOME_ZOMBIE = _pm("gnome zombie")
-PM_GNOME_MUMMY = _pm("gnome mummy")
-PM_ORC_ZOMBIE = _pm("orc zombie")
-PM_ORC_MUMMY = _pm("orc mummy")
-PM_ELF_ZOMBIE = _pm("elf zombie")
-PM_ELF_MUMMY = _pm("elf mummy")
-PM_HUMAN_ZOMBIE = _pm("human zombie")
-PM_HUMAN_MUMMY = _pm("human mummy")
-PM_ETTIN_ZOMBIE = _pm("ettin zombie")
-PM_ETTIN_MUMMY = _pm("ettin mummy")
-PM_GIANT_ZOMBIE = _pm("giant zombie")
-PM_GIANT_MUMMY = _pm("giant mummy")
-PM_WATCHMAN = _pm("watchman")
-PM_WATCH_CAPTAIN = _pm("watch captain")
-PM_ARCHEOLOGIST = _pm("archeologist")
-PM_WIZARD = _pm("wizard")
-PM_BAT = _pm("bat")
-PM_GIANT_BAT = _pm("giant bat")
-PM_VAMPIRE = _pm("vampire")
-PM_VAMPIRE_LEADER = _pm("vampire leader")
 
 
 def mons(pm: int) -> Optional[PerMonst]:
@@ -782,9 +727,6 @@ def likes_lava(ptr: PerMonst) -> bool:
 
 def likes_fire(ptr: PerMonst) -> bool:
     return ptr.pmidx in (PM_FIRE_VORTEX, PM_FLAMING_SPHERE) or likes_lava(ptr)
-
-
-PM_COCKATRICE = _pm("cockatrice")
 
 
 def touch_petrifies(ptr: PerMonst) -> bool:
