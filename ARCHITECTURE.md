@@ -82,7 +82,7 @@ emoji log strings.
   is dropped.
 
 **Added (NetHack-faithful, small):**
-- The defence system (PLAN-ARMOR.md, Phases 1-2): worn state is the C
+- The defence system (PLAN-ARMOR.md, Phases 1-3): worn state is the C
   mechanism -- `Item.owornmask` (prop.h bitmask) + an inventory scan
   (`worn.which_armor` / `setworn`); `Monster.ac` is the BASE body AC
   and the effective AC is the computed `worn.uac()` (C `find_ac`:
@@ -94,9 +94,15 @@ emoji log strings.
   effective AC 5, the old demo's defence; a cloak, gloves and a ring
   of protection ride carried, and six floor armours (one cursed)
   can be picked up (`g`), worn (`w<letter>`) and taken off
-  (`t<letter>`).
+  (`t<letter>`).  Phase 3 adds the mhitu.c defence details: `mhitu.magic_negation`
+  (the max worn a_can plus the worn amulet-of-guarding Protection
+  increment, capped at 3) and `mhitu.u_slip_free` (a greased / oilskin
+  cloak-suit-shirt -- or the helmet against brain drain -- sheds hug /
+  wrap attacks; cursed gear fails 1/3; the grease wears off 1/2 and
+  `Item.greased` is cleared) -- both implemented and tested, with no
+  live call site yet (they come live with the monster-zap / hug ports).
 - Bump-to-attack: walking into a monster attacks it (the old demo had
-  no hero attack at all, so the game was a death-watching exercise).
+  no hero attack at all, so the game was a death-watching exercise).  
   Hero melee uses the same hit formula with 1d2 damage.
 - A monster adjacent to the hero attacks instead of moving.
 - Sleep / stuck / confusion / poison now tick down each turn
@@ -149,6 +155,3 @@ emoji log strings.
 3. Monster awareness/LOS for chases.
 4. If the system/entity matrix grows, evolve into a lightweight ECS —
    the events-out design stays the same.
-
-
----

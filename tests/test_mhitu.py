@@ -6,16 +6,19 @@ the pure-core half that applies those intents through the choke points.
 The tests assert on the produced intents AND on the resulting world
 state after processing.
 """
+import itertools
+
 from core import WaitCommand, step
 from core.events import DamageEvent, DeathEvent, MessageEvent, StatusEvent
 from core.mhitu import (adtyp_to_damage, could_seduce, explmu, getmattk,
-                        hitmu, mattacku, missmu)
-from core.monst import (AD_ACID, AD_DISE, AD_DRST, AD_FIRE, AD_PHYS, AD_SEDU,
-                        AD_SLEE, MONS, PM_CENTIPEDE, PM_GOBLIN, PM_WOOD_NYMPH,
-                        PM_YELLOW_LIGHT, PM_ZRUTY, Attack, AT_BITE, AT_CLAW,
-                        AT_EXPL, AD_BLND)
-from core.objects import OBJECTS, ObjType, W_ARM, W_ARMC, W_ARMF, W_ARMG,
-    W_ARMH, W_ARMS, W_RINGL
+                        hitmu, mattacku, magic_negation, missmu, u_slip_free)
+from core.monst import (AD_ACID, AD_DISE, AD_DRIN, AD_DRST, AD_FIRE, AD_PHYS,
+                        AD_SEDU, AD_SLEE, AD_WRAP, MONS, PM_CENTIPEDE,
+                        PM_GOBLIN, PM_WOOD_NYMPH, PM_YELLOW_LIGHT, PM_ZRUTY,
+                        Attack, AT_BITE, AT_CLAW, AT_ENGL, AT_EXPL, AT_HUGS,
+                        AT_TENT, AD_BLND)
+from core.objects import (OBJECTS, ObjClass, ObjType, W_AMUL, W_ARM, W_ARMC,
+                          W_ARMF, W_ARMG, W_ARMH, W_ARMS, W_ARMU, W_RINGL)
 from core.rules import process_events
 from core.types import DamageType, Item, Monster, ObjectType
 from core.worn import uac
@@ -340,3 +343,223 @@ def test_mattacku_negative_ac_rolls_ac_value_first():
     ev = mattacku(w, g.id, rng)
     assert not any(isinstance(e, DamageEvent) for e in ev)
     assert rng._values == [99, 99]
+
+
+# ------------------------------------------------------------
+# Phase 3 of PLAN-ARMOR.md: the mhitu.c defence details
+# (magic_negation + u_slip_free) -- implemented, tested, with no
+# live call site yet (the call sites land with castmu / the hug port)
+# ------------------------------------------------------------
+
+_worn_ids = itertools.count()
+# fine oclass -> coarse ObjectType for the Item field
+_COARSE = {
+    int(ObjClass.ARMOR): ObjectType.ARMOR,
+    int(ObjClass.RING): ObjectType.RING,
+    int(ObjClass.AMULET): ObjectType.AMULET,
+    int(ObjClass.WEAPON): ObjectType.WEAPON,
+}
+
+
+def _wear(w, otyp: ObjType, mask: int, name=None, spe=0, cursed=False,
+          greased=False) -> Item:
+    """Carry a fine-identity item on the hero, pre-worn with ``mask``
+    (0 = carried, not worn)."""
+    o = OBJECTS[otyp.value]
+    it = Item(id=f"ph3_{next(_worn_ids)}", otype=_COARSE[int(o.oclass)],
+              name=name if name is not None else (o.name or o.descr),
+              otyp=otyp.value, oclass=int(o.oclass), spe=spe, cursed=cursed,
+              greased=greased, owornmask=mask, container="player")
+    w.hero.inventory.append(it)
+    w.items[it.id] = it
+    return it
+
+
+def _attacker(name="angler") -> Monster:
+    """A bare attacker stand-in (only its name matters here)."""
+    return Monster(id=f"atk_{name}", name=name, pos=(7, 4), hp=5, max_hp=5,
+                   ac=5)
+
+
+# magic_negation (C: mhitu.c) -------------------------------------------
+
+def test_magic_negation_table():
+    # nothing worn -> 0
+    w = make_world()
+    assert magic_negation(w.hero) == 0
+
+    # the plan's "leather 0": the leather JACKET has a_can 0
+    w = make_world()
+    _wear(w, ObjType.LEATHER_JACKET, W_ARM)
+    assert magic_negation(w.hero) == 0
+    # (correction vs the plan's arithmetic, as in its status note: worn
+    # LEATHER_ARMOR has a_can 1)
+    w = make_world()
+    _wear(w, ObjType.LEATHER_ARMOR, W_ARM)
+    assert magic_negation(w.hero) == 1
+
+    # plate (a_can 2)
+    w = make_world()
+    _wear(w, ObjType.PLATE_MAIL, W_ARM)
+    assert magic_negation(w.hero) == 2
+
+    # the MAX over the worn slots, not a sum (chain 1 + oilskin 2 -> 2)
+    w = make_world()
+    _wear(w, ObjType.CHAIN_MAIL, W_ARM)
+    _wear(w, ObjType.OILSKIN_CLOAK, W_ARMC)
+    assert magic_negation(w.hero) == 2
+
+    # plate + amulet of guarding -> 2 + 2 = 4 -> capped at 3
+    w = make_world()
+    _wear(w, ObjType.PLATE_MAIL, W_ARM)
+    _wear(w, ObjType.AMULET_OF_GUARDING, W_AMUL)
+    assert magic_negation(w.hero) == 3
+
+    # amulet of guarding alone -> 2 (the plan's Phase-3 semantics: with no
+    # other Protection source in the subset, the worn amulet IS the
+    # protection source)
+    w = make_world()
+    _wear(w, ObjType.AMULET_OF_GUARDING, W_AMUL)
+    assert magic_negation(w.hero) == 2
+
+    # an UNWORN amulet gives nothing; a non-guarding amulet neither
+    w = make_world()
+    _wear(w, ObjType.AMULET_OF_GUARDING, 0)
+    assert magic_negation(w.hero) == 0
+    w = make_world()
+    _wear(w, ObjType.AMULET_OF_ESP, W_AMUL)
+    assert magic_negation(w.hero) == 0
+
+
+# u_slip_free (C: mhitu.c) ----------------------------------------------
+
+def test_u_slip_free_greased_cloak_sheds_a_hug():
+    w = make_world()
+    cloak = _wear(w, ObjType.LEATHER_CLOAK, W_ARMC, greased=True)
+    mon = _attacker()
+    mattk = Attack(AT_HUGS, AD_PHYS, 0, 0)
+    # not cursed: no cursed draw; grease roll preset 2 -> rn2 1 -> keeps
+    slipped, events = u_slip_free(w, mon, mattk, SeqRng(2))
+    assert slipped is True
+    assert cloak.greased is True
+    assert [e.text for e in events] == \
+        ["angler grabs you, but cannot hold onto your greased "
+         "leather cloak!"]
+
+
+def test_u_slip_free_engulf_never_slips():
+    w = make_world()
+    _wear(w, ObjType.LEATHER_CLOAK, W_ARMC, greased=True)
+    # AT_ENGL is excluded before any gear is read: no rng draw
+    slipped, events = u_slip_free(w, _attacker(),
+                                  Attack(AT_ENGL, AD_WRAP, 1, 6), SeqRng())
+    assert slipped is False
+    assert events == []
+
+
+def test_u_slip_free_no_gear_does_not_slip():
+    w = make_world()
+    slipped, events = u_slip_free(w, _attacker(),
+                                  Attack(AT_HUGS, AD_PHYS, 0, 0), SeqRng())
+    assert slipped is False
+    assert events == []
+
+
+def test_u_slip_free_cloak_suit_shirt_fallback():
+    mon = _attacker()
+    hug = Attack(AT_HUGS, AD_PHYS, 0, 0)
+    # no cloak: the greased suit protects
+    w = make_world()
+    _wear(w, ObjType.CHAIN_MAIL, W_ARM, greased=True)
+    slipped, _ = u_slip_free(w, mon, hug, SeqRng(2))
+    assert slipped is True
+    # no cloak / suit: the greased shirt protects
+    w = make_world()
+    _wear(w, ObjType.HAWAIIAN_SHIRT, W_ARMU, greased=True)
+    slipped, _ = u_slip_free(w, mon, hug, SeqRng(2))
+    assert slipped is True
+    # with both, the cloak wins the message
+    w = make_world()
+    _wear(w, ObjType.CHAIN_MAIL, W_ARM, greased=True)
+    _wear(w, ObjType.LEATHER_CLOAK, W_ARMC, greased=True)
+    slipped, events = u_slip_free(w, mon, hug, SeqRng(2))
+    assert slipped is True
+    assert [e.text for e in events] == \
+        ["angler grabs you, but cannot hold onto your greased "
+         "leather cloak!"]
+
+
+def test_u_slip_free_brain_drain_is_parried_by_the_helmet():
+    mon = _attacker("mind flayer")
+    drain = Attack(AT_TENT, AD_DRIN, 0, 0)
+    # a worn greased cloak is ignored for AD_DRIN; the greased helmet
+    # protects
+    w = make_world()
+    _wear(w, ObjType.LEATHER_CLOAK, W_ARMC, greased=True)
+    _wear(w, ObjType.HELMET, W_ARMH, greased=True)
+    slipped, events = u_slip_free(w, mon, drain, SeqRng(2))
+    assert slipped is True
+    assert [e.text for e in events] == \
+        ["mind flayer grabs you, but cannot hold onto your greased "
+         "helmet!"]
+    # a non-greased helmet does NOT protect, even with a greased cloak
+    w = make_world()
+    _wear(w, ObjType.LEATHER_CLOAK, W_ARMC, greased=True)
+    _wear(w, ObjType.HELMET, W_ARMH)
+    slipped, events = u_slip_free(w, mon, drain, SeqRng())
+    assert slipped is False
+    assert events == []
+
+
+def test_u_slip_free_oilskin_cloak():
+    w = make_world()
+    cloak = _wear(w, ObjType.OILSKIN_CLOAK, W_ARMC)  # slippery, not greased
+    mon = _attacker()
+    # the AD_WRAP verb is "slips off of"; nothing is drawn (not cursed,
+    # not greased)
+    slipped, events = u_slip_free(w, mon, Attack(AT_HUGS, AD_WRAP, 0, 0),
+                                  SeqRng())
+    assert slipped is True
+    assert cloak.greased is False
+    assert [e.text for e in events] == \
+        ["angler slips off of your slippery oilskin cloak!"]
+
+
+def test_u_slip_free_cursed_gear_fails_one_third():
+    w = make_world()
+    _wear(w, ObjType.LEATHER_CLOAK, W_ARMC, greased=True, cursed=True)
+    mon = _attacker()
+    hug = Attack(AT_HUGS, AD_PHYS, 0, 0)
+    # cursed: the protection fails when rn2(3) == 0 (preset 1 -> 0)
+    rng = SeqRng(1)
+    slipped, events = u_slip_free(w, mon, hug, rng)
+    assert slipped is False
+    assert events == []
+    assert rng._values == []  # exactly the one cursed draw
+    # ...and it holds when the roll is nonzero (preset 2 -> rn2 1);
+    # the grease roll (preset 2 -> rn2 1) keeps the grease
+    w = make_world()
+    cloak = _wear(w, ObjType.LEATHER_CLOAK, W_ARMC, greased=True,
+                  cursed=True)
+    rng = SeqRng(2, 2)
+    slipped, events = u_slip_free(w, mon, hug, rng)
+    assert slipped is True
+    assert cloak.greased is True
+    assert rng._values == []  # both draws consumed
+
+
+def test_u_slip_free_grease_wears_off():
+    w = make_world()
+    cloak = _wear(w, ObjType.LEATHER_CLOAK, W_ARMC, greased=True)
+    mon = _attacker()
+    # not cursed (no cursed draw); grease roll preset 1 -> rn2 0 ->
+    # "The grease wears off." and the flag is cleared
+    slipped, events = u_slip_free(w, mon, Attack(AT_HUGS, AD_PHYS, 0, 0),
+                                  SeqRng(1))
+    assert slipped is True
+    assert cloak.greased is False
+    assert [e.text for e in events] == [
+        "angler grabs you, but cannot hold onto your greased "
+        "leather cloak!",
+        "The grease wears off.",
+    ]

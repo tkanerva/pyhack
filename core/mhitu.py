@@ -53,7 +53,23 @@ Included (implemented and tested):
   trapped);
 - ``passiveum`` -- the hero's passive counterattack; a no-op while the
   hero has no ``mdata`` (it becomes live once the hero can be
-  polymorphed into a monster with passive attacks).
+  polymorphed into a monster with passive attacks);
+- ``magic_negation`` -- how much the hero's worn armour / protection
+  negates an incoming magic attack (C: magic_negation): the max a_can
+  of the seven worn armour slots (the table's oc2) plus the protection
+  increment -- +2 for a worn amulet of guarding, +1 for any other
+  Protection source -- capped at 3; the scan reuses
+  ``worn.which_armor``.  No live call site yet: hero-facing zaps /
+  monster spells are unported, the call sites land with castmu /
+  zap-on-hero;
+- ``u_slip_free`` -- whether the hero's greased / slippery clothing
+  sheds a hug / wrap / brain-drain attack (C: u_slip_free): AT_ENGL
+  never slips; the protecting item is the worn cloak, else the suit,
+  else the shirt (the helmet for a AD_DRIN attack); it must be greased
+  or an oilskin cloak; cursed gear fails 1/3 (``!cursed || rn2(3)``);
+  when a greased item protects, the grease wears off 1/2 (``!rn2(2)``)
+  and the flag is cleared with a message.  Same "no live call site
+  yet" note -- no demo monster hugs / wraps / drains.
 
 STUBs (raise ``NotImplementedError``; the fill-in replaces a stub, not a
 call site -- the C API surface stays visible):
@@ -65,8 +81,6 @@ call site -- the C API surface stays visible):
   alignment);
 - ``summonmu`` -- demon / were-creature summoning (needs ``msummon`` /
   ``were_summon``, night, Inhell);
-- ``u_slip_free`` / ``magic_negation`` -- armor-based protection
-  (needs the equipment / artifact machinery);
 - ``mon_avoiding_this_attack`` / ``ranged_attk_available`` -- ranged
   attack availability (needs the ``m_seenres`` bookkeeping);
 - ``cloneu`` -- the gelatinous-cube split (needs the monster-spawn
@@ -100,15 +114,17 @@ from .events import DamageEvent, Event, MessageEvent, StatusEvent
 from .hacklib import can_see, is_hallucinating, is_stuck
 from .mondata import is_animal, is_undead
 from .monst import (
-    AD_ACID, AD_BLND, AD_COLD, AD_CONF, AD_DISE, AD_DISN, AD_ELEC, AD_FIRE,
-    AD_FAMN, AD_HALU, AD_MAGM, AD_PHYS, AD_PEST, AD_SITM, AD_SLEE, AD_SEDU,
-    AD_SSEX, AD_STUN, AD_DRST,
+    AD_ACID, AD_BLND, AD_COLD, AD_CONF, AD_DISE, AD_DISN, AD_DRIN, AD_ELEC,
+    AD_FIRE, AD_FAMN, AD_HALU, AD_MAGM, AD_PHYS, AD_PEST, AD_SITM, AD_SLEE,
+    AD_SEDU, AD_SSEX, AD_STUN, AD_DRST, AD_WRAP,
     AT_BITE, AT_BOOM, AT_BUTT, AT_ENGL, AT_EXPL, AT_HUGS, AT_KICK, AT_NONE,
     AT_STNG, AT_TENT, AT_TUCH, NATTK, Attack, PerMonst, PM_WOOD_NYMPH,
     distance_atk_type,
 )
+from .objects import (OBJECTS, ObjType, W_AMUL, W_ARM, W_ARMC, W_ARMF,
+                      W_ARMG, W_ARMH, W_ARMS, W_ARMU)
 from .types import DamageType, Monster, World
-from .worn import ac_value, uac
+from .worn import ac_value, uac, which_armor
 
 # ------------------------------------------------------------
 # Attack outcome codes (C: M_ATTK_* in hack.h / mhitm.h)
@@ -159,6 +175,11 @@ def adtyp_to_damage(adtyp: int) -> DamageType:
 def _rnd(rng, n: int) -> int:
     """C ``rnd(n)``: a roll in 1..n."""
     return rng.randint(1, n)
+
+
+def _rn2(rng, n: int) -> int:
+    """C ``rn2(n)``: a roll in 0..n-1."""
+    return rng.randint(1, n) - 1
 
 
 def _dice(rng, n: int, x: int) -> int:
@@ -287,7 +308,7 @@ def hitmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
 
     Returns ``(events, damage)``: the ``DamageEvent`` / ``MessageEvent``
     / ``StatusEvent`` intents to emit, and the raw damage dealt (so the
-    caller can stop producing further attacks once the hero is down).
+    caller can stop producing further attacks once the hero is down).  
     No state is mutated here -- ``process_events`` applies the events.
     """
     mdat: PerMonst = mon.mdata
@@ -545,17 +566,91 @@ def summonmu(mon: Monster, youseeit: bool, rng) -> List[Event]:
     raise NotImplementedError("summonmu: summoning is not ported yet")
 
 
-def u_slip_free(mon: Monster, mattk: Attack) -> bool:
-    """STUB (C: u_slip_free): whether the hero's greased / slippery
-    clothing sheds a hug / wrap attack.  Needs the equipment machinery."""
-    raise NotImplementedError("u_slip_free: equipment is not ported yet")
+def u_slip_free(world: World, mon: Monster, mattk: Attack,
+                rng) -> Tuple[bool, List[Event]]:
+    """Whether the hero's greased / slippery clothing sheds a hug / wrap /
+    brain-drain attack (C: u_slip_free, src/mhitu.c).
+
+    ``mon`` is the ATTACKING monster (the subject of the slip-off message);
+    the defender is the hero (C's u_slip_free is hero-specific, reading the
+    u* globals -- here the hero's worn gear via which_armor).  Returns
+    ``(slipped, events)``: ``slipped`` is True when the attack is shed and
+    ``events`` holds the slip-off message plus, when a greased item's grease
+    wears off, the "The grease wears off." line.  The greased flag is
+    cleared in place (item equipment state, like the owornmask the don/doff
+    paths set).
+
+    No live call site yet (no demo monster hugs / wraps / drains); the call
+    sites land with the monster-hug port.
+    """
+    # greased armor does not protect against AT_ENGL+AD_WRAP
+    if mattk.aatyp == AT_ENGL:
+        return False, []
+
+    hero = world.hero
+    # cloak, else suit, else shirt -- the C uarmc ? uarmc : uarm / uarmu
+    obj = which_armor(None, hero, W_ARMC)
+    if obj is None:
+        obj = which_armor(None, hero, W_ARM)
+    if obj is None:
+        obj = which_armor(None, hero, W_ARMU)
+    # a brain-drain (tentacle) attack is parried by the helmet, not the
+    # body armour (C: if (mattk->adtyp == AD_DRIN) obj = uarmh)
+    if mattk.adtyp == AD_DRIN:
+        obj = which_armor(None, hero, W_ARMH)
+
+    # greased (or oilskin) gear makes the monster slip off; the protection
+    # might fail (1/3) when the gear is cursed (C: !obj->cursed || rn2(3))
+    if (obj is not None
+            and (obj.greased or obj.otyp == ObjType.OILSKIN_CLOAK.value)
+            and (not obj.cursed or _rn2(rng, 3))):
+        verb = ("slips off of" if mattk.adtyp == AD_WRAP
+                else "grabs you, but cannot hold onto")
+        adjective = "greased" if obj.greased else "slippery"
+        events: List[Event] = [
+            MessageEvent(f"{mon.name} {verb} your {adjective} {obj.name}!")]
+        # the grease wears off 1/2 of the time it protects (C: !rn2(2))
+        if obj.greased and not _rn2(rng, 2):
+            obj.greased = False
+            events.append(MessageEvent("The grease wears off."))
+        return True, events
+    return False, []
 
 
 def magic_negation(mon: Monster) -> int:
-    """STUB (C: magic_negation): how much the hero's armor / protection
-    negates an incoming magic attack.  Needs the equipment / artifact
-    machinery."""
-    raise NotImplementedError("magic_negation: equipment is not ported yet")
+    """How much the hero's worn armour / protection negates an incoming
+    magic attack (C: magic_negation, src/mhitu.c).
+
+    The max a_can of the seven worn armour slots (the table's oc2), plus the
+    protection increment -- +2 for a worn amulet of guarding, +1 for any
+    other Protection source -- capped at 3 (C: ``if (mc > 3) mc = 3``).
+    The slot scan reuses ``worn.which_armor`` over the carrier's inventory
+    (PLAN-ARMOR.md decision 1).
+
+    C gates the increment on an existing Protection source (EProtection /
+    the high cleric's innate Protection).  The subset has no other
+    Protection source (the prop-system port, PLAN-ARMOR.md phase 5), so a
+    WORN amulet of guarding counts as the protection source itself and adds
+    +2 on its own; the generic +1 path is kept for when the other sources
+    land.  No live call site yet (hero-facing zaps / monster spells are
+    unported); the call sites land with castmu / zap-on-hero.
+    """
+    mc = 0
+    for mask in (W_ARM, W_ARMC, W_ARMH, W_ARMF, W_ARMS, W_ARMG, W_ARMU):
+        it = which_armor(None, mon, mask)
+        if it is not None and it.otyp:
+            acan = int(OBJECTS[it.otyp].oc2)  # a_can
+            if acan > mc:
+                mc = acan
+    amul = which_armor(None, mon, W_AMUL)
+    via_amul = (amul is not None
+                and amul.otyp == ObjType.AMULET_OF_GUARDING.value)
+    gotprot = False  # other Protection sources: the prop-system port
+    if gotprot or via_amul:
+        mc += 2 if via_amul else 1
+        if mc > 3:
+            mc = 3
+    return mc
 
 
 def mon_avoiding_this_attack(mon: Monster, attkidx: int) -> bool:

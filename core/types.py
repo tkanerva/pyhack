@@ -274,7 +274,7 @@ class Map:
 
     def __init__(self, tiles: List[List[Tile]]):
         self.tiles = tiles
-        # C: viz_clear[][], left_ptrs[][], right_ptrs[][] (vision.c)
+        # C: viz_clear[], left_ptrs[], right_ptrs[] (vision.c)
         self.viz_clear: Optional[List[List[bool]]] = None
         self.left_ptrs: Optional[List[List[int]]] = None
         self.right_ptrs: Optional[List[List[int]]] = None
@@ -350,6 +350,11 @@ class Item:
     # found by scanning the carrier's inventory (core.worn.which_armor /
     # setworn) -- one mechanism for hero and future monsters.
     owornmask: int = 0
+    # greased (C: obj->greased): the item is coated with oil.  A greased
+    # worn cloak / suit / shirt (or the helmet, against brain drain) sheds
+    # hug / wrap attacks (core.mhitu.u_slip_free), and the grease wears off
+    # 1/2 of the time it protects.
+    greased: bool = False
 
 
 # ============================================================

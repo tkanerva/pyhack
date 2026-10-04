@@ -1,16 +1,23 @@
 # Plan: defence system with armours
 
-**Status (2026-10-01):** Phases 1 and 2 are implemented and tested
+**Status (2026-10-04):** Phases 1, 2 and 3 are implemented and tested
 (`core/worn.py`, `core/pickup.py`, the `mhitu` AC integration, the three
-commands, the console keys and the demo gear).  Corrections made while
-executing, against this plan's arithmetic: (a) the plan's "plate 3" in
-the Phase-1 `arm_bonus` list is the macro's ac argument -- the actual
-`ARM_BONUS(plate mail)` is **7** (`a_ac = 10 - 3`); (b) the plan's
-"chain 5 + cloak 1 + helmet 1 + shield 1 + gloves 1 + boots 1 = effective
-1" is **0** (10 - 10); (c) the "goblin -> threshold 17" mhitu test case
-matches the hill orc (mlevel 2), not the goblin (mlevel 0, threshold
-15).  Phase 3 (magic_negation / u_slip_free) and Phase 4 (erosion) are
-the next series; Phase 5 stays out of scope.
+commands, the console keys and the demo gear; and the Phase-3 defence
+details `mhitu.magic_negation` / `mhitu.u_slip_free` plus
+`Item.greased`).  Corrections made while executing, against this plan's
+arithmetic: (a) the plan's "plate 3" in the Phase-1 `arm_bonus` list is
+the macro's ac argument -- the actual `ARM_BONUS(plate mail)` is **7**
+(`a_ac = 10 - 3`); (b) the plan's "chain 5 + cloak 1 + helmet 1 + shield
+1 + gloves 1 + boots 1 = effective 1" is **0** (10 - 10); (c) the
+"goblin -> threshold 17" mhitu test case matches the hill orc (mlevel
+2), not the goblin (mlevel 0, threshold 15); (d) the Phase-3
+`magic_negation` table: the "leather 0" row is honoured with the leather
+jacket (a_can 0) -- worn LEATHER_ARMOR has a_can **1** -- and the
+"amulet alone -> 2" row is the plan's subset semantics (the worn amulet
+of guarding is the Protection source itself, since the subset has no
+other source), a deliberate deviation from C's gotprot-gated increment,
+documented in the function docstring.  Phase 4 (erosion) is the next
+series; Phase 5 stays out of scope.
 
 Goal: the hero's defence stops being a fixed `Monster.ac` constant and becomes
 a NetHack defence system: the hero wears armour in the seven C slots
@@ -32,7 +39,7 @@ for unported machinery, table-driven deterministic tests with `SeqRng`.
 |---|---|---|
 | Worn-slot masks `W_ARM` `W_ARMC` `W_ARMH` `W_ARMS` `W_ARMG` `W_ARMF` `W_ARMU` `W_AMUL` `W_RINGL` `W_RINGR` `W_TOOL` | `include/prop.h` | `W_ARMOR`, `W_ACCESSORY`, `W_WEP`, ... aggregates |
 | Slot accessors | `src/worn.c` `which_armor()` (scans inventory for `owornmask & flag`); `src/invent.c` `wearing_armor()`, `is_worn()`; `src/worn.c` `setworn()` | The hero uses globals (`uarm`, ...), monsters scan `minvent` — same mask mechanism |
-| Per-item armour data | `include/objclass.h`: `a_ac` == `oc1`, `a_can` == `oc2`; `include/obj.h`: `oc_armcat` (`ARM_SUIT`..`ARM_SHIRT`), `oc_delay`, `is_suit/is_cloak/is_shield/is_helmet/is_gloves/is_boots/is_shirt` macros | Already in `core/objects.py`: `Object.oc1` (built as `10 - ac`, i.e. `a_ac`), `oc2` (`a_can`), `subtyp` (`oc_armcat`), `delay` (`oc_delay`), `oprop` |
+| Per-item armour data | `include/objclass.h`: `a_ac` == `oc1`, `a_can` == `oc2`; `include/obj.h`: `oc_armcat` (`ARM_SUIT`..`ARM_SHIRT`), `oc_delay`, `is_suit/is_cloak/is_shield/is_helmet/is_gloves/is_boots/is_shirt` macros | Already in `core/objects.py`: `Object.oc1` (built as `10 - ac`, i.e. `a_ac`), `oc2` (`a_can`), `subtyp` (`oc_armcat`), `delay` (`oc_delay`), `oc_oprop` |
 | AC bonus of one item | `include/hack.h` `ARM_BONUS(obj)` = `objects[otyp].a_ac + obj->spe - min(greatest_erosion(obj), a_ac)` | `greatest_erosion` already ported in `core/weapon.py` (getattr with 0 default) |
 | Effective AC | `src/do_wear.c` `find_ac()`: `mons[u.umonnum].ac` (base) − Σ `ARM_BONUS` over the 7 slots − `spe` of worn protection rings (left+right) − 2 for amulet of guarding − `u.ublessed` (intrinsic Protection) − `u.uspellprot`, clamped to ±`AC_MAX` (99, `you.h`) | Base AC for a human is **10** (`monsters.h`: `MON(NAM("human"), S_HUMAN, LVL(0, 12, 10, 0, 0), ...)`); the human row is NOT in `core/monst.py`'s `SUBSET_PM`, so the hero's base is a named constant |
 | Hit differential | `src/mhitu.c` `mattacku()`: `tmp = AC_VALUE(u.uac) + 10 + m_lev`; `AC_VALUE(AC)` = `AC >= 0 ? AC : -rnd(-(AC))` (`include/hack.h`) — a negative AC rolls, so it is strictly better than 0 but never fully immune | `core/mhitu.py` currently uses `hero.ac + 10 + level` (raw, no `AC_VALUE`); fine while AC ≥ 0, must change once gear can push AC negative |
@@ -219,7 +226,7 @@ Tasks:
      "You can't. It is cursed."; clear slot; "You were wearing the X."
      (gloves-vs-welded and boot-trap checks are dead — noted).
 3. `core/pickup.py` (new; C `pickup.c` `pickobj()` subset): topmost item on
-   the hero's tile → inventory, "You pick up the X."; empty floor →
+    the hero's tile → inventory, "You pick up the X."; empty floor →
    "You see nothing here to pick up." (no merging, no cap, no leashes).
 4. `core/step.py`: wire the three commands into the player turn.
 5. `core/worldgen.py` (no new RNG draws):
@@ -345,6 +352,3 @@ order; Phase 1 must be green before Phase 2 starts touching `step`/`ui`.
 5. **Draw-order discipline.** Every new `rnd`/`d` call changes `SeqRng`
    expectations; keep the Phase-1 `AC_VALUE` draw strictly inside
    `ac_value()` so it is the single auditable draw for negative AC.
-
-
----
