@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 if TYPE_CHECKING:  # annotation only -- no runtime import cycle
     from .monst import PerMonst
+    from .objects import Prop
     from .vision import HeroVision
     from .weapon import Skills
 
@@ -398,6 +399,11 @@ class Monster:
     ustr: int = 12                   # strength (fixed; no STR18)
     udex: int = 12                   # dexterity (neutral: no bonus swing)
     skills: Optional["Skills"] = None  # per-hero weapon-skill state
+    # intrinsic properties (C: the u.uprops[] inherent / temp half,
+    # mprops for monsters): the Prop set held without gear (species,
+    # spells, potions).  The worn-gear contribution is computed, never
+    # stored (core.props.worn_properties / has_property).
+    intrinsics: "set[Prop]" = field(default_factory=set)
 
 
 # ============================================================
