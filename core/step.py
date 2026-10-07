@@ -13,6 +13,7 @@ from typing import List, Optional, Tuple
 from .commands import (CastCommand, Command, MoveCommand, PickupCommand,
                        QuaffCommand, ReadCommand, TakeOffCommand,
                        WearCommand, ZapCommand)
+from .energy import tick_energy
 from .events import Event, GameOverEvent, MessageEvent
 from .hacklib import distmin, is_asleep, is_stuck
 from .mhitu import mattacku
@@ -39,6 +40,7 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
 
     # --- player turn ---
     events += tick_actor(world, "player", rng)
+    events += tick_energy(world, world.turn + 1, rng)
     if not world.hero.alive:
         return _finish(world, events)
     if not was_asleep:
@@ -75,6 +77,8 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
         mon = world.actors[mon_id]
         if not mon.alive:
             continue
+        if not world.hero.alive:
+            break
         events += tick_actor(world, mon_id, rng)
         if not mon.alive:
             continue

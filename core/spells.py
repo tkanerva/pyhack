@@ -5,11 +5,15 @@ ARCHITECTURE.md): beams stop at the FIRST monster hit (NetHack
 behaviour; the old beam hit everything in range), damage is a flat 2d6
 (the old d6*nd formula referenced an 'nd' stat that never existed), and
 the study/learning mechanics are dropped (charges only).
+
+Phase 3: spell energy -- cast_spell() drains Pw from the caster
+before applying effects (C: spell.c's drain_energy).
 """
 from __future__ import annotations
 
 from typing import List, Optional
 
+from .energy import drain_energy, spell_lev_pw
 from .events import Event, MessageEvent
 from .items import cancel_items, consume_item
 from .rules import (apply_damage, can_polymorph, find_target_in_line, heal,
@@ -18,6 +22,20 @@ from .types import DamageType, Direction, Item, ObjectType, SpellType, World
 
 BEAM_RANGE = 7
 HEALING_POWER = 12
+
+# NetHack spell levels: the cost in Pw is level * 5 (spell_lev_pw).
+SPELL_LEVELS = {
+    SpellType.MAGIC_MISSILE: 1,
+    SpellType.FIREBALL: 5,
+    SpellType.CONE_OF_COLD: 5,
+    SpellType.LIGHTNING: 5,
+    SpellType.SLEEP: 2,
+    SpellType.DEATH: 6,
+    SpellType.POLYMORPH: 7,
+    SpellType.CANCELLATION: 5,
+    SpellType.TELEPORT: 3,
+    SpellType.HEALING: 3,
+}
 
 SPELL_DAMAGE = {
     SpellType.MAGIC_MISSILE: DamageType.MAGIC_MISSILE,
@@ -49,6 +67,13 @@ def cast_spell(world: World, caster_id: str, book_id: str,
     caster = world.actors[caster_id]
     st = book.spell_type or SpellType.MAGIC_MISSILE
     spell_name = st.name.lower().replace("_", " ")
+    # Phase 3: check and drain spell energy
+    cost = spell_lev_pw(SPELL_LEVELS.get(st, 1))
+    if caster.uen < cost:
+        if caster.is_hero:
+            return [MessageEvent("You don't have enough energy to cast that!")]
+        return [MessageEvent(f"{caster.name} doesn't have enough energy!")]
+
     events: List[Event] = [MessageEvent(
         f"You cast {spell_name}." if caster.is_hero
         else f"{caster.name} casts {spell_name}.")]
@@ -103,6 +128,9 @@ def cast_spell(world: World, caster_id: str, book_id: str,
     elif st == SpellType.CANCELLATION:
         # cancellation affects the caster (NetHack behaviour)
         events += cancel_items(world, caster)
+
+    # Phase 3: drain the energy cost
+    drain_energy(world, caster_id, cost)
 
     book.charges -= 1
     if book.charges <= 0:
