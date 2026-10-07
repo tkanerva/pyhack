@@ -1,8 +1,11 @@
 """Core text / geometry utilities (home of the hacklib.c port).
 
-Policy (per the porting guidelines): where Python's stdlib or the
-`inflect` package does the job, we use those instead of porting the C
-idiom:
+Policy (per the porting guidelines): where Python's stdlib does the
+job, we use it instead of porting the C idiom.  The word
+transformations are the exception: the `inflect` package was tried
+and dropped (it lacks gerunds entirely, and the rest was just an
+extra dependency), so they are now a direct port of the original
+NetHack C (see ``hacklib_inflection.py``).
 
 - C ``digit()``      -> ``str.isdigit()``
 - C ``highc/lowc/
@@ -18,10 +21,10 @@ idiom:
    stripdigits``     -> ``str`` methods / ``re`` / ``str.translate``
 - C ``isqrt()``      -> ``math.isqrt``
 - C ``makeplural`` /
-   ``makesingular``  -> ``inflect`` (plural / singular)
-- C ``s_suffix``     -> ``inflect.to_possessive`` (with the two
-   NetHack-specific cases "it"->"its" and "you"->"your" kept)
-- C ``ing_suffix``   -> ``inflect.verb_gerund``
+   ``makesingular`` /
+   ``s_suffix`` /
+   ``ing_suffix``    -> direct port of the NetHack C in
+   ``hacklib_inflection`` (no inflection library)
 
 What remains in this module are the pieces that are genuinely
 NetHack-specific or have no stdlib equivalent: the '@-is-a-letter'
@@ -33,21 +36,18 @@ for every "is this actor in status X?" question.
 """
 from __future__ import annotations
 
-import re
 from math import isqrt  # noqa: F401  (stdlib replacement for C isqrt)
 from typing import Optional, Tuple
 
-import inflect
-
+from .hacklib_inflection import (
+    ing_suffix,
+    makesingular,
+    makeplural,
+    s_suffix,
+)
 from .types import Monster
 
 Pos = Tuple[int, int]
-
-_inflect_engine = inflect.engine()
-
-# C mungspaces(): collapse space/tab runs to one space, stop at \n,
-# drop the trailing space.
-_MUNG_RE = re.compile(r"[ \t]+")
 
 
 # ------------------------------------------------------------
@@ -66,15 +66,29 @@ def letter(c: str) -> bool:
 # ------------------------------------------------------------
 
 def mungspaces(s: str) -> str:
-    """C: mungspaces -- collapse runs of spaces/tabs to a single space,
-    stop at a newline, drop the trailing space."""
-    line = s.split('\n', 1)[0]
-    return _MUNG_RE.sub(' ', line).rstrip(' ')
+    """C: mungspaces -- remove excess whitespace: collapse runs of
+    spaces/tabs to a single space, treating a newline as end-of-string
+    and dropping both the leading and the trailing space (the C code
+    starts with was_space == TRUE, so leading blanks go too)."""
+    out = []
+    was_space = True
+    for c in s:
+        if c == '\n':
+            break  # treat newline the same as end-of-string
+        if c == '\t':
+            c = ' '
+        if c != ' ' or not was_space:
+            out.append(c)
+        was_space = (c == ' ')
+    if was_space and out:
+        out.pop()  # drop the trailing space
+    return ''.join(out)
 
 
 def visctrl(c: str) -> str:
     """C: visctrl -- printable representation of a control character:
-    ^A, ^?, M-^A, ..."""
+    ^A, ^?, M-^A, ....  M-DEL is shown as M-? (the common terminal
+    convention, as in bash) rather than the C code's M-^?."""
     o = ord(c)
     out = ""
     if o & 0x80:
@@ -83,7 +97,7 @@ def visctrl(c: str) -> str:
     if o < 0x20:
         return out + "^" + chr(o | 0x40)
     if o == 0x7F:
-        return out + "^?"
+        return (out + "?") if out else "^?"
     return out + chr(o)
 
 
@@ -133,36 +147,13 @@ def fuzzymatch(s1: str, s2: str, ignore_chars: str, caseblind: bool = False) -> 
 
 
 # ------------------------------------------------------------
-# Word transformations (inflect-backed)
+# Word transformations
 # ------------------------------------------------------------
-
-def makeplural(s: str) -> str:
-    """Pluralize (C: makeplural, objnam.c) -- via inflect."""
-    return _inflect_engine.plural(s)
-
-
-def makesingular(s: str) -> str:
-    """Singularize (C: makesingular, objnam.c) -- via inflect."""
-    return _inflect_engine.singular(s)
-
-
-def s_suffix(s: str) -> str:
-    """Possessive (C: s_suffix, hacklib.c) -- via inflect, with the two
-    NetHack-specific cases kept: it -> "its" (not "it's") and
-    you -> "your"."""
-    low = s.lower()
-    if low == "it":
-        return s + "s"
-    if low == "you":
-        return s + "r"
-    return _inflect_engine.to_possessive(s)
-
-
-def ing_suffix(s: str) -> str:
-    """Gerund (C: ing_suffix, hacklib.c) -- via inflect:
-    tip -> "tipping", vie -> "vying", grease -> "greasing",
-    "jump on" -> "jumping on"."""
-    return _inflect_engine.verb_gerund(s)
+#
+# makeplural / makesingular / s_suffix / ing_suffix are imported from
+# core.hacklib_inflection (a direct port of the original NetHack C:
+# objnam.c + hacklib.c) and re-exported here so callers keep using
+# core.hacklib exactly as before.
 
 
 def ordin(n: int) -> str:
