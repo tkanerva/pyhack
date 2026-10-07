@@ -124,7 +124,7 @@ from .monst import (
 from .objects import (OBJECTS, ObjType, W_AMUL, W_ARM, W_ARMC, W_ARMF,
                       W_ARMG, W_ARMH, W_ARMS, W_ARMU)
 from .types import DamageType, Monster, World
-from .worn import ac_value, uac, which_armor
+from .worn import ERODE_CORRODE, ac_value, erode_armor, uac, which_armor
 
 # ------------------------------------------------------------
 # Attack outcome codes (C: M_ATTK_* in hack.h / mhitm.h)
@@ -431,6 +431,13 @@ def passiveum(world: World, hero: Monster, mon: Monster, mattk: Attack,
                 events.append(DamageEvent(target=mon.id, amount=tmp,
                                           damage_type=DamageType.ACID,
                                           source=hero.id))
+        # the hero's acid corrodes the attacker's worn armour 1/30 (C:
+        # passiveum AD_ACID -> erode_armor(mtmp, ERODE_CORRODE)); the
+        # draw happens in every acid case, as in C.  C's 1/6
+        # acid_damage(MON_WEP(mtmp)) weapon branch is dead in the subset
+        # (monsters carry no weapons).
+        if not _rn2(rng, 30):
+            events += erode_armor(world, mon, ERODE_CORRODE, rng)
     # AD_STON / AD_ENCH and the "still a monster" (polymorph) branch are
     # deferred with those systems.
     return events
@@ -528,13 +535,13 @@ def expels(mon: Monster, hero: Monster, mdat: PerMonst,
            message: bool = True) -> List[Event]:
     """STUB (C: expels): the swallower releases the hero.  Needs the
     swallow machinery -- the mon.c / swallow port."""
-    raise NotImplementedError("expels: swallowing is not ported yet")
+    raise NotImplementedError("expels: the swallow machinery is not ported yet")
 
 
 def gulp_blnd_check(world: World, mon: Monster, hero: Monster) -> bool:
     """STUB (C: gulp_blnd_check): whether an engulfing blindness should
     take effect right now (e.g. when the blindfold comes off).  Needs
-    the swallow machinery -- the mon.c / swallow port."""
+    the swallow machinery."""
     raise NotImplementedError("gulp_blnd_check: swallowing is not ported yet")
 
 
@@ -546,7 +553,7 @@ def gazemu(world: World, mon: Monster, hero: Monster, mattk: Attack,
 
 
 def doseduce(world: World, mon: Monster, hero: Monster,
-             rng) -> List[Event]:
+             mattk: Optional[Attack]) -> List[Event]:
     """STUB (C: doseduce): the seduction sequence (the nymph / amorous
     demon undresses and drains the hero).  Needs equipment, money and
     alignment -- the do_wear / money / align ports."""

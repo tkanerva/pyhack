@@ -101,6 +101,17 @@ emoji log strings.
   wrap attacks; cursed gear fails 1/3; the grease wears off 1/2 and
   `Item.greased` is cleared) -- both implemented and tested, with no
   live call site yet (they come live with the monster-zap / hug ports).
+  Phase 4 adds erosion (PLAN-ARMOR.md): `Item.oeroded` / `oeroded2` /
+  `oerodeproof`, the obj.h `ERODE_*` / `EF_*` / `ER_*` constants and
+  the material predicates in `worn.py`, the hero-facing
+  `worn.erode_obj` (grease protection, blessed 1/4 resistance,
+  destruction at MAX_ERODE clears the slot), the 5-way picks
+  `worn.erode_armor` / `worn.burnarmor`, and the filled
+  `disintegrate_arm` / `destroy_arm` (the destroy-armor scroll; no
+  call site yet -- the scroll port).  Erosion bites: the fire trap
+  burns worn gear and the acid passive attack corrodes the attacker's
+  (future) gear; `ARM_BONUS` and `uac` read the counters on every
+  query, so no cache invalidation.
 - Bump-to-attack: walking into a monster attacks it (the old demo had
   no hero attack at all, so the game was a death-watching exercise).  
   Hero melee uses the same hit formula with 1d2 damage.

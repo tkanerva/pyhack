@@ -15,6 +15,7 @@ from .items import cancel_items
 from .rules import (apply_damage, apply_stuck, put_to_sleep, resists, roll,
                     teleport_to_floor)
 from .types import DamageType, Monster, Trap, TrapType, World
+from .worn import burnarmor
 
 TrapEffect = Callable[[World, Trap, str, object], List[Event]]
 
@@ -55,6 +56,9 @@ def _fire_trap_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Even
     events: List[Event] = [MessageEvent(flavor)]
     events += apply_damage(world, actor_id, dmg, DamageType.FIRE,
                            f"trap:{trap.id}", message=False)
+    # C: dofiretrap -> burnarmor: the fire also chews at the worn
+    # armour (the trap.c 5-way pick; a no-op for bare monsters)
+    events += burnarmor(world, a, rng)
     return events
 
 
@@ -67,7 +71,7 @@ def _ranged_trap_effect(world: World, trap: Trap, actor_id: str, rng,
     if rng.randint(1, 20) <= hit_chance:
         dmg = roll(rng, die)
         flavor = (f"🏹 A {projectile} trap hits you for {dmg} damage!" if a.is_hero
-                  else f"🏹 {a.name} is hit by a {projectile} trap for {dmg} damage!")
+                  else f"🏹 A {projectile} trap hits {a.name} for {dmg} damage!")
         events: List[Event] = [MessageEvent(flavor)]
         events += apply_damage(world, actor_id, dmg, DamageType.ACID,
                                f"trap:{trap.id}", message=False)
@@ -106,7 +110,7 @@ def _boulder_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event]
     a = world.actors[actor_id]
     dmg = rng.randint(4, 20)
     flavor = (f"💥 A rolling boulder hits you for {dmg} damage!" if a.is_hero
-              else f"💥 {a.name} is crushed by a rolling boulder for {dmg} damage!")
+              else f"💥 {a.name} is crushed by a rolling boulder!")
     events: List[Event] = [MessageEvent(flavor)]
     events += apply_damage(world, actor_id, dmg, DamageType.MELEE,
                            f"trap:{trap.id}", message=False)
@@ -153,13 +157,13 @@ def check_traps(world: World, actor_id: str, rng) -> List[Event]:
                 events.append(MessageEvent(
                     "👣 You feel something underfoot but don't trigger it."))
             else:
-                events.append(MessageEvent(f"👣 {actor.name} feels something underfoot."))
+                events.append(MessageEvent(f"👣 {a.name} feels something underfoot."))
     return events
 
 
 def disarm_trap(world: World, trap_id: str, source_id: str) -> List[Event]:
     trap = world.traps.get(trap_id)
-    if trap is None or trap.disarmed or trap.triggered:
+    if trap is None:
         return [MessageEvent("You fail to find a way to disarm the trap.")]
     trap.disarmed = True
     source = world.actors.get(source_id)

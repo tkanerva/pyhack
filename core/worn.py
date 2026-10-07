@@ -35,7 +35,21 @@ Included (implemented and tested):
   canwearobj + the accessory checks of accessory_or_armor_on),
   ``dowear`` (C dowear/doputon -> accessory_or_armor_on),
   ``dotakeoff`` (C dotakeoff/doremring -> armor_or_accessory_off +
-  the select_off subset).
+  the select_off subset);
+- erosion / armour destruction (Phase 4 of PLAN-ARMOR.md): the
+  ``ERODE_*`` / ``EF_*`` / ``ER_*`` constants and ``MAX_ERODE``
+  (obj.h), the material predicates (``is_flammable`` / ``is_rottable``
+  / ``is_rustprone`` / ``is_crackable`` / ``is_corrodeable`` /
+  ``is_damageable``, obj.h + mkobj.c), ``erosion_matters`` (objnam.c),
+  ``obj_erode_type`` (do_wear.c), ``erode_obj`` (the hero-facing
+  subset of trap.c: grease protection, the blessed 1/4 resistance,
+  the oeroded / oeroded2 counters, destruction at MAX_ERODE with slot
+  clearing), ``erode_armor`` (uhitm.c: the rust / acid / rot 5-way
+  pick), ``burnarmor`` (trap.c: the fire-trap 5-way pick),
+  ``disintegrate_arm`` / ``destroy_arm`` (do_wear.c: the destroy-
+  armor scroll; no live call site yet -- the scroll port).  The AC /
+  damage effect of erosion is free: ``arm_bonus`` caps the bonus by
+  ``greatest_erosion`` and ``uac`` is computed on every query.
 
 STUBs (raise ``NotImplementedError``; the fill-in replaces a stub, not
 a call site -- the C API surface stays visible):
@@ -47,8 +61,6 @@ a call site -- the C API surface stays visible):
   hooks, which are no-ops until then;
 - ``welded`` / ``stop_donning`` -- the welded-weapon and multi-turn
   don/doff machinery (no welding / occupations in the subset);
-- ``disintegrate_arm`` / ``destroy_arm`` -- the destroy-armor scroll
-  (Phase 4 of PLAN-ARMOR.md);
 - ``inaccessible_equipment`` / ``count_worn_stuff`` / ``doddoremarm`` --
   the 'A' take-off-all command (PLAN-ARMOR.md phase 5).
 
@@ -75,21 +87,28 @@ Simplifications (documented, not bugs):
 - The ``u.uprops[]`` extrinsic / blocked / artifact bookkeeping of C
   setworn() is not modelled (no intrinsic system yet); the AC effect
   of gear is covered by the computed uac().
+- Erosion messages (erode_obj) are hero-only: C's vismon / visobj
+  branches (monster-carried / floor-item visibility) are dropped, and
+  the monster-carried case is unreachable anyway (mon.c port,
+  decision 9).  EF_PAY (costly_alteration) is accepted but ignored --
+  no shops.  C's early ER_NOTHING for a FIRE_RES / ACID_RES hero and
+  the rknown identification split of the oerodeproof test are skipped
+  (phase 5 / identification ports).
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .events import Event, MessageEvent
 from .items import wielded_of
 from .objects import (ARM_BOOTS, ARM_CLOAK, ARM_GLOVES, ARM_HELM,
                       ARM_SHIELD, ARM_SHIRT, ARM_SUIT, FIRST_AMULET,
-                      LAST_AMULET, OBJECTS, ObjType, W_AMUL, W_ARM,
-                      W_ARMC, W_ARMF, W_ARMG, W_ARMH, W_ARMOR,
-                      W_ACCESSORY, W_ARMS, W_ARMU, W_WEAPONS, W_RING,
-                      W_RINGL, W_RINGR)
+                      LAST_AMULET, Material, ObjClass, OBJECTS, ObjType,
+                      Prop, W_AMUL, W_ARM, W_ARMC, W_ARMF, W_ARMG,
+                      W_ARMH, W_ARMOR, W_ACCESSORY, W_ARMS, W_ARMU,
+                      W_WEAPONS, W_RING, W_RINGL, W_RINGR)
 from .types import Monster, World
-from .weapon import bimanual, greatest_erosion
+from .weapon import bimanual, greatest_erosion, is_weptool
 
 O = ObjType
 
@@ -496,6 +515,418 @@ def dotakeoff(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
 
 
 # ------------------------------------------------------------
+# Erosion and armour destruction (Phase 4 of PLAN-ARMOR.md; the
+# erode_obj / grease_protect of src/trap.c, the burnarmor of
+# src/trap.c, the erode_armor of src/uhitm.c, the obj_erode_type /
+# disintegrate_arm / destroy_arm of src/do_wear.c, the material
+# predicates of include/obj.h + src/mkobj.c and the erosion_matters
+# of src/objnam.c)
+# ------------------------------------------------------------
+
+# obj.h
+ERODE_NONE = -1
+ERODE_BURN = 0
+ERODE_RUST = 1
+ERODE_ROT = 2
+ERODE_CORRODE = 3
+ERODE_CRACK = 4  # crystal armor
+
+# obj.h: the ef_flags of erode_obj()
+EF_NONE = 0
+EF_GREASE = 0x1   # check for a greased object
+EF_DESTROY = 0x2  # potentially destroy the object
+EF_VERBOSE = 0x4  # print extra messages
+EF_PAY = 0x8      # it's the player's fault (costly_alteration: no shops yet)
+
+# obj.h: the return values of erode_obj()
+ER_NOTHING = 0    # nothing happened
+ER_GREASED = 1    # protected by grease
+ER_DAMAGED = 2    # object was damaged in some way
+ER_DESTROYED = 3  # object was destroyed
+
+# obj.h: the erosion counters saturate here
+MAX_ERODE = 3
+
+# trap.c erode_obj: the message words, indexed by ERODE_* (C: the
+# action / msg / bythe arrays; the "s" endings are C's vtense()
+# conjugation of every one of these verbs)
+_ERODE_ACTION = ("smoulder", "rust", "rot", "corrode", "crack")
+_ERODE_MSG = ("burnt", "rusted", "rotten", "corroded", "cracked")
+_ERODE_BYTHE = ("heat", "oxidation", "decay", "corrosion", "impact")
+
+
+def _rn2(rng, n: int) -> int:
+    """C rn2(n): a roll in 0..n-1 (the house rng duck-type exposes
+    randint only -- the same adapter core.mhitu uses)."""
+    return rng.randint(1, n) - 1
+
+
+def _row(item):
+    """The table row of the item's fine identity, or None (no fine
+    identity -- the item is subject to no erosion)."""
+    o = _otyp(item)
+    return OBJECTS[o] if o else None
+
+
+# ------------------------------------------------------------
+# The material predicates (C: include/obj.h macros + the
+# is_flammable / is_rottable functions of src/mkobj.c)
+# ------------------------------------------------------------
+
+def is_flammable(item) -> bool:
+    """C: is_flammable (src/mkobj.c): WAX..BONE (LIQUID excluded) and
+    PLASTIC; the FIRE_RES property and the wand of fire are not
+    flammable.  (C's candle exclusion is dead here: no candle row in
+    the table, and erosion_matters() already excludes plain tools.)"""
+    row = _row(item)
+    if row is None or int(_otyp(item)) == O.WAN_FIRE.value:
+        return False
+    if row.oprop == int(Prop.FIRE_RES):
+        return False
+    mat = row.material
+    return (mat <= Material.WOOD and mat != Material.LIQUID
+            or mat == Material.PLASTIC)
+
+
+def is_rottable(item) -> bool:
+    """C: is_rottable (src/mkobj.c): WAX..BONE (LIQUID excluded) and
+    DRAGON_HIDE."""
+    row = _row(item)
+    if row is None:
+        return False
+    mat = row.material
+    return (mat <= Material.WOOD and mat != Material.LIQUID
+            or mat == Material.DRAGON_HIDE)
+
+
+def is_rustprone(item) -> bool:
+    """C: is_rustprone (include/obj.h): material IRON (includes
+    steel)."""
+    row = _row(item)
+    return row is not None and row.material == Material.IRON
+
+
+def is_crackable(item) -> bool:
+    """C: is_crackable (include/obj.h): GLASS armour (crystal plate
+    mail)."""
+    row = _row(item)
+    return (row is not None and row.material == Material.GLASS
+            and int(row.oclass) == int(ObjClass.ARMOR))
+
+
+def is_corrodeable(item) -> bool:
+    """C: is_corrodeable (include/obj.h): material COPPER or IRON."""
+    row = _row(item)
+    return row is not None and row.material in (Material.COPPER,
+                                                Material.IRON)
+
+
+def is_damageable(item) -> bool:
+    """C: is_damageable (include/obj.h): subject to any erosion."""
+    return (is_rustprone(item) or is_flammable(item) or is_rottable(item)
+            or is_corrodeable(item) or is_crackable(item))
+
+
+def erosion_matters(item) -> bool:
+    """C: erosion_matters (src/objnam.c): WEAPON / ARMOR / BALL / CHAIN
+    are erodeable; TOOL only as a weptool; everything else (potions,
+    scrolls, food, ...) never."""
+    row = _row(item)
+    if row is None:
+        return False
+    ocls = int(row.oclass)
+    if ocls in (int(ObjClass.WEAPON), int(ObjClass.ARMOR),
+                int(ObjClass.BALL), int(ObjClass.CHAIN)):
+        return True
+    if ocls == int(ObjClass.TOOL):
+        return is_weptool(item)
+    return False
+
+
+def obj_erode_type(item) -> int:
+    """C: obj_erode_type (src/do_wear.c): the ERODE_* type that applies
+    to the item, in C's priority order (burn, rust, crack, rot,
+    corrode), or ERODE_NONE."""
+    if is_flammable(item):
+        return ERODE_BURN
+    if is_rustprone(item):
+        return ERODE_RUST
+    if is_crackable(item):
+        return ERODE_CRACK
+    if is_rottable(item):
+        return ERODE_ROT
+    if is_corrodeable(item):
+        return ERODE_CORRODE
+    return ERODE_NONE
+
+
+def _remove_destroyed(world: World, mon: Optional[Monster], item) -> None:
+    """C: the erode_obj destruction branch (remove_worn_item + delobj):
+    clear the worn slots, drop the item from the carrier's inventory
+    and the world registry.  C's <Type>_off() side effects stay the
+    no-op STUB hooks (_type_off)."""
+    if mon is not None and item.owornmask:
+        setworn(mon, None, item.owornmask)
+    if mon is not None:
+        mon.inventory = [i for i in mon.inventory if i.id != item.id]
+    world.items.pop(item.id, None)
+
+
+def erode_obj(world: World, item, ostr: Optional[str], type: int,
+              ef_flags: int, rng=None) -> Tuple[List[Event], int]:
+    """Erode one item (C: erode_obj, src/trap.c -- the hero-facing
+    subset).
+
+    ``type`` is an ERODE_* value; ``ef_flags`` an or-ed EF_* list;
+    ``ostr`` an alternate name for the messages (C's xname; the call
+    sites pass ``item.name``).  Returns ``(events, code)``: the
+    message events and the ER_* result.  The item's ``oeroded`` /
+    ``oeroded2`` counter (primary: burn / rust / crack, secondary:
+    rot / corrode) goes up one; at MAX_ERODE the item takes the
+    EF_DESTROY destruction -- the worn slot is cleared and the item
+    leaves the world.  The AC / damage effect is free: ``uac`` and
+    ``arm_bonus`` read the erosion on every query (greatest_erosion).
+
+    Subset simplifications (documented, not bugs):
+
+    - No monster / floor visibility: messages are emitted for the
+      hero only (C's vismon / visobj branches); floor items are
+      silent.  The live call sites (burnarmor / erode_armor /
+      destroy-armor) only ever touch the hero, or monsters that carry
+      no gear yet.
+    - No ``costly_alteration`` (shops unported): EF_PAY is accepted
+      and ignored.
+    - No inventory resistance (the intrinsic system, phase 5): C's
+      early ER_NOTHING for a FIRE_RES / ACID_RES hero is skipped.
+    - No identification bookkeeping (rknown / update_inventory): the
+      C ``oerodeproof && rknown`` split collapses into the plain
+      oerodeproof test.
+    - The blessed resistance is C's ``!rnl(4)`` at zero luck: one
+      draw in 0..3, resist on 0 (one in four).
+    """
+    if item is None:
+        return [], ER_NOTHING
+    mon = world.actors.get(item.container) if item.container else None
+    uvictim = mon is world.hero
+    name = item.name if ostr is None else ostr
+    print_ = (ef_flags & EF_VERBOSE) != 0
+    events: List[Event] = []
+
+    is_primary = True
+    check_grease = (ef_flags & EF_GREASE) != 0
+    crackers = False
+    if type == ERODE_BURN:
+        vulnerable = is_flammable(item)
+        check_grease = False
+    elif type == ERODE_RUST:
+        vulnerable = is_rustprone(item)
+    elif type == ERODE_ROT:
+        vulnerable = is_rottable(item)
+        check_grease = False
+        is_primary = False
+    elif type == ERODE_CORRODE:
+        vulnerable = is_corrodeable(item)
+        is_primary = False
+    elif type == ERODE_CRACK:  # crystal armor
+        vulnerable = is_crackable(item)
+        crackers = True
+    else:
+        raise ValueError(f"Invalid erosion type in erode_obj: {type}")
+
+    erosion = item.oeroded if is_primary else item.oeroded2
+
+    if check_grease and item.greased:
+        events.append(MessageEvent(
+            f"Your {name} is protected by the layer of grease!"))
+        # the grease wears off 1/2 of the time it protects (C: !rn2(2))
+        if not _rn2(rng, 2):
+            item.greased = False
+            events.append(MessageEvent("The grease dissolves."))
+        return events, ER_GREASED
+    if not erosion_matters(item):
+        return events, ER_NOTHING
+    if not vulnerable or item.oerodeproof:
+        if print_ and uvictim:
+            events.append(MessageEvent(
+                f"Your {name} is not affected by {_ERODE_BYTHE[type]}."))
+        return events, ER_NOTHING
+    if item.oerodeproof or (item.blessed and not _rn2(rng, 4)):
+        if uvictim and (print_ or item.oerodeproof):
+            events.append(MessageEvent(
+                f"Somehow, your {name} is not affected by the "
+                f"{_ERODE_BYTHE[type]}."))
+        return events, ER_NOTHING
+    if erosion < MAX_ERODE:
+        adverb = (" completely" if erosion + 1 == MAX_ERODE
+                  else " further" if erosion else "")
+        if uvictim:
+            events.append(MessageEvent(
+                f"Your {name} {_ERODE_ACTION[type]}s{adverb}!"))
+        if is_primary:
+            item.oeroded += 1
+        else:
+            item.oeroded2 += 1
+        return events, ER_DAMAGED
+    if ef_flags & EF_DESTROY:
+        if uvictim:
+            if crackers:
+                events.append(MessageEvent(f"Your {name} shatters!"))
+            else:
+                events.append(MessageEvent(
+                    f"Your {name} {_ERODE_ACTION[type]}s away!"))
+        _remove_destroyed(world, mon, item)
+        return events, ER_DESTROYED
+    if print_ and uvictim:
+        events.append(MessageEvent(
+            f"Your {name} looks completely {_ERODE_MSG[type]}."))
+    return events, ER_NOTHING
+
+
+def erode_armor(world: World, mon: Monster, hurt: int,
+                rng) -> List[Event]:
+    """C: erode_armor (src/uhitm.c): a rust / acid / rot attack erodes
+    one of ``mon``'s worn armour pieces.  C's loop keeps picking a
+    random slot (helm / cloak-suit-shirt / shield / gloves / boots)
+    until an attempt affects something; the torso tier exits after a
+    single attempt, exactly as in C.  A carrier with no worn armour
+    gets [] (C's callers guarantee worn gear; the guard keeps the
+    loop honest for the subset's bare monsters).  ``hurt`` is the
+    ERODE_* type of the attack (ERODE_RUST / ERODE_CORRODE /
+    ERODE_ROT)."""
+    if not wearing_armor(mon):
+        return []
+    events: List[Event] = []
+    while True:
+        case = _rn2(rng, 5)
+        if case == 1:  # cloak, else suit, else shirt: one attempt, done
+            target = (which_armor(world, mon, W_ARMC)
+                      or which_armor(world, mon, W_ARM)
+                      or which_armor(world, mon, W_ARMU))
+            if target is not None:
+                events += erode_obj(world, target, target.name, hurt,
+                                    EF_GREASE | EF_VERBOSE, rng)[0]
+            return events
+        mask = {0: W_ARMH, 2: W_ARMS, 3: W_ARMG, 4: W_ARMF}[case]
+        target = which_armor(world, mon, mask)
+        if target is not None:
+            ev, code = erode_obj(world, target, target.name, hurt,
+                                 EF_GREASE, rng)
+            events += ev
+            if code != ER_NOTHING:
+                return events
+        # C: continue the loop while the attempt affected nothing
+
+
+def burnarmor(world: World, mon: Monster, rng) -> List[Event]:
+    """C: burnarmor (src/trap.c): hit by fire (fire trap, lava,
+    explosion) -- one random worn piece takes burn damage (C's
+    burn_dmg macro: ERODE_BURN + EF_GREASE).  The loop exits when
+    something is affected; the torso tier (cloak / suit / shirt)
+    always exits after its attempt, as in C.  C's wet-towel drying
+    prefix is omitted (no towels in the demo; the mechanics exist in
+    weapon.dry_a_towel), and C's torso-hit boolean has no consumer in
+    the subset.  Returns the message events.
+    """
+    events: List[Event] = []
+    while True:
+        case = _rn2(rng, 5)
+        if case == 1:  # cloak, else suit, else shirt
+            target = (which_armor(world, mon, W_ARMC)
+                      or which_armor(world, mon, W_ARM)
+                      or which_armor(world, mon, W_ARMU))
+            if target is not None:
+                events, _ = erode_obj(world, target, target.name,
+                                      ERODE_BURN, EF_GREASE, rng)
+            return events
+        mask = (W_ARMH if case == 0 else W_ARMS if case == 2
+                else W_ARMG if case == 3 else W_ARMF)
+        target = which_armor(world, mon, mask)
+        if target is not None:
+            ev, code = erode_obj(world, target, target.name,
+                                 ERODE_BURN, EF_GREASE, rng)
+            if code != ER_NOTHING:
+                return ev
+        # C: keep rolling while the attempt affected nothing
+
+
+def disintegrate_arm(world: World, mon_id: str, rng) -> List[Event]:
+    """C: disintegrate_arm (src/do_wear.c): the (blessed) destroy-armor
+    scroll and the black dragon's breath disintegrate the first armor
+    piece in C's order -- cloak, suit, shirt, helmet, gloves, boots,
+    shield -- that fails the resistance check.
+
+    C's maybe_destroy_armor targets the scroll's chosen piece (atmp)
+    and gates on obj_resists(armor, 0, 90): for ordinary (non-)
+    artifact gear the check never resists (an artifact would resist
+    90%), so with no artifacts in the subset the first worn piece in
+    order goes.  The item is unworn and removed (C
+    wornarm_destroyed: the <Type>_off() hooks stay the no-op STUBs;
+    the glove-loss selftouch has no consumer -- no weapon welding).
+    Returns the events; an empty list is C's "could not destroy
+    anything" 0.  No live call site yet: the destroy-armor scroll
+    (read.c seffect_destroy_armor) lands with the scroll port.
+    """
+    mon = world.actors.get(mon_id)
+    if mon is None:
+        return []
+    # C order + the C messages (the full item name in place of C's
+    # simple-name words -- the don/doff simplification)
+    for mask, verb in (
+            (W_ARMC, "crumbles and turns to dust!"),
+            (W_ARM, "turns to dust and falls to the floor!"),
+            (W_ARMU, "crumbles into tiny threads and falls apart!"),
+            (W_ARMH, "turns to dust and is blown away!"),
+            (W_ARMG, "vanish!"),
+            (W_ARMF, "disintegrate!"),
+            (W_ARMS, "crumbles away!")):
+        it = which_armor(world, mon, mask)
+        if it is None:
+            continue
+        # maybe_destroy_armor: no artifact in the subset, so the
+        # resistance check (obj_resists(armor, 0, 90)) never fires
+        events = [MessageEvent(f"Your {it.name} {verb}")]
+        _remove_destroyed(world, mon, it)
+        return events
+    return []
+
+
+def destroy_arm(world: World, mon_id: str, rng) -> List[Event]:
+    """C: destroy_arm (src/do_wear.c): the (cursed) destroy-armor
+    scroll erodes 1..4 random hits on the worn armour: each hit picks
+    a random worn piece (C gathers W_ARM, W_ARMC, W_ARMH, W_ARMS,
+    W_ARMG, W_ARMF, W_ARMU) and erodes it with its own
+    obj_erode_type (EF_PAY | EF_DESTROY), stopping when a piece is
+    destroyed.  Non-erodeable pieces (erosion_matters / is_damageable
+    / oerodeproof / ERODE_NONE) take no hit.  EF_PAY is accepted but
+    ignored (no shops).  Returns the events; an empty list is C's 0.
+    No live call site yet (the scroll port, read.c).
+    """
+    mon = world.actors.get(mon_id)
+    if mon is None:
+        return []
+    armors = [a for a in (which_armor(world, mon, mask)
+                          for mask in (W_ARM, W_ARMC, W_ARMH, W_ARMS,
+                                       W_ARMG, W_ARMF, W_ARMU))
+              if a is not None]
+    if not armors:
+        return []
+    hits = _rn2(rng, 4) + 1
+    events: List[Event] = []
+    for _ in range(hits):
+        otmp = armors[_rn2(rng, len(armors))]
+        if (erosion_matters(otmp) and is_damageable(otmp)
+                and not otmp.oerodeproof):
+            erosion = obj_erode_type(otmp)
+            if erosion != ERODE_NONE:
+                ev, r = erode_obj(world, otmp, otmp.name, erosion,
+                                  EF_PAY | EF_DESTROY, rng)
+                events += ev
+                if r == ER_DESTROYED:
+                    break
+    return events
+
+
+# ------------------------------------------------------------
 # STUBs -- the C API surface, filled by the named ports
 # ------------------------------------------------------------
 
@@ -610,18 +1041,6 @@ def stop_donning(world: World, mon: Monster) -> List[Event]:
     """STUB (C: stop_donning): abort a multi-turn don/doff.  Needs the
     occupation / nomul machinery (PLAN-ARMOR.md phase 5)."""
     raise NotImplementedError("stop_donning: the occupation system is not ported yet")
-
-
-def disintegrate_arm(world: World, mon_id: str, rng) -> List[Event]:
-    """STUB (C: disintegrate_arm, do_wear.c): the destroy-armor
-    scroll disintegrates all worn armor.  PLAN-ARMOR.md Phase 4."""
-    raise NotImplementedError("disintegrate_arm: Phase 4 of PLAN-ARMOR.md")
-
-
-def destroy_arm(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
-    """STUB (C: destroy_arm, do_wear.c): destroy one worn piece of
-    armor.  PLAN-ARMOR.md Phase 4."""
-    raise NotImplementedError("destroy_arm: Phase 4 of PLAN-ARMOR.md")
 
 
 def inaccessible_equipment(mon: Monster) -> bool:

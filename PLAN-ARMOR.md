@@ -16,8 +16,19 @@ jacket (a_can 0) -- worn LEATHER_ARMOR has a_can **1** -- and the
 "amulet alone -> 2" row is the plan's subset semantics (the worn amulet
 of guarding is the Protection source itself, since the subset has no
 other source), a deliberate deviation from C's gotprot-gated increment,
-documented in the function docstring.  Phase 4 (erosion) is the next
-series; Phase 5 stays out of scope.
+documented in the function docstring.  Phase 4 (erosion) is implemented
+in `core/worn.py` (the obj.h `ERODE_*`/`EF_*`/`ER_*` constants +
+`MAX_ERODE`, the obj.h/mkobj.c material predicates, `erosion_matters`,
+`obj_erode_type`, the hero-facing `erode_obj` with its grease /
+blessed-1/4 / MAX_ERODE-destruction branches, `erode_armor` and
+`burnarmor`, and the filled `disintegrate_arm` / `destroy_arm`);
+call sites: `mhitu.passiveum`'s AD_ACID branch (C
+`erode_armor(mtmp, ERODE_CORRODE)`, 1/30) and the fire trap (C
+dofiretrap -> `burnarmor`).  The destroy-armor scroll itself has no
+live call site yet (pyhack has no scroll command; the read.c port
+brings it, the Phase-3 precedent).  Phase 4's test suite is pending
+(per the execution request, tests land after the code); Phase 5 stays
+out of scope.
 
 Goal: the hero's defence stops being a fixed `Monster.ac` constant and becomes
 a NetHack defence system: the hero wears armour in the seven C slots
@@ -144,9 +155,9 @@ provenance, what's included, STUBs, simplifications.
 Tasks:
 
 1. `core/objects.py`: port the `prop.h` worn masks — `W_ARM`, `W_ARMC`,
-   `W_ARMH`, `W_ARMS`, `W_ARMG`, `W_ARMF`, `W_ARMU`, `W_ARMOR`, `W_AMUL`,
-   `W_RINGL`, `W_RINGR`, `W_RING`, `W_TOOL`, `W_ACCESSORY`, `W_WEP`,
-   `W_SWAPWEP`, `W_QUIVER`, `W_WEAPONS` — next to `Prop`.
+   `W_ARMH`, `W_ARMS`, `W_ARMG`, `W_ARMF`, `W_ARMU`, `W_AMUL`, `W_RINGL`,
+   `W_RINGR`, `W_RING`, `W_TOOL`, `W_ACCESSORY`, `W_WEP`, `W_SWAPWEP`,
+   `W_QUIVER`, `W_WEAPONS` — next to `Prop`.
 2. `core/types.py` `Item`: add `owornmask: int = 0`. Update the `Monster.ac`
    docstring: base (body) AC; effective AC via `core.worn.uac`.
 3. `core/worn.py` (new), pure functions:
