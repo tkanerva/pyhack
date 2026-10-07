@@ -46,6 +46,7 @@ def test_sleep_spell():
 def test_healing_spell():
     w = world_with_book(SpellType.HEALING)
     w.hero.hp = 10
+    w.hero.uen = 20
     cast_spell(w, "player", "book_0", Direction.E, SeqRng())
     assert w.hero.hp == 22
 

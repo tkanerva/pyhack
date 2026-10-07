@@ -28,6 +28,8 @@ def manhattan(a: Pos, b: Pos) -> int:
 
 def roll(rng, die: int, times: int = 1) -> int:
     """Roll `times` dice of `die` sides (1..die) and sum them."""
+    if times == 1:
+        return rng.randint(1, die)
     return sum(rng.randint(1, die) for _ in range(times))
 
 

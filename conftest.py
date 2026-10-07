@@ -71,3 +71,6 @@ class SeqRng:
 
     def choice(self, seq):
         return self._values.pop(0)
+
+    def rn2(self, x):
+        return self._values.pop(0) % x
