@@ -12,7 +12,7 @@ from core.commands import (Command, MoveCommand, PickupCommand,
                            ReadCommand, TakeOffCommand, WaitCommand,
                            WearCommand)
 from core.items import wielded_of
-from core.types import World
+from core.types import Item, Pos, World
 from core.worn import W_ACCESSORY, W_ARMOR, uac
 
 # The old code lower-cased the key before comparing against "\x1b[A",
@@ -82,13 +82,19 @@ def _inventory_line(world: World) -> str:
 def render(world: World, log: List[str]) -> str:
     lines: List[str] = []
     lines.append("🗺️  Cave Map")
-    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall")
+    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall | ! = Scroll")
     lines.append("")
 
     hero_pos = world.hero.pos
     monster_pos = {m.pos for m in world.actors.values() if not m.is_hero and m.alive}
     triggered = {t.pos for t in world.traps.values() if t.triggered}
     seen = {t.pos for t in world.traps.values() if t.seen and not t.triggered}
+
+    # Collect items on the floor (not carried by a monster)
+    floor_items: dict[Pos, List[Item]] = {}
+    for item in world.items.values():
+        if item.pos is not None and item.container is None:
+            floor_items.setdefault(item.pos, []).append(item)
 
     for y in range(world.map.height):
         row = []
@@ -104,6 +110,14 @@ def render(world: World, log: List[str]) -> str:
                 row.append("^")
             elif world.map.is_wall(pos):
                 row.append("#")
+            elif pos in floor_items:
+                # Display scrolls with "!" (any scroll type)
+                for item in floor_items[pos]:
+                    if item.otype.name == "SCROLL":
+                        row.append("!")
+                        break
+                else:
+                    row.append(".")  # other floor items
             else:
                 row.append(" ")
         lines.append("".join(row))
