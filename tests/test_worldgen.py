@@ -6,7 +6,7 @@ from core.monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from core.objects import ObjClass, ObjType, W_ARM
 from core.weapon import P_SKILLED, Skill
 from core.worn import uac, which_armor
-from core.worldgen import FLOOR_ARMOR, HERO_BASE_AC, new_world
+from core.worldgen import FLOOR_ARMOR, FLOOR_SCROLLS, HERO_BASE_AC, new_world
 
 
 def test_layout_counts():
@@ -52,7 +52,7 @@ def test_demo_monsters_carry_their_permonst_types():
         assert mon.mdata is MONS[pm], mid
         assert mon.hp == hp and mon.max_hp == hp, mid
         assert mon.ac == MONS[pm].ac, mid
-    assert {mon.name for mon in w.actors.values() if not mon.is_hero} == \
+    assert {mon.name for mon in w.actors.values() if not m.is_hero} == \
         {"Goblin", "Orc", "Bat"}
 
 
@@ -130,6 +130,23 @@ def test_floor_armour_lies_on_floor_tiles():
         assert it.cursed is cursed
         assert it.pos == pos and it.container is None
         assert it.owornmask == 0
+
+
+def test_floor_scrolls_lie_on_floor_tiles():
+    """The demo floor scrolls (the read.c port) sit on their fixed
+    positions (walkable, never the hero's tile), are carried by
+    nobody, and carry their fine identity + effect tag."""
+    w = new_world(random.Random(42))
+    for pos, name, otyp, stype in FLOOR_SCROLLS:
+        assert pos != (20, 10)
+        assert w.map.is_walkable(pos)
+        items = w.items_at(pos)
+        assert len(items) == 1, pos
+        it = items[0]
+        assert it.name == name and it.otyp == otyp.value
+        assert it.oclass == ObjClass.SCROLL.value
+        assert it.scroll_type is stype
+        assert it.pos == pos and it.container is None
 
 
 def test_new_world_makes_no_new_rng_draws():

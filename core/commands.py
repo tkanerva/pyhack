@@ -37,6 +37,12 @@ class CastCommand:
 
 
 @dataclass(frozen=True)
+class ReadCommand:
+    """Read a scroll (C: 'R' / 'r' -- doread)."""
+    item_id: str
+
+
+@dataclass(frozen=True)
 class WearCommand:
     """Wear / put on an armor, ring or amulet (C: 'W' and 'P' both
     funnel into accessory_or_armor_on -- one command pair, PLAN-ARMOR.md
@@ -57,4 +63,5 @@ class PickupCommand:
 
 
 Command = Union[MoveCommand, WaitCommand, ZapCommand, QuaffCommand,
-                CastCommand, WearCommand, TakeOffCommand, PickupCommand]
+                CastCommand, ReadCommand, WearCommand, TakeOffCommand,
+                PickupCommand]

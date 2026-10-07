@@ -103,6 +103,37 @@ class PotionType(Enum):
     INCREASE_AC = auto()
 
 
+class ScrollType(Enum):
+    """C: the SCR_* scroll types (objects.h).  All 22 types a non-MAIL
+    build knows; the effects pyhack implements are the five in the
+    core.scrolls docstring (blank paper, enchant weapon, enchant
+    armor, remove curse, teleportation) -- the rest are STUBs that
+    raise NotImplementedError until their machinery is ported.
+    SCR_MAIL is compiled out, as in core.objects."""
+    ENCHANT_ARMOR = auto()
+    DESTROY_ARMOR = auto()
+    CONFUSE_MONSTER = auto()
+    SCARE_MONSTER = auto()
+    REMOVE_CURSE = auto()
+    ENCHANT_WEAPON = auto()
+    CREATE_MONSTER = auto()
+    TAMING = auto()
+    GENOCIDE = auto()
+    LIGHT = auto()
+    TELEPORTATION = auto()
+    GOLD_DETECTION = auto()
+    FOOD_DETECTION = auto()
+    IDENTIFY = auto()
+    MAGIC_MAPPING = auto()
+    AMNESIA = auto()
+    FIRE = auto()
+    EARTH = auto()
+    PUNISHMENT = auto()
+    CHARGING = auto()
+    STINKING_CLOUD = auto()
+    BLANK_PAPER = auto()
+
+
 class SpellType(Enum):
     MAGIC_MISSILE = auto()
     FIREBALL = auto()
@@ -338,6 +369,7 @@ class Item:
     wand_type: Optional[WandType] = None
     potion_type: Optional[PotionType] = None
     spell_type: Optional[SpellType] = None
+    scroll_type: Optional[ScrollType] = None
     # fine object identity (C: struct obj's otyp / oclass / spe): the
     # coarse `otype` above stays the class-level tag; these carry the
     # exact core.objects.OBJECTS row (0 = "not fine").  An Item with
@@ -384,7 +416,7 @@ class Monster:
     poisoned: int = 0          # turns of poison remaining
     confused: int = 0          # turns of confusion remaining
     blind: int = 0             # turns of blindness remaining
-    hallucinating: int = 0     # turns of hallucination remaining
+    hallucinating: int = 0     # turns of hallucinating remaining
     is_undead: bool = False
     is_demon: bool = False
     is_golem: bool = False

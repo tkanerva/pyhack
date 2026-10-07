@@ -9,7 +9,8 @@ from __future__ import annotations
 from typing import List, Optional
 
 from core.commands import (Command, MoveCommand, PickupCommand,
-                           TakeOffCommand, WaitCommand, WearCommand)
+                           ReadCommand, TakeOffCommand, WaitCommand,
+                           WearCommand)
 from core.items import wielded_of
 from core.types import World
 from core.worn import W_ACCESSORY, W_ARMOR, uac
@@ -38,21 +39,23 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     """Returns None to quit.
 
     Keys: WASD / arrows to move, `g` to pick up, `w<letter>` to wear,
-    `t<letter>` to take off (the letters are the inventory letters
-    shown in the screen's inventory line), `q` to quit; anything else
-    is a wait.
+    `t<letter>` to take off, `r<letter>` to read a scroll (the letters
+    are the inventory letters shown in the screen's inventory line),
+    `q` to quit; anything else is a wait.
     """
     key = input(prompt).strip().lower()
     if key == "q":
         return None
     if key == "g":
         return PickupCommand()
-    if len(key) == 2 and key[0] in ("w", "t") and key[1].isalpha():
+    if len(key) == 2 and key[0] in ("w", "t", "r") and key[1].isalpha():
         item_id = _item_by_letter(world, key[1])
         if item_id is not None:
             if key[0] == "w":
                 return WearCommand(item_id)
-            return TakeOffCommand(item_id)
+            if key[0] == "t":
+                return TakeOffCommand(item_id)
+            return ReadCommand(item_id)
     if key in ARROWS:
         dx, dy = ARROWS[key]
         return MoveCommand(dx, dy)

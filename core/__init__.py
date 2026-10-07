@@ -5,8 +5,8 @@ Design in one line: one state object (World), one transition function
 """
 from .types import (
     DamageType, Direction, DoorMask, Item, Map, Monster, ObjectType,
-    PotionType, SpellType, Tile, TerrainType, Trap, TrapType, WandType,
-    World,
+    PotionType, ScrollType, SpellType, Tile, TerrainType, Trap, TrapType,
+    WandType, World,
 )
 from .events import (
     DamageEvent, DeathEvent, Event, GameOverEvent, MessageEvent,
@@ -14,6 +14,6 @@ from .events import (
 )
 from .commands import (
     CastCommand, Command, MoveCommand, PickupCommand, QuaffCommand,
-    TakeOffCommand, WaitCommand, WearCommand, ZapCommand,
+    ReadCommand, TakeOffCommand, WaitCommand, WearCommand, ZapCommand,
 )
 from .step import step

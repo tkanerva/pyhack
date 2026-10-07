@@ -11,13 +11,14 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .commands import (CastCommand, Command, MoveCommand, PickupCommand,
-                       QuaffCommand, TakeOffCommand, WearCommand,
-                       ZapCommand)
+                       QuaffCommand, ReadCommand, TakeOffCommand,
+                       WearCommand, ZapCommand)
 from .events import Event, GameOverEvent, MessageEvent
 from .hacklib import distmin, is_asleep, is_stuck
 from .mhitu import mattacku
 from .pickup import pickup
 from .potions import quaff
+from .scrolls import read_scroll
 from .uhitm import uhitm
 from .rules import (apply_damage, melee_attack, process_events, tick_actor)
 from .spells import cast_spell
@@ -52,6 +53,8 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
             events += quaff(world, "player", cmd.item_id, rng)
         elif isinstance(cmd, CastCommand):
             events += cast_spell(world, "player", cmd.book_id, cmd.direction, rng)
+        elif isinstance(cmd, ReadCommand):
+            events += read_scroll(world, "player", cmd.item_id, rng)
         elif isinstance(cmd, WearCommand):
             events += dowear(world, "player", cmd.item_id, rng)
         elif isinstance(cmd, TakeOffCommand):

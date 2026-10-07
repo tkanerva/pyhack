@@ -19,6 +19,7 @@ core/            pure simulation (no I/O)
   traps.py         trap effect registry + trigger logic
   zap.py           wand beams
   potions.py       quaffing
+  scrolls.py       the read.c subset (five seffect_* + STUBs)
   spells.py        spell beams / fireball
   worn.py          armor slots (owornmask) + the computed effective AC
   pickup.py        pick up the topmost item on your tile
@@ -36,10 +37,13 @@ python main.py
 ```
 
 WASD / arrow keys to move, bump a monster to attack it, `g` to pick
-up, `w<letter>` to wear and `t<letter>` to take off (letters are the
-inventory letters on the screen), `q` to quit.  The `AC` on the status
-line is the computed effective AC: the hero starts at base 10 wearing
-chain mail (effective 5) -- go get the floor armour.
+up, `w<letter>` to wear and `t<letter>` to take off, `r<letter>` to
+read a scroll (letters are the inventory letters on the screen), `q`
+to quit.  The `AC` on the status line is the computed effective AC:
+the hero starts at base 10 wearing chain mail (effective 5) -- go get
+the floor armour.  The floor also carries the demo scrolls (enchant
+weapon / enchant armor, remove curse, teleportation, blank paper);
+the cursed floor cloak only comes off after a remove curse scroll.
 
 ## Test
 
@@ -51,6 +55,3 @@ pytest            # run from the repo root
 The tests are deterministic: the core takes an injected
 `random.Random` (or any object with `randint`/`choice`), and `tests`
 includes a `SeqRng` helper for exact roll-by-roll control.
-
-
----

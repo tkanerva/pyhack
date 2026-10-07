@@ -21,7 +21,10 @@ def main() -> None:
     log: List[str] = []
 
     print("🎮 PyHack — functional core, events out")
-    print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | Q to quit")
+    print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | r<letter> read | Q to quit")
+    print("   The floor scrolls (enchant weapon/armor, remove curse, teleportation,
+   blank paper) are read with r<letter> -- the cursed cloak needs a
+   remove curse scroll before it can come off.")
     print("   Bump into a monster to attack it!")
     print("   Traps trigger when you step on them (30% chance).")
     print("   The AC on the status line is the computed effective AC")

@@ -31,8 +31,8 @@ from typing import List, Optional, Tuple
 
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType, W_ARM
-from .types import (Item, Map, Monster, ObjectType, Pos, Tile, TerrainType,
-                    Trap, TrapType, World)
+from .types import (Item, Map, Monster, ObjectType, Pos, ScrollType, Tile,
+                    TerrainType, Trap, TrapType, World)
 from .vision import vision_init, vision_recalc, vision_reset
 from .weapon import P_SKILLED, Skill, Skills
 
@@ -48,7 +48,7 @@ HERO_BASE_AC = 10
 
 # The demo floor armour (PLAN-ARMOR.md Phase 2): (position, name, otype,
 # cursed) at FIXED positions -- they are reserved via
-# generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
+generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
 # added and the seed-42 layout, trap / monster placement and every
 # seeded test are untouched.  The last piece is cursed (PLAN-ARMOR.md
 # risk 3, default yes): it makes the "You can't. It is cursed." doff
@@ -60,6 +60,26 @@ FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
     ((25, 13), "small shield", ObjType.SMALL_SHIELD, False),
     ((20, 15), "leather jacket", ObjType.LEATHER_JACKET, False),
     ((20, 6), "leather cloak", ObjType.LEATHER_CLOAK, True),  # cursed
+]
+
+# The demo floor scrolls (the read.c port): (position, name, otype,
+# scroll type) at FIXED positions -- reserved via
+generate_map(keep_floor=...) alongside HERO_POS and FLOOR_ARMOR, so
+# no rng draw is added and the seed-42 layout, trap / monster
+# placement and every seeded test are untouched.  All five
+# implemented scroll types are represented; the cursed-gear demo
+# piece (the FLOOR_ARMOR cloak) pairs with the remove curse scroll.
+FLOOR_SCROLLS: List[Tuple[Pos, str, ObjType, ScrollType]] = [
+    ((17, 7), "enchant weapon", ObjType.SCR_ENCHANT_WEAPON,
+     ScrollType.ENCHANT_WEAPON),
+    ((23, 7), "enchant armor", ObjType.SCR_ENCHANT_ARMOR,
+     ScrollType.ENCHANT_ARMOR),
+    ((17, 13), "remove curse", ObjType.SCR_REMOVE_CURSE,
+     ScrollType.REMOVE_CURSE),
+    ((23, 13), "teleportation", ObjType.SCR_TELEPORTATION,
+     ScrollType.TELEPORTATION),
+    ((20, 12), "blank paper", ObjType.SCR_BLANK_PAPER,
+     ScrollType.BLANK_PAPER),
 ]
 
 
@@ -97,7 +117,8 @@ def _hero_skills() -> Skills:
 def new_world(rng, width: int = 40, height: int = 20) -> World:
     m = generate_map(rng, width, height,
                      keep_floor=[HERO_POS]
-                     + [p for p, _, _, _ in FLOOR_ARMOR])
+                     + [p for p, _, _, _ in FLOOR_ARMOR]
+                     + [p for p, _, _, _ in FLOOR_SCROLLS])
     world = World(map=m)
 
     hero = Monster(
@@ -156,6 +177,15 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
         it = Item(id=f"armor_{i}", otype=ObjectType.ARMOR, name=name,
                   otyp=otyp.value, oclass=ObjClass.ARMOR.value, pos=pos,
                   cursed=cursed)
+        world.items[it.id] = it
+
+    # the demo floor scrolls (fixed positions, see FLOOR_SCROLLS
+    # above): fine identity (ObjLike) + the effect tag the read
+    # dispatch switches on
+    for i, (pos, name, otyp, stype) in enumerate(FLOOR_SCROLLS):
+        it = Item(id=f"scroll_{i}", otype=ObjectType.SCROLL, name=name,
+                  otyp=otyp.value, oclass=ObjClass.SCROLL.value, pos=pos,
+                  scroll_type=stype)
         world.items[it.id] = it
 
     floor = [p for p in m.floor_tiles() if p != HERO_POS]

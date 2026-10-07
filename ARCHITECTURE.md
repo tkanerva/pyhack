@@ -16,6 +16,7 @@ turn. The core has **no I/O, no global state, and no broadcast bus**:
         +-- traps                      (traps.py: TRAP_EFFECTS registry)
         +-- zaps                       (zap.py)
         +-- potions                    (potions.py)
+        +-- scrolls                    (scrolls.py: the read.c subset)
         +-- spells                     (spells.py)
         +-- wear / take off            (worn.py: slots + AC computation)
         +-- pickup                     (pickup.py: the pickobj subset)
@@ -133,6 +134,30 @@ emoji log strings.
   intrinsic/extrinsic property system (PLAN-ARMOR.md decision 7 and
   Phase 4/5); the AC effect of gear is already live via the computed
   `uac`.
+- Scroll reading (core/scrolls.py, the read.c port): `ReadCommand`
+  (C: 'R'/'r') + `read_scroll()`, the first five effects of C's
+  `seffects()` switch -- blank paper (not consumed, C: doread skips
+  useup), enchant weapon (chwepon: the +1 / blessed-rnd(3 - spe/3) /
+  spe>=9-0-or-1 amount, the soft +/-5 evaporate limit, the positive-
+  enchant uncurse, the high-spe vibration clue), enchant armor
+  (some_armor's cloak/suit/shirt -> helmet/gloves/boots/shield 3/4
+  swap, the elven vibration/evaporate warning, the (4-s)/2 base power
+  + elven / nonmagical / blessed bonuses, the BUC transfer), remove
+  curse (a cursed scroll only disintegrates; otherwise worn items --
+  carried items for a blessed scroll -- are uncursed silently, as
+  C's uncurse() does), teleportation (on the floor-tile set,
+  rules.teleport_to_floor -- the demo's single level collapses C's
+  cursed level-teleport and the blessed getpos destination).  The
+  demo floor gains five scrolls (FLOOR_SCROLLS, fixed positions, no
+  rng draws) and the console `r<letter>` key.  The remaining seventeen
+  C seffect_* handlers are STUBs (raise NotImplementedError when read;
+  the demo never carries them).
+- The elven test of the enchant-armor effects is by table name
+  ("elven ..."): the ported Object row carries no C OC_ELVEN flag;
+  the test is exact over the demo's elven subset.  Note the C 5.0
+  elven rows (elven mithril coat, elven leather helm) are NOT
+  oc_magic, so they take BOTH the elven and the nonmagical power
+  bonus.
 
 **Intentional simplifications (documented, not bugs):**
 - Monster AI is still a random walk — no awareness/line-of-sight yet.
@@ -163,6 +188,14 @@ emoji log strings.
    inventory in `worldgen` and a few keys in `read_command`).
 2. Port `priest.py` / `pray.py` as systems (start from
    `NetHack/NetHack/src/priest.c` and `pray.c`).
-3. Monster awareness/LOS for chases.
-4. If the system/entity matrix grows, evolve into a lightweight ECS —
+3. Fill in the scroll STUBs in `core/scrolls.py` as their machinery
+   lands (the C provenance of each is in the module docstring; the
+   destroy-armor pair `worn.disintegrate_arm` / `destroy_arm` is
+   already real and tested, awaiting its `SCR_DESTROY_ARMOR` call
+   site).  Next candidates on existing machinery: SCR_DESTROY_ARMOR
+   (the scroll effect wrapper around the Phase-4 fill), SCR_LIGHT
+   (a `lit` flag on Tile), SCR_CONFUSE_MONSTER (rules.apply_confusion
+   over nearby monsters).
+4. Monster awareness/LOS for chases.
+5. If the system/entity matrix grows, evolve into a lightweight ECS —
    the events-out design stays the same.
