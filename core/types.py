@@ -147,6 +147,40 @@ class SpellType(Enum):
     HEALING = auto()
 
 
+class ZapEffect(Enum):
+    """C: the shared zap effect ids -- the registry keys of the zap
+    port (core.zap.ZAP_EFFECTS).
+
+    In C NetHack, wands and spells share their effect code through one
+    intermediate object: spelleffects() (src/spell.c) builds a temporary
+    "pseudo" spellbook object (mksobj(spellid), quan 20 so useup() leaves
+    it alone) and hands it to the SAME weffects() (src/zap.c) that dozap()
+    uses for wands; weffects() then dispatches on the object type --
+    bhitm()'s switch (WAN_STRIKING falls through into SPE_FORCE_BOLT: the
+    wand of striking and the force bolt spell run ONE code path) and the
+    dobuzz()/zhitm() damage switch for the ray wands and the zap spells.
+
+    pyhack keeps that structure without the pseudo-object trick: this
+    enum is the key space (C's zno / ZT_* damage types + the bhitm otyp
+    cases) both WandType and SpellType map into, and core.zap.ZAP_EFFECTS
+    maps each key to the one effect function wands and spells both call.
+    The unported C zaps (opening, locking, probing, slow, speed, make
+    invisible, light, ...) are absent by design: each lands with the
+    machinery it needs (doors, monster speed, invisibility, ...).
+    """
+    FIRE = auto()             # C: ZT_FIRE (WAN_FIRE; no C spell -- fireball is area)
+    COLD = auto()             # C: ZT_COLD (WAN_COLD + SPE_CONE_OF_COLD)
+    LIGHTNING = auto()        # C: ZT_LIGHTNING (WAN_LIGHTNING + the 3.x lightning spell)
+    MAGIC = auto()            # C: ZT_MAGIC_MISSILE (SPE_MAGIC_MISSILE + WAN_MAGIC_MISSILE)
+    STRIKING = auto()         # C: bhitm WAN_STRIKING -> SPE_FORCE_BOLT (zap_punch, d(2,12))
+    SLEEP = auto()            # C: ZT_SLEEP (WAN_SLEEP + SPE_SLEEP)
+    DEATH = auto()            # C: ZT_DEATH (WAN_DEATH + SPE_FINGER_OF_DEATH)
+    POLYMORPH = auto()        # C: bhitm WAN_POLYMORPH + SPE_POLYMORPH
+    CANCELLATION = auto()     # C: bhitm WAN_CANCELLATION + SPE_CANCELLATION
+    TELEPORT = auto()         # C: bhitm WAN_TELEPORTATION + SPE_TELEPORT_AWAY
+    UNDEAD_TURNING = auto()   # C: bhitm WAN_UNDEAD_TURNING + SPE_TURN_UNDEAD
+
+
 class Direction(Enum):
     N = (0, -1)
     S = (0, 1)
@@ -273,7 +307,7 @@ def accessible(typ: TerrainType) -> bool:
 
 def is_pool(typ: TerrainType) -> bool:
     """C: IS_POOL."""
-    return TerrainType.POOL <= typ <= TerrainType.DRAWBRIDGE_UP
+    TerrainType.POOL <= typ <= TerrainType.DRAWBRIDGE_UP
 
 
 @dataclass
@@ -394,6 +428,12 @@ class Item:
 # Monsters (the hero is just a monster with is_hero=True)
 # ============================================================
 
+# C: include/you.h -- the maximum character level.  Sizes the hero's
+# ueninc[] bookkeeping array (core.energy) and the regen period
+# (MAXULEV + 8 - ulevel).
+MAXULEV = 30
+
+
 @dataclass
 class Monster:
     id: str
@@ -430,11 +470,23 @@ class Monster:
     ulevel: int = 1                  # hero level (fixed in the demo)
     ustr: int = 12                   # strength (fixed; no STR18)
     udex: int = 12                   # dexterity (neutral: no bonus swing)
+    uwis: int = 12                   # wisdom (fixed; C: the A_WIS half of
+    # newpw() / regen_pw() in core.energy)
+    uint: int = 15                   # intelligence (fixed; C: the A_INT half;
+    # the Wizard role's starting INT feeds the spell formulas in
+    # core.spells)
+    # spell power (C: you.h uen / uenmax / uenpeak / ueninc[MAXULEV]):
+    # the demo default is 0/0/0 (the test heroes never cast); the demo
+    # hero's Pw is set by energy.init_energy (C: u_init.c)
+    uen: int = 0
+    uenmax: int = 0
+    uenpeak: int = 0
+    ueninc: List[int] = field(default_factory=lambda: [0] * MAXULEV)
     skills: Optional["Skills"] = None  # per-hero weapon-skill state
     # intrinsic properties (C: the u.uprops[] inherent / temp half,
-    # mprops for monsters): the Prop set held without gear (species,
-    # spells, potions).  The worn-gear contribution is computed, never
-    # stored (core.props.worn_properties / has_property).
+    # mprops for monsters): the Prop set held without gear (species, spells,
+    # potions).  The worn-gear contribution is computed, never stored
+    # (core.props.worn_properties / has_property).
     intrinsics: "set[Prop]" = field(default_factory=set)
 
 

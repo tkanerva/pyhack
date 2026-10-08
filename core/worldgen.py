@@ -18,6 +18,15 @@ gloves and a ring of protection (+1) ride carried, and six floor
 armours (FLOOR_ARMOR, one of them cursed) wait on fixed tiles.  None
 of it adds an rng draw, so the seeded layout is still unchanged.
 
+The hero also runs the spell power system (core.energy): init_energy
+(C: u_init.c's `u.uen = newpw()`) adds exactly ONE rng draw (the
+level-0 newpw rnd(3)), after the map and before the traps -- the
+seeded layout (walls, traps, spawns) is untouched.  The floor carries
+the zap-port demo kit (FLOOR_WANDS / FLOOR_BOOKS, fixed positions):
+the wand of cold + the cone of cold book run the SAME ZapEffect
+(core.zap's shared design), the striking wand the force-bolt effect,
+and the magic missile / healing books the spell side.
+
 The grid is now rm-like Tiles (STONE boundary ring, ROOM floor, scattered
 STONE obstacles) instead of the old 0/1 ints, so the vision code
 (core/vision.py) runs on the same substrate the full mklev.c (rooms +
@@ -29,10 +38,11 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
+from .energy import init_energy
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType, W_ARM
-from .types import (Item, Map, Monster, ObjectType, Pos, ScrollType, Tile,
-                    TerrainType, Trap, TrapType, World)
+from .types import (Item, Map, Monster, ObjectType, Pos, ScrollType, SpellType,
+                    Tile, TerrainType, Trap, TrapType, WandType, World)
 from .vision import vision_init, vision_recalc, vision_reset
 from .weapon import P_SKILLED, Skill, Skills
 
@@ -43,16 +53,16 @@ HERO_HP = 25
 # row is not in core.monst's SUBSET_PM, so a named constant (PLAN-
 # ARMOR.md decision 2).  The effective AC is computed from the worn gear
 # (core.worn.uac): the hero starts wearing chain mail (a_ac 5), so the
-# demo's effective defence is 10 - 5 = 5, exactly the old demo's AC.
+demo's effective defence is 10 - 5 = 5, exactly the old demo's AC.
 HERO_BASE_AC = 10
 
 # The demo floor armour (PLAN-ARMOR.md Phase 2): (position, name, otype,
 # cursed) at FIXED positions -- they are reserved via
 generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
-# added and the seed-42 layout, trap / monster placement and every
-# seeded test are untouched.  The last piece is cursed (PLAN-ARMOR.md
-# risk 3, default yes): it makes the "You can't. It is cursed." doff
-# path reachable in play.
+added and the seed-42 layout, trap / monster placement and every
+seeded test are untouched.  The last piece is cursed (PLAN-ARMOR.md
+risk 3, default yes): it makes the "You can't. It is cursed." doff
+path reachable in play.
 FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
     ((15, 7), "leather armor", ObjType.LEATHER_ARMOR, False),
     ((25, 7), "elven leather helm", ObjType.ELVEN_LEATHER_HELM, False),
@@ -65,10 +75,10 @@ FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
 # The demo floor scrolls (the read.c port): (position, name, otype,
 # scroll type) at FIXED positions -- reserved via
 generate_map(keep_floor=...) alongside HERO_POS and FLOOR_ARMOR, so
-# no rng draw is added and the seed-42 layout, trap / monster
-# placement and every seeded test are untouched.  All five
-# implemented scroll types are represented; the cursed-gear demo
-# piece (the FLOOR_ARMOR cloak) pairs with the remove curse scroll.
+no rng draw is added and the seed-42 layout, trap / monster
+placement and every seeded test are untouched.  All five
+implemented scroll types are represented; the cursed-gear demo
+piece (the FLOOR_ARMOR cloak) pairs with the remove curse scroll.
 FLOOR_SCROLLS: List[Tuple[Pos, str, ObjType, ScrollType]] = [
     ((17, 7), "enchant weapon", ObjType.SCR_ENCHANT_WEAPON,
      ScrollType.ENCHANT_WEAPON),
@@ -80,6 +90,34 @@ FLOOR_SCROLLS: List[Tuple[Pos, str, ObjType, ScrollType]] = [
      ScrollType.TELEPORTATION),
     ((20, 12), "blank paper", ObjType.SCR_BLANK_PAPER,
      ScrollType.BLANK_PAPER),
+]
+
+# The demo floor wands (the zap.c port): (position, name, otype, wand
+type, charges) at FIXED positions -- reserved via
+generate_map(keep_floor=...) alongside the rest, so no rng draw is
+added and the seed-42 layout is untouched.  The striking and cold
+wands pair with the books below: the wand of cold and the cone of
+cold book run the SAME ZapEffect (the shared-effect design), the
+striking wand the force-bolt effect (C bhitm WAN_STRIKING ->
+SPE_FORCE_BOLT).
+FLOOR_WANDS: List[Tuple[Pos, str, ObjType, WandType, int]] = [
+    ((19, 10), "wand of striking", ObjType.WAN_STRIKING,
+     WandType.STRIKING, 3),
+    ((21, 10), "wand of cold", ObjType.WAN_COLD, WandType.COLD, 3),
+]
+
+# The demo floor spellbooks (the spell.c port): (position, name,
+otype, spell type, charges) at FIXED positions -- the book is the
+power source (C: the spellbook's pages; one page per successful
+cast).  The levels mirror core.objects's SPELL rows (magic missile
+2, cone of cold 4, healing 1) and core.spells.SPELL_LEVELS.
+FLOOR_BOOKS: List[Tuple[Pos, str, ObjType, SpellType, int]] = [
+    ((18, 11), "book of magic missile", ObjType.SPE_MAGIC_MISSILE,
+     SpellType.MAGIC_MISSILE, 5),
+    ((20, 11), "book of cone of cold", ObjType.SPE_CONE_OF_COLD,
+     SpellType.CONE_OF_COLD, 5),
+    ((22, 11), "book of healing", ObjType.SPE_HEALING,
+     SpellType.HEALING, 5),
 ]
 
 
@@ -105,8 +143,8 @@ def generate_map(rng, width: int = 40, height: int = 20,
 def _hero_skills() -> Skills:
     """The demo hero's skill state: it starts skilled with its starting
     weapon.  ``skill_init`` needs a role's class-skill table, which the
-    demo has no, so the one skill is set directly (no progression in the
-    demo)."""
+demo has no, so the one skill is set directly (no progression in the
+demo)."""
     skills = Skills()
     skill = int(Skill.P_SHORT_SWORD)
     skills.skill[skill] = P_SKILLED
@@ -118,15 +156,26 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
     m = generate_map(rng, width, height,
                      keep_floor=[HERO_POS]
                      + [p for p, _, _, _ in FLOOR_ARMOR]
-                     + [p for p, _, _, _ in FLOOR_SCROLLS])
+                     + [p for p, _, _, _ in FLOOR_SCROLLS]
+                     + [p for p, _, _, _, _ in FLOOR_WANDS]
+                     + [p for p, _, _, _, _ in FLOOR_BOOKS])
     world = World(map=m)
 
+    # C: the Wizard role's fixed attributes (role.c: INT 15, WIS 12) --
+    # they feed the spell formulas (core.spells) and the energy
+    # formulas (core.energy)
     hero = Monster(
         id="player", name="Hero", pos=HERO_POS,
         hp=HERO_HP, max_hp=HERO_HP, ac=HERO_BASE_AC, damage=2, is_hero=True,
-        ulevel=1, ustr=12, udex=12,
+        ulevel=1, ustr=12, udex=12, uwis=12, uint=15,
         skills=_hero_skills())
     world.actors["player"] = hero
+
+    # C: u_init.c -- `u.uen = u.uenmax = u.uenpeak = newpw();` (the
+    # level-0 branch: 4 + 1 + rnd(3) = 6..8 Pw).  The ONE rng draw this
+    # wiring adds (the layout draws above are untouched -- see
+    # test_new_world_makes_no_new_rng_draws).
+    init_energy(world, rng)
 
     # the hero starts with one short sword (the demo's weapon subset):
     # the fine identity (ObjLike-compatible for core.weapon) lives on
@@ -188,6 +237,24 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
                   scroll_type=stype)
         world.items[it.id] = it
 
+    # the demo floor wands (the zap.c port): fine identity (ObjLike)
+    # + the effect tag the wand dispatch switches on + the fixed
+    # charges (no rng draw)
+    for i, (pos, name, otyp, wtype, charges) in enumerate(FLOOR_WANDS):
+        it = Item(id=f"wand_{i}", otype=ObjectType.WAND, name=name,
+                  otyp=otyp.value, oclass=ObjClass.WAND.value, pos=pos,
+                  wand_type=wtype, charges=charges)
+        world.items[it.id] = it
+
+    # the demo floor spellbooks (the spell.c port): fine identity
+    # (ObjLike) + the effect tag the cast dispatch switches on + the
+    # fixed pages (no rng draw)
+    for i, (pos, name, otyp, stype, charges) in enumerate(FLOOR_BOOKS):
+        it = Item(id=f"book_{i}", otype=ObjectType.BOOK, name=name,
+                  otyp=otyp.value, oclass=ObjClass.SPBOOK.value, pos=pos,
+                  spell_type=stype, charges=charges)
+        world.items[it.id] = it
+
     floor = [p for p in m.floor_tiles() if p != HERO_POS]
 
     # 10 traps of the same types the old demo used
@@ -229,7 +296,7 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
     for i in range(3):
         world.actors[f"bat_{i}"] = Monster(
             id=f"bat_{i}", name="Bat", pos=next_pos(),
-            hp=4, max_hp=4, ac=3, damage=1, is_flying=True,
+            hp=4, max_hp=4, ac=bat.ac, damage=1, is_flying=True,
             mdata=bat)
 
     # vision (C: vision_init() before mklev(), vision_reset() after the

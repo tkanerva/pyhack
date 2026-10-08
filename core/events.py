@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from .types import DamageType, WandType
+from .types import DamageType, ZapEffect
 
 
 class Event:
@@ -57,8 +57,10 @@ class TrapSeenEvent(Event):
 
 @dataclass(frozen=True)
 class ZapEvent(Event):
+    """A beam was fired (wand zap or spell cast -- the shared engine
+    emits it; the effect is the registry key, C: the zap type)."""
     caster: str
-    wand_type: WandType
+    effect: ZapEffect
     target: Optional[str]
 
 

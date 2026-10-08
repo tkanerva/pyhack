@@ -4,11 +4,7 @@ The table is a mechanical transcription of include/objects.h; these
 tests pin the C numbering (so any future reordering fails loudly),
 the macro expansions for representative rows, and the class ranges.
 """
-from core.objects import (ObjClass, ObjType, OBJECTS, BASES, NUM_OBJECTS,
-                          FIRST_OBJECT, FIRST_AMULET, LAST_AMULET,
-                          FIRST_SPELL, LAST_SPELL, FIRST_REAL_GEM,
-                          LAST_REAL_GEM, FIRST_GLASS_GEM, LAST_GLASS_GEM,
-                          MAXOCLASSES, O)
+from core.objects import (ObjClass, ObjType, OBJECTS, BASES, NUM_OBJECTS,\n                          FIRST_OBJECT, FIRST_AMULET, LAST_AMULET,\n                          FIRST_SPELL, LAST_SPELL, FIRST_REAL_GEM,\n                          LAST_REAL_GEM, FIRST_GLASS_GEM, LAST_GLASS_GEM,\n                          MAXOCLASSES, O)
 
 
 def test_table_length():
@@ -211,7 +207,7 @@ def test_wand_rows():
     assert OBJECTS[O.WAN_WISHING].prob == 5
     assert OBJECTS[O.WAN1].name is None
     assert OBJECTS[O.WAN1].descr == "forked"
-    assert OBJECTS[O.WAN_NOTHING].magic is False
+    assert not OBJECTS[O.WAN_NOTHING].magic  # 0, not False: plain int
 
 
 def test_coin_gem_rows():

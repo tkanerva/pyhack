@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 from .types import Direction, WandType
 
@@ -33,7 +33,10 @@ class QuaffCommand:
 @dataclass(frozen=True)
 class CastCommand:
     book_id: str
-    direction: Direction
+    direction: Optional[Direction] = None  # None = self (C: 'C' / 'c' -- the zapyourself
+    # path -- a directional spell cast without a direction hits the
+    # caster; the self effects (healing, teleport, cancellation) need
+    # no direction at all)
 
 
 @dataclass(frozen=True)

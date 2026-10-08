@@ -157,7 +157,7 @@ def check_traps(world: World, actor_id: str, rng) -> List[Event]:
                 events.append(MessageEvent(
                     "👣 You feel something underfoot but don't trigger it."))
             else:
-                events.append(MessageEvent(f"👣 {a.name} feels something underfoot."))
+                events.append(MessageEvent(f"👣 {actor.name} feels something underfoot."))
     return events
 
 

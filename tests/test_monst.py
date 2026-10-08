@@ -46,7 +46,7 @@ def test_dragon_range():
     assert M.PM_GRAY_DRAGON < M.PM_BLACK_DRAGON <= M.PM_YELLOW_DRAGON
     assert M.PM_YELLOW_DRAGON - M.PM_GRAY_DRAGON + 1 == 10
     for i in range(M.PM_GRAY_DRAGON, M.PM_YELLOW_DRAGON + 1):
-        assert is_dragon(MONS[i]) or MONS[i] is None
+        assert MONS[i] is None or is_dragon(MONS[i])
 
 
 def test_monsndx_and_monclass():
@@ -212,7 +212,9 @@ def test_flag_combinations():
     assert M.M1_HUMANOID in g.mflags1
     assert M.M1_OMNIVORE in g.mflags1
     assert not (g.mflags1 & M.M1_FLY)
-    assert "HUMANOID" in str(g.mflags1)
+    # format(), not str(): since Python 3.11, str() of a combined
+    # IntFlag is the bare value; format() keeps the readable names
+    assert "HUMANOID" in format(g.mflags1, "")
     # the C-defined combined masks work as masks and equal their
     # component combinations
     t = MONS[M.PM_TROLL]

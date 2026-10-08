@@ -65,8 +65,8 @@ TEMP_LIT = 0x4   # location is temporarily lit (STUB: unused until light.c)
 MAX_RADIUS = 15
 
 # C: vision.c -- limit offsets for one quadrant of a circle of a given
-# radius (the first number of each block); radius r has r+1 entries,
-# and the final 16 terminates the range loops.
+# radius (the first number of each block); radius r has r+1 entries, and
+# the final 16 terminates the range loops.
 CIRCLE_DATA = (
     0,
     1,  1,
@@ -216,6 +216,9 @@ def _rescan_row(world: World, y: int) -> None:
                 for i in range(dig_left, x):
                     left[y][i] = dig_left
                     right[y][i] = x - 1
+                    clear[y][i] = False  # a rescan of a row that used to
+                    # be clear must unmark the blocked run (the initial
+                    # build starts all-False, so only rescans need it)
             else:
                 i = dig_left
                 if dig_left:
@@ -325,7 +328,7 @@ def _q1_path(m: Map, srow: int, scol: int, row: int, col: int) -> bool:
         err = dys - dx
         for _ in range(dx - 1, 0, -1):
             if err >= 0:
-                y -= 1
+                y += 1
                 err -= dxs
             x += 1
             err += dys

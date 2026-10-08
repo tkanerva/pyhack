@@ -8,11 +8,10 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from core.commands import (Command, MoveCommand, PickupCommand,
-                           ReadCommand, TakeOffCommand, WaitCommand,
-                           WearCommand)
+from core.commands import (CastCommand, Command, MoveCommand, PickupCommand,\n                           ReadCommand, TakeOffCommand, WaitCommand,\n                           WearCommand, ZapCommand)
 from core.items import wielded_of
-from core.types import Item, Pos, World
+from core.spells import SPELL_ZAPS
+from core.types import Direction, ObjectType, World
 from core.worn import W_ACCESSORY, W_ARMOR, uac
 
 # The old code lower-cased the key before comparing against "\x1b[A",
@@ -23,6 +22,18 @@ ARROWS = {
     "a": (-1, 0), "\x1b[d": (-1, 0),
     "d": (1, 0), "\x1b[c": (1, 0),
 }
+
+# The zap direction prompt (C: getdir for the ray wands / spells)
+DIRECTIONS = {
+    "n": Direction.N, "s": Direction.S, "e": Direction.E, "w": Direction.W,
+    "ne": Direction.NE, "nw": Direction.NW, "se": Direction.SE,
+    "sw": Direction.SW,
+}
+
+
+def _ask_direction() -> Direction:
+    key = input("Direction (n/s/e/w/ne/nw/se/sw): ").strip().lower()
+    return DIRECTIONS.get(key, Direction.E)
 
 
 def _item_by_letter(world: World, letter: str) -> Optional[str]:
@@ -39,23 +50,43 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     """Returns None to quit.
 
     Keys: WASD / arrows to move, `g` to pick up, `w<letter>` to wear,
-    `t<letter>` to take off, `r<letter>` to read a scroll (the letters
-    are the inventory letters shown in the screen's inventory line),
-    `q` to quit; anything else is a wait.
+    `t<letter>` to take off, `r<letter>` to read a scroll, `z<letter>`
+    to zap a wand (+ the direction prompt), `c<letter>` to cast a
+    spell (the direction prompt only for the beam spells -- the
+    self spells cast at once) (the letters are the inventory letters
+    shown in the screen's inventory line), `q` to quit; anything else
+    is a wait.
     """
     key = input(prompt).strip().lower()
     if key == "q":
         return None
     if key == "g":
         return PickupCommand()
-    if len(key) == 2 and key[0] in ("w", "t", "r") and key[1].isalpha():
+    if len(key) == 2 and key[1].isalpha():
         item_id = _item_by_letter(world, key[1])
         if item_id is not None:
             if key[0] == "w":
                 return WearCommand(item_id)
             if key[0] == "t":
                 return TakeOffCommand(item_id)
-            return ReadCommand(item_id)
+            if key[0] == "r":
+                return ReadCommand(item_id)
+            if key[0] == "z":
+                item = world.items[item_id]
+                if (item.otype == ObjectType.WAND
+                        and item.wand_type is not None):
+                    return ZapCommand(item.wand_type, _ask_direction())
+                return WaitCommand()
+            if key[0] == "c":
+                item = world.items[item_id]
+                if (item.otype == ObjectType.BOOK
+                        and item.spell_type is not None):
+                    direction = (_ask_direction()
+                                 if item.spell_type in SPELL_ZAPS
+                                 else None)
+                    return CastCommand(item_id, direction)
+                return WaitCommand()
+            return WaitCommand()
     if key in ARROWS:
         dx, dy = ARROWS[key]
         return MoveCommand(dx, dy)
@@ -82,19 +113,13 @@ def _inventory_line(world: World) -> str:
 def render(world: World, log: List[str]) -> str:
     lines: List[str] = []
     lines.append("🗺️  Cave Map")
-    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall | ! = Scroll")
+    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall")
     lines.append("")
 
     hero_pos = world.hero.pos
     monster_pos = {m.pos for m in world.actors.values() if not m.is_hero and m.alive}
     triggered = {t.pos for t in world.traps.values() if t.triggered}
     seen = {t.pos for t in world.traps.values() if t.seen and not t.triggered}
-
-    # Collect items on the floor (not carried by a monster)
-    floor_items: dict[Pos, List[Item]] = {}
-    for item in world.items.values():
-        if item.pos is not None and item.container is None:
-            floor_items.setdefault(item.pos, []).append(item)
 
     for y in range(world.map.height):
         row = []
@@ -110,14 +135,6 @@ def render(world: World, log: List[str]) -> str:
                 row.append("^")
             elif world.map.is_wall(pos):
                 row.append("#")
-            elif pos in floor_items:
-                # Display scrolls with "!" (any scroll type)
-                for item in floor_items[pos]:
-                    if item.otype.name == "SCROLL":
-                        row.append("!")
-                        break
-                else:
-                    row.append(".")  # other floor items
             else:
                 row.append(" ")
         lines.append("".join(row))

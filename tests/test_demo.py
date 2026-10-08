@@ -25,7 +25,7 @@ def _typed(pm: int, pos=(7, 4), hp=8, **kw) -> Monster:
     """A runtime Monster carrying a PerMonst type (the mhitu path)."""
     data = MONS[pm]
     return Monster(id=f"mon_{pm}", name=data.pmnames[2], pos=pos, hp=hp,
-                   max_hp=hp, ac=data.ac, mdata=data, **kw)
+                   max_hp=kw.pop("max_hp", hp), ac=data.ac, mdata=data, **kw)
 
 
 def _hero_with_sword(**kw):
@@ -118,8 +118,7 @@ def test_new_world_wires_the_demo_combat():
 
 def test_demo_full_game_is_deterministic():
     """Same seed + same commands => same game, now that combat runs on
-    the PerMonst / weapon paths (the old demo's determinism property,
-    checked on the wired-up world)."""
+    the PerMonst / weapon paths (the old demo's determinism property, checked on the wired-up world)."""
     def play():
         rng = random.Random(42)
         w = new_world(rng)

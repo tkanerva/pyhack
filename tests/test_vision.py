@@ -2,15 +2,13 @@
 
 Vision is an algorithm, so the high-value tests are algorithmic:
 clear_path() (the Bresenham line of sight) is checked EXHAUSTIVELY
-against an independent geometric oracle on whole maps, and the
+against an independent transcription of C's q?_path() on whole maps, and the
 could_see field (Algorithm C) against hand-computed tile sets.  The
 gameplay wiring (monsters pursuing the hero through step()) is
 covered in tests/test_step.py.
 """
 from core.types import (DoorMask, Item, ObjectType, Tile, TerrainType)
-from core.vision import (can_see, clear_path, could_see, do_clear_area,
-                         m_can_see, m_can_see_u, set_tile, unblock_point,
-                         vision_recalc, vision_reset)
+from core.vision import (can_see, clear_path, could_see, do_clear_area,\n                         m_can_see, m_can_see_u, set_tile, unblock_point,\n                         vision_recalc, vision_reset)
 from conftest import make_hero, make_map, make_monster, make_world
 
 
@@ -18,56 +16,55 @@ from conftest import make_hero, make_map, make_monster, make_world
 # Independent line-of-sight oracle (for the exhaustive tests)
 # ------------------------------------------------------------
 
-def _segment_hits_open_square(x0, y0, x1, y1, tx, ty):
-    """True if the centre-to-centre segment -- in DOUBLED tile
-    coordinates, where tile (i, j) spans (2i, 2i+2) x (2j, 2j+2) --
-    has a positive-length intersection with the INTERIOR of tile
-    (tx, ty).
-
-    Liang-Barsky clip against the open square: a segment that merely
-    touches a tile at a corner or along an edge counts as clear --
-    that is NetHack's corner-cutting rule (a single diagonal step
-    never checks the corner tiles).  The independent geometric
-    definition of what clear_path() must return.
-    """
-    dx = x1 - x0
-    dy = y1 - y0
-    p = (-dx, dx, -dy, dy)
-    q = (x0 - 2 * tx, 2 * tx + 2 - x0,
-         y0 - 2 * ty, 2 * ty + 2 - y0)
-    t0 = 0.0
-    t1 = 1.0
-    for pi, qi in zip(p, q):
-        if pi == 0:
-            if qi <= 0:  # parallel, on or outside the boundary
-                return False
-        else:
-            t = qi / pi
-            if pi < 0:
-                if t > t1:
-                    return False
-                if t > t0:
-                    t0 = t
-            else:
-                if t < t0:
-                    return False
-                if t < t1:
-                    t1 = t
-    return t1 > t0  # strictly positive length inside the open square
-
-
 def _los_tiles(a, b):
-    """The tiles STRICTLY BETWEEN a and b on the sight line (the
-    oracle's version of what the Bresenham paths check)."""
-    x0, y0 = 2 * a[0] + 1, 2 * a[1] + 1
-    x1, y1 = 2 * b[0] + 1, 2 * b[1] + 1
+    """The tiles C's q?_path() checks STRICTLY BETWEEN a and b -- an
+    independent transcription of the C do-while Bresenham (vision.c's
+    q1..q4_path), written plainly so it can serve as the reference for
+    the ported q?_path functions.
+
+    This is the RASTERIZED line NetHack uses, not the true
+    centre-to-centre segment: a shallow line can clip a wall tile's
+    corner sliver that the raster never steps into (e.g. (0,0)->(7,2)
+    clips (5,2)'s lower-left corner without ever stepping onto it), so
+    the true-segment geometry is the wrong oracle.  Corner cutting is
+    part of the algorithm: a diagonal step never checks the corner
+    tiles.  Endpoints are never checked.
+    """
+    x, y = a
+    tx, ty = b
+    if (x, y) == (tx, ty):
+        return []
+    if tx > x:
+        sx = 1
+        dx = tx - x
+    else:
+        sx = -1
+        dx = x - tx
+    if ty < y:  # up (q1 / q2)
+        sy = -1
+        dy = y - ty
+    else:       # down or level (q3 / q4)
+        sy = 1
+        dy = ty - y
     out = []
-    for ty in range(min(a[1], b[1]), max(a[1], b[1]) + 1):
-        for tx in range(min(a[0], b[0]), max(a[0], b[0]) + 1):
-            if (tx, ty) in (a, b):
-                continue
-            if _segment_hits_open_square(x0, y0, x1, y1, tx, ty):
-                out.append((tx, ty))
+    if dy > dx:
+        err = 2 * dx - dy
+        for _ in range(dy - 1):
+            if err >= 0:
+                x += sx
+                err -= 2 * dy
+            y += sy
+            err += 2 * dx
+            out.append((x, y))
+    else:
+        err = 2 * dy - dx
+        for _ in range(dx - 1):
+            if err >= 0:
+                y += sy
+                err -= 2 * dx
+            x += sx
+            err += 2 * dy
+            out.append((x, y))
     return out
 
 
@@ -89,10 +86,11 @@ def _test_maps():
     return maps
 
 
-def test_clear_path_matches_geometry_exhaustively():
+def test_clear_path_matches_reference_exhaustively():
     """Every tile pair on several maps: clear_path() must agree with
-    the independent geometric definition (all tiles strictly between
-    the endpoints are clear)."""
+    the independent transcription of C's q?_path() (every tile the
+    rasterized line steps through, strictly between the endpoints,
+    is clear)."""
     for w in _test_maps():
         vision_reset(w)
         tiles = [(x, y) for y in range(w.map.height)
@@ -150,14 +148,15 @@ def test_algorithm_c_wall_with_gap():
 def test_can_see_matches_could_see_without_lighting():
     """STUB semantics: with no light system yet, everything the hero
     could see is lit, so can_see() == could_see() (C: the IN_SIGHT
-    marking comes from light.c)."""
+    marking comes from light.c).  Both queries return the raw bit
+    (IN_SIGHT / COULD_SEE), so compare as booleans."""
     w = make_world(map=make_map(width=5, height=5,
                                 walls=((2, 0), (2, 1), (2, 3), (2, 4))),
                    hero=make_hero(pos=(0, 2)))
     vision_recalc(w)
     for y in range(5):
         for x in range(5):
-            assert can_see(w, (x, y)) == could_see(w, (x, y))
+            assert bool(can_see(w, (x, y))) == bool(could_see(w, (x, y)))
 
 
 def test_hero_view_follows_the_hero():

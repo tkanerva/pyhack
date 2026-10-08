@@ -1,47 +1,101 @@
-"""Spell system: cast_spell() with simple straight-line beam traversal.
+"""Spell system: cast_spell() -- the caster half of the zap port.
 
-Ported from the old spell.py.  Differences (documented in
-ARCHITECTURE.md): beams stop at the FIRST monster hit (NetHack
-behaviour; the old beam hit everything in range), damage is a flat 2d6
-(the old d6*nd formula referenced an 'nd' stat that never existed), and
-the study/learning mechanics are dropped (charges only).
+C sources: src/spell.c (`spelleffects()` / `spelleffects_check()` --
+the hero cast pipeline) + the shared machinery in core/zap.py (see
+there for the C provenance of the whole design).
 
-Phase 3: spell energy -- cast_spell() drains Pw from the caster
-before applying effects (C: spell.c's drain_energy).
+In C, spelleffects() builds a temporary pseudo spellbook object
+(mksobj(spellid), quan 20 so useup() leaves it alone) and hands it to
+the SAME weffects() the wands use.  pyhack replaces the pseudo object
+with a `ZapSpec`: the caster-side differences -- the Pw cost
+(SPELL_LEV_PW), the failure roll (`rnd(100) > percent_success`), the
+spell power (`u.ulevel / 2 + 1` dice) and the spell damage bonus
+(spell_damage_bonus, the INT/level bonus) -- are computed HERE and
+carried as VALUES in the spec; the effect code itself lives in
+core.zap.ZAP_EFFECTS, which the wands call with their own specs.
+
+C check order (spelleffects_check -> spelleffects), kept:
+
+1. the energy check (`u.uen < SPELL_LEV_PW(lev)`) -- no time, no draw,
+   no charge
+2. the failure roll (`rnd(100) > percent_success`) -- a fizzle costs
+   the turn but NOT the energy (C: the drain is in spelleffects, after
+   the check) and no book page (3.x: the page is used up after a
+   successful cast)
+3. the cast: the "you cast" line, the effect, the energy drain, the
+   page
+
+Simplifications (documented, not bugs):
+
+- percent_success is reduced to the demo: the INT base (C:
+  11 * INT / 2) minus the unskilled-caster difficulty growth
+  (C: (spellev - 1) * 4), clamped to a percentile -- C's role skill
+  tables, encumbrance penalties and spell-specific machinery are
+  dropped (the demo hero has no role skill state)
+- spell_damage_bonus: the INT/level bonus of C zap.c
+  spell_damage_bonus, with the INT <= 9 "never reduce below 1" floor
+  dropped (unreachable: the demo hero's INT is fixed)
+- the fireball is the demo's documented simplification (everything
+  adjacent to the caster, C 5.0's explode() at a distant point has no
+  demo equivalent); the C 5.0 cone-of-cold-as-explosion is kept in its
+  C 3.x beam form ("a cold stream") so it shares the wand of cold's
+  ZapEffect.COLD
+- the book is the power source (C: the spellbook's pages): one charge
+  per successful cast, consumed at 0
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .energy import drain_energy, spell_lev_pw
 from .events import Event, MessageEvent
-from .items import cancel_items, consume_item
-from .rules import (apply_damage, can_polymorph, find_target_in_line, heal,
-                    put_to_sleep, resists, roll, teleport_to_floor)
-from .types import DamageType, Direction, Item, ObjectType, SpellType, World
+from .items import consume_item
+from .rules import apply_damage, heal, roll
+from .types import (DamageType, Direction, Item, Monster, ObjectType,
+                    SpellType, ZapEffect, World)
+from .zap import ZAP_EFFECTS, ZapSpec, zap
 
-BEAM_RANGE = 7
-HEALING_POWER = 12
+HEALING_POWER = 12  # the demo's flat healing (C: the healing spell's rnd)
 
-# NetHack spell levels: the cost in Pw is level * 5 (spell_lev_pw).
-SPELL_LEVELS = {
-    SpellType.MAGIC_MISSILE: 1,
-    SpellType.FIREBALL: 5,
-    SpellType.CONE_OF_COLD: 5,
-    SpellType.LIGHTNING: 5,
-    SpellType.SLEEP: 2,
-    SpellType.DEATH: 6,
-    SpellType.POLYMORPH: 7,
-    SpellType.CANCELLATION: 5,
+# C: the spell levels of the objects table (core/objects_data.py, the
+# SPELL(name, descr, skill, prob, delay, LEVEL, ...) rows).  The Pw
+# cost is level * 5 (energy.spell_lev_pw, C SPELL_LEV_PW).
+# TELEPORT is the 3.x self-teleport level (the 5.0 row is the
+# targeted SPE_TELEPORT_AWAY); LIGHTNING has no 5.0 row (3.x level).
+SPELL_LEVELS: Dict[SpellType, int] = {
+    SpellType.MAGIC_MISSILE: 2,
+    SpellType.FIREBALL: 4,
+    SpellType.CONE_OF_COLD: 4,
+    SpellType.LIGHTNING: 4,
+    SpellType.SLEEP: 3,
+    SpellType.DEATH: 7,
+    SpellType.POLYMORPH: 6,
+    SpellType.CANCELLATION: 7,
     SpellType.TELEPORT: 3,
-    SpellType.HEALING: 3,
+    SpellType.HEALING: 1,
 }
 
-SPELL_DAMAGE = {
-    SpellType.MAGIC_MISSILE: DamageType.MAGIC_MISSILE,
-    SpellType.CONE_OF_COLD: DamageType.COLD,
-    SpellType.LIGHTNING: DamageType.LIGHTNING,
-    SpellType.DEATH: DamageType.DEATH,
+# C: the spelleffects() "these spells are all duplicates of wand
+# effects" group -- the beam spells dispatch onto the SAME ZapEffect
+# the wands use (the wand of cold and the cone of cold book are one
+# effect, C ZT_COLD / "a cold stream"; the magic missile book runs the
+# wand of magic missile's ZT_MAGIC_MISSILE, the striking wand's cousin)
+SPELL_ZAPS: Dict[SpellType, ZapEffect] = {
+    SpellType.MAGIC_MISSILE: ZapEffect.MAGIC,
+    SpellType.CONE_OF_COLD: ZapEffect.COLD,
+    SpellType.LIGHTNING: ZapEffect.LIGHTNING,
+    SpellType.SLEEP: ZapEffect.SLEEP,
+    SpellType.DEATH: ZapEffect.DEATH,
+    SpellType.POLYMORPH: ZapEffect.POLYMORPH,
+}
+
+# C: the self-targeted spell effects (the spelleffects atme /
+# zapyourself paths): the same registry functions, invoked without a
+# beam -- the caster is the target (the cancellation spell cancels
+# YOUR items, the teleport spell moves YOU)
+SELF_ZAPS: Dict[SpellType, ZapEffect] = {
+    SpellType.TELEPORT: ZapEffect.TELEPORT,
+    SpellType.CANCELLATION: ZapEffect.CANCELLATION,
 }
 
 
@@ -52,12 +106,67 @@ def _find_book(world: World, caster_id: str, book_id: str) -> Optional[Item]:
     return item
 
 
-def _miss_message(hit_wall: bool, noun: str = "spell") -> str:
-    return f"💥 The {noun} hits a wall." if hit_wall else f"The {noun} goes astray."
+def spell_damage_bonus(caster: Monster) -> int:
+    """C: spell_damage_bonus (src/zap.c) -- the INT/level damage bonus
+    the SPELL side adds to its rolled damage (wands add nothing):
+
+        INT <= 9               -3  (C floors the total at 1 -- the
+                                    demo's fixed INT never hits it)
+        INT <= 13, or level < 5   0
+        INT <= 18               +1
+        INT <= 24, or level < 14 +2
+        above                   +3
+    """
+    i, lvl = caster.uint, caster.ulevel
+    if i <= 9:
+        return -3
+    if i <= 13 or lvl < 5:
+        return 0
+    if i <= 18:
+        return 1
+    if i <= 24 or lvl < 14:
+        return 2
+    return 3
+
+
+def spell_success_chance(caster: Monster, spell_level: int) -> int:
+    """C: percent_success (src/spell.c) reduced to the demo: the INT
+    base (C: 11 * INT / 2) minus the difficulty growth of an unskilled
+    caster (C: (spellev - 1) * 4, the skill/level terms of C's
+    difficulty formula at the demo's fixed values), clamped to a
+    percentile.  C's role skill tables, the encumbrance penalties and
+    the spell-specific machinery are dropped (the demo hero has no
+    role skill state)."""
+    chance = caster.uint * 11 // 2 - (spell_level - 1) * 4
+    return max(0, min(100, chance))
+
+
+def _fireball(world: World, caster: Monster, rng) -> List[Event]:
+    """The demo's fireball (C: the SPE_FIREBALL explode reduced to the
+    established simplification): everything adjacent to the caster
+    takes 1d6 fire.  The dice are rolled per victim, in actor order."""
+    events: List[Event] = []
+    hit_anyone = False
+    for m in world.actors.values():
+        if m.is_hero or not m.alive or m.pos == caster.pos:
+            continue
+        if (abs(m.pos[0] - caster.pos[0]) <= 1
+                and abs(m.pos[1] - caster.pos[1]) <= 1):
+            dmg = roll(rng, 6)
+            events += apply_damage(world, m.id, dmg, DamageType.FIRE,
+                                   "spell:fireball")
+            hit_anyone = True
+    if not hit_anyone:
+        events.append(MessageEvent("The fireball bursts harmlessly."))
+    return events
 
 
 def cast_spell(world: World, caster_id: str, book_id: str,
-               direction: Direction, rng) -> List[Event]:
+               direction: Optional[Direction], rng) -> List[Event]:
+    """C: the spelleffects() pipeline (see the module docstring for
+    the check order): find the book, check the Pw, roll the failure
+    check, cast (the effect through the shared ZAP_EFFECTS registry,
+    the wand's counterpart), drain the Pw, use a page."""
     book = _find_book(world, caster_id, book_id)
     if book is None:
         return [MessageEvent("You don't have such a book.")]
@@ -67,71 +176,76 @@ def cast_spell(world: World, caster_id: str, book_id: str,
     caster = world.actors[caster_id]
     st = book.spell_type or SpellType.MAGIC_MISSILE
     spell_name = st.name.lower().replace("_", " ")
-    # Phase 3: check and drain spell energy
-    cost = spell_lev_pw(SPELL_LEVELS.get(st, 1))
-    if caster.uen < cost:
-        if caster.is_hero:
-            return [MessageEvent("You don't have enough energy to cast that!")]
-        return [MessageEvent(f"{caster.name} doesn't have enough energy!")]
+    lev = SPELL_LEVELS.get(st, 1)
+    cost = spell_lev_pw(lev)
 
+    # 1. C: spelleffects_check -- `if (*energy > u.uen)` -- no time,
+    # no draw, no charge
+    if caster.uen < cost:
+        return [MessageEvent("You don't have enough energy to cast that!"
+                             if caster.is_hero
+                             else f"{caster.name} doesn't have enough energy!")]
+
+    # 2. C: the failure roll -- `rnd(100) > percent_success(spell)` --
+    # a fizzle costs the turn, NOT the energy (the drain in C is in
+    # spelleffects, after the check) and no book page
+    chance = spell_success_chance(caster, lev)
+    if rng.randint(1, 100) > chance:
+        return [MessageEvent("You fail to cast the spell correctly."
+                             if caster.is_hero
+                             else f"{caster.name} fails to cast the spell correctly.")]
+
+    # 3. the cast
     events: List[Event] = [MessageEvent(
         f"You cast {spell_name}." if caster.is_hero
         else f"{caster.name} casts {spell_name}.")]
 
     if st == SpellType.FIREBALL:
-        # immediate area effect: everything adjacent to the caster
-        hit_anyone = False
-        for m in world.actors.values():
-            if m.is_hero or not m.alive or m.pos == caster.pos:
-                continue
-            if (abs(m.pos[0] - caster.pos[0]) <= 1
-                    and abs(m.pos[1] - caster.pos[1]) <= 1):
-                dmg = roll(rng, 6)
-                events += apply_damage(world, m.id, dmg, DamageType.FIRE,
-                                       "spell:fireball")
-                hit_anyone = True
-        if not hit_anyone:
-            events.append(MessageEvent("The fireball bursts harmlessly."))
-    elif st in SPELL_DAMAGE:
-        # resolve the beam first; dice are only rolled when the spell
-        # actually connects (as in NetHack's spell_hit())
-        target, hit_wall = find_target_in_line(world, caster.pos, direction, BEAM_RANGE)
-        if target is None:
-            events.append(MessageEvent(_miss_message(hit_wall)))
-        elif resists(target, SPELL_DAMAGE[st]):
-            events.append(MessageEvent(f"{target.name} is unaffected."))
+        # area effect (C: the SPE_FIREBALL explode; no direction --
+        # the demo's adjacent burst ignores it)
+        events += _fireball(world, caster, rng)
+    elif st in SPELL_ZAPS:
+        # the beam spells (C: ubuzz(BZ_U_SPELL(...), u.ulevel / 2 + 1)):
+        # the power is the caster's level / 2 + 1 dice, the damage
+        # bonus the INT/level spell_damage_bonus -- both computed
+        # HERE (the caster side), carried in the spec, applied by the
+        # shared effect the wands use too
+        effect = SPELL_ZAPS[st]
+        spec = ZapSpec(effect=effect,
+                       power=caster.ulevel // 2 + 1,
+                       damage_bonus=spell_damage_bonus(caster),
+                       source=book)
+        if direction is None:
+            # C: the zapyourself path -- a directional spell cast
+            # without a direction hits the caster
+            spec = ZapSpec(effect=effect,
+                           power=caster.ulevel // 2 + 1,
+                           damage_bonus=spell_damage_bonus(caster),
+                           source=book, noun="spell")
+            events += ZAP_EFFECTS[effect](world, caster, caster, spec, rng)
         else:
-            dmg = roll(rng, 6, 2)
-            events += apply_damage(world, target.id, dmg, SPELL_DAMAGE[st],
-                                   f"spell:{spell_name}")
-    elif st == SpellType.SLEEP:
-        target, hit_wall = find_target_in_line(world, caster.pos, direction, BEAM_RANGE)
-        if target is None:
-            events.append(MessageEvent(_miss_message(hit_wall, "ray")))
-        elif resists(target, DamageType.SLEEP):
-            events.append(MessageEvent(f"{target.name} resists sleep!"))
-        else:
-            events += put_to_sleep(world, target.id, 25)
+            noun = ("ray" if st in (SpellType.SLEEP, SpellType.POLYMORPH)
+                    else "spell")
+            spec = ZapSpec(effect=effect,
+                           power=caster.ulevel // 2 + 1,
+                           damage_bonus=spell_damage_bonus(caster),
+                           source=book, noun=noun)
+            events += zap(world, caster_id, direction, spec, rng)
+    elif st in SELF_ZAPS:
+        # C: the atme path -- the self effects invoke the shared
+        # registry functions directly, the caster as the target
+        effect = SELF_ZAPS[st]
+        spec = ZapSpec(effect=effect, source=book)
+        events += ZAP_EFFECTS[effect](world, caster, caster, spec, rng)
     elif st == SpellType.HEALING:
+        # C: the SPE_HEALING potion-effect family (no wand counterpart:
+        # caster-side only)
         events += heal(world, caster_id, HEALING_POWER)
-    elif st == SpellType.TELEPORT:
-        events += teleport_to_floor(world, caster_id, rng)
-    elif st == SpellType.POLYMORPH:
-        target, hit_wall = find_target_in_line(world, caster.pos, direction, BEAM_RANGE)
-        if target is None:
-            events.append(MessageEvent(_miss_message(hit_wall, "ray")))
-        elif not can_polymorph(target):
-            events.append(MessageEvent(f"{target.name} cannot be polymorphed!"))
-        else:
-            target.name = f"Polymorphed {target.name}"
-            events.append(MessageEvent(f"{target.name} shudders and transforms!"))
-    elif st == SpellType.CANCELLATION:
-        # cancellation affects the caster (NetHack behaviour)
-        events += cancel_items(world, caster)
+    else:
+        events.append(MessageEvent(f"The {spell_name} spell does nothing."))
 
-    # Phase 3: drain the energy cost
+    # the energy drain + the page (C: after the effect)
     drain_energy(world, caster_id, cost)
-
     book.charges -= 1
     if book.charges <= 0:
         consume_item(world, caster_id, book.id)
