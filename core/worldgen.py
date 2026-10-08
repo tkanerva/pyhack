@@ -53,16 +53,16 @@ HERO_HP = 25
 # row is not in core.monst's SUBSET_PM, so a named constant (PLAN-
 # ARMOR.md decision 2).  The effective AC is computed from the worn gear
 # (core.worn.uac): the hero starts wearing chain mail (a_ac 5), so the
-demo's effective defence is 10 - 5 = 5, exactly the old demo's AC.
+# demo's effective defence is 10 - 5 = 5, exactly the old demo's AC.
 HERO_BASE_AC = 10
 
 # The demo floor armour (PLAN-ARMOR.md Phase 2): (position, name, otype,
 # cursed) at FIXED positions -- they are reserved via
-generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
-added and the seed-42 layout, trap / monster placement and every
-seeded test are untouched.  The last piece is cursed (PLAN-ARMOR.md
-risk 3, default yes): it makes the "You can't. It is cursed." doff
-path reachable in play.
+# generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
+# added and the seed-42 layout, trap / monster placement and every
+# seeded test are untouched.  The last piece is cursed (PLAN-ARMOR.md
+# risk 3, default yes): it makes the "You can't. It is cursed." doff
+# path reachable in play.
 FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
     ((15, 7), "leather armor", ObjType.LEATHER_ARMOR, False),
     ((25, 7), "elven leather helm", ObjType.ELVEN_LEATHER_HELM, False),
@@ -74,11 +74,11 @@ FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
 
 # The demo floor scrolls (the read.c port): (position, name, otype,
 # scroll type) at FIXED positions -- reserved via
-generate_map(keep_floor=...) alongside HERO_POS and FLOOR_ARMOR, so
-no rng draw is added and the seed-42 layout, trap / monster
-placement and every seeded test are untouched.  All five
-implemented scroll types are represented; the cursed-gear demo
-piece (the FLOOR_ARMOR cloak) pairs with the remove curse scroll.
+# generate_map(keep_floor=...) alongside HERO_POS and FLOOR_ARMOR, so
+# no rng draw is added and the seed-42 layout, trap / monster
+# placement and every seeded test are untouched.  All five
+# implemented scroll types are represented; the cursed-gear demo
+# piece (the FLOOR_ARMOR cloak) pairs with the remove curse scroll.
 FLOOR_SCROLLS: List[Tuple[Pos, str, ObjType, ScrollType]] = [
     ((17, 7), "enchant weapon", ObjType.SCR_ENCHANT_WEAPON,
      ScrollType.ENCHANT_WEAPON),
@@ -93,13 +93,13 @@ FLOOR_SCROLLS: List[Tuple[Pos, str, ObjType, ScrollType]] = [
 ]
 
 # The demo floor wands (the zap.c port): (position, name, otype, wand
-type, charges) at FIXED positions -- reserved via
-generate_map(keep_floor=...) alongside the rest, so no rng draw is
-added and the seed-42 layout is untouched.  The striking and cold
-wands pair with the books below: the wand of cold and the cone of
-cold book run the SAME ZapEffect (the shared-effect design), the
-striking wand the force-bolt effect (C bhitm WAN_STRIKING ->
-SPE_FORCE_BOLT).
+# type, charges) at FIXED positions -- reserved via
+# generate_map(keep_floor=...) alongside the rest, so no rng draw is
+# added and the seed-42 layout is untouched.  The striking and cold
+# wands pair with the books below: the wand of cold and the cone of
+# cold book run the SAME ZapEffect (the shared-effect design), the
+# striking wand the force-bolt effect (C bhitm WAN_STRIKING ->
+# SPE_FORCE_BOLT).
 FLOOR_WANDS: List[Tuple[Pos, str, ObjType, WandType, int]] = [
     ((19, 10), "wand of striking", ObjType.WAN_STRIKING,
      WandType.STRIKING, 3),
@@ -107,10 +107,10 @@ FLOOR_WANDS: List[Tuple[Pos, str, ObjType, WandType, int]] = [
 ]
 
 # The demo floor spellbooks (the spell.c port): (position, name,
-otype, spell type, charges) at FIXED positions -- the book is the
-power source (C: the spellbook's pages; one page per successful
-cast).  The levels mirror core.objects's SPELL rows (magic missile
-2, cone of cold 4, healing 1) and core.spells.SPELL_LEVELS.
+# otype, spell type, charges) at FIXED positions -- the book is the
+# power source (C: the spellbook's pages; one page per successful
+# cast).  The levels mirror core.objects's SPELL rows (magic missile
+# 2, cone of cold 4, healing 1) and core.spells.SPELL_LEVELS.
 FLOOR_BOOKS: List[Tuple[Pos, str, ObjType, SpellType, int]] = [
     ((18, 11), "book of magic missile", ObjType.SPE_MAGIC_MISSILE,
      SpellType.MAGIC_MISSILE, 5),
