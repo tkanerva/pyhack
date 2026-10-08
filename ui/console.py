@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from core.commands import (CastCommand, Command, MoveCommand, PickupCommand,\n                           ReadCommand, TakeOffCommand, WaitCommand,\n                           WearCommand, ZapCommand)
+from core.commands import (CastCommand, Command, MoveCommand, PickupCommand,
+                           ReadCommand, TakeOffCommand, WaitCommand,
+                           WearCommand, ZapCommand)
 from core.items import wielded_of
 from core.spells import SPELL_ZAPS
 from core.types import Direction, ObjectType, World

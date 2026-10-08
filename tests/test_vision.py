@@ -8,7 +8,9 @@ gameplay wiring (monsters pursuing the hero through step()) is
 covered in tests/test_step.py.
 """
 from core.types import (DoorMask, Item, ObjectType, Tile, TerrainType)
-from core.vision import (can_see, clear_path, could_see, do_clear_area,\n                         m_can_see, m_can_see_u, set_tile, unblock_point,\n                         vision_recalc, vision_reset)
+from core.vision import (can_see, clear_path, could_see, do_clear_area,
+                         m_can_see, m_can_see_u, set_tile, unblock_point,
+                         vision_recalc, vision_reset)
 from conftest import make_hero, make_map, make_monster, make_world
 
 

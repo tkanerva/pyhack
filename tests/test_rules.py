@@ -3,7 +3,8 @@ import random
 
 from core.events import DamageEvent, DeathEvent
 from core.hacklib import is_blind, is_hallucinating
-from core.rules import (apply_damage, heal, hit_chance, melee_attack,\n                        resists, roll, tick_actor, teleport_to_floor)
+from core.rules import (apply_damage, heal, hit_chance, melee_attack,
+                        resists, roll, tick_actor, teleport_to_floor)
 from core.types import DamageType
 from conftest import SeqRng, make_hero, make_monster, make_world
 
@@ -91,3 +92,4 @@ def test_tick_actor_blindness_and_hallucination_decrement():
     tick_actor(w, "player", SeqRng())
     assert not is_blind(w.hero)
     assert not is_hallucinating(w.hero)
+
