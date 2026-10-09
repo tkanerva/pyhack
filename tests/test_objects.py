@@ -8,7 +8,8 @@ from core.objects import (ObjClass, ObjType, OBJECTS, BASES, NUM_OBJECTS,
                           FIRST_OBJECT, FIRST_AMULET, LAST_AMULET,
                           FIRST_SPELL, LAST_SPELL, FIRST_REAL_GEM,
                           LAST_REAL_GEM, FIRST_GLASS_GEM, LAST_GLASS_GEM,
-                          MAXOCLASSES, O)
+                          MAXOCLASSES, O, DEF_OC_SYMS, class_glyph,
+                          GOLD_SYM, SPBOOK_SYM, WEAPON_SYM)
 
 
 def test_table_length():
@@ -67,6 +68,41 @@ def test_class_bases():
     assert BASES[ObjClass.ROCK] == O.BOULDER
     assert BASES[ObjClass.VENOM] == O.BLINDING_VENOM
     assert BASES[MAXOCLASSES] == NUM_OBJECTS
+
+
+def test_class_glyphs_match_defsym():
+    """DEF_OC_SYMS is the transcription of defsym.h's OBJCLASS table
+    (the C 5.0 object-class glyphs): the character is the C glyph, the
+    index the oclass, slot 0 the RANDOM placeholder (C '\0' -- no
+    symbol)."""
+    assert len(DEF_OC_SYMS) == MAXOCLASSES
+    assert DEF_OC_SYMS[0].sym == ""
+    assert DEF_OC_SYMS[ObjClass.ILLOBJ].sym == "]"
+    assert DEF_OC_SYMS[ObjClass.WEAPON].sym == ")"
+    assert DEF_OC_SYMS[ObjClass.ARMOR].sym == "["
+    assert DEF_OC_SYMS[ObjClass.RING].sym == "="
+    assert DEF_OC_SYMS[ObjClass.AMULET].sym == '"'
+    assert DEF_OC_SYMS[ObjClass.TOOL].sym == "("
+    assert DEF_OC_SYMS[ObjClass.FOOD].sym == "%"
+    assert DEF_OC_SYMS[ObjClass.POTION].sym == "!"
+    assert DEF_OC_SYMS[ObjClass.SCROLL].sym == "?"
+    assert DEF_OC_SYMS[ObjClass.SPBOOK].sym == "+"
+    assert DEF_OC_SYMS[ObjClass.WAND].sym == "/"
+    assert DEF_OC_SYMS[ObjClass.COIN].sym == "$"
+    assert DEF_OC_SYMS[ObjClass.GEM].sym == "*"
+    assert DEF_OC_SYMS[ObjClass.ROCK].sym == "`"
+    assert DEF_OC_SYMS[ObjClass.BALL].sym == "0"
+    assert DEF_OC_SYMS[ObjClass.CHAIN].sym == "_"
+    assert DEF_OC_SYMS[ObjClass.VENOM].sym == "."
+    # the <CLASS>_SYM constants (enum objclass_defchars) agree with
+    # the table; COIN's row is the OBJCLASS2 entry named GOLD_SYM
+    assert WEAPON_SYM == DEF_OC_SYMS[ObjClass.WEAPON].sym
+    assert SPBOOK_SYM == DEF_OC_SYMS[ObjClass.SPBOOK].sym
+    assert GOLD_SYM == DEF_OC_SYMS[ObjClass.COIN].sym
+    # the renderer's lookup (C: def_oc_syms[oclass].sym)
+    assert class_glyph(ObjClass.WAND) == "/"
+    assert class_glyph(0) == ""
+    assert class_glyph(99) == ""
 
 
 def test_generic_slots():
@@ -244,3 +280,4 @@ def test_misc_rows():
     venom = OBJECTS[O.ACID_VENOM]
     assert venom.oclass == ObjClass.VENOM
     assert venom.wsdam == 6 and venom.nowish
+

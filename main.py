@@ -24,16 +24,22 @@ def main() -> None:
     print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | Q to quit")
     print("   r<letter> read a scroll | z<letter> zap a wand | c<letter> cast a spell")
     print("   (zaps and beam spells ask for the direction: n/s/e/w/ne/nw/se/sw)")
-    print("   The floor scrolls (enchant weapon/armor, remove curse, teleportation,
-   blank paper) are read with r<letter> -- the cursed cloak needs a
-   remove curse scroll before it can come off.")
-    print("   The floor wands (striking, cold) and books (magic missile, cone of
-   cold, healing) are the zap-port demo kit: the wand of cold and the cone of
-   cold book run the SAME effect (the shared zap registry).")
+    print("   The floor scrolls (enchant weapon/armor, remove curse, "
+          "teleportation, blank paper) are read with r<letter> -- the "
+          "cursed cloak needs a remove curse scroll before it can come off.")
+    print("   The floor wands (striking, cold) and books (magic missile, "
+          "cone of cold, healing) are the zap-port demo kit: the wand of "
+          "cold and the cone of cold book run the SAME effect (the shared "
+          "zap registry).")
     print("   Bump into a monster to attack it!")
     print("   Traps trigger when you step on them (30% chance).")
     print("   The AC on the status line is the computed effective AC")
     print("   (base 10 - your worn gear; wear the floor armour!).")
+    print("   Pw on the status line is spell power: casting a level-N book")
+    print("   costs 5*N Pw, and it regens slowly (1 Pw every 37 turns at")
+    print("   level 1).  The floor items wear their NetHack glyphs")
+    print("   (defsym.h): ? scrolls, ) weapons, [ armour, + spell books,")
+    print("   / wands.")
     print()
 
     while not world.over:

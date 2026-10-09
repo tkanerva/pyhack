@@ -6,14 +6,15 @@ the dependency points one way only.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from core.commands import (CastCommand, Command, MoveCommand, PickupCommand,
                            ReadCommand, TakeOffCommand, WaitCommand,
                            WearCommand, ZapCommand)
 from core.items import wielded_of
+from core.objects import DEF_OC_SYMS, ObjClass, class_glyph
 from core.spells import SPELL_ZAPS
-from core.types import Direction, ObjectType, World
+from core.types import Direction, Item, ObjectType, Pos, World
 from core.worn import W_ACCESSORY, W_ARMOR, uac
 
 # The old code lower-cased the key before comparing against "\x1b[A",
@@ -116,12 +117,30 @@ def render(world: World, log: List[str]) -> str:
     lines: List[str] = []
     lines.append("🗺️  Cave Map")
     lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall")
+    # the floor-glyph legend: the glyphs come from the same defsym.h
+    # table the map uses (def_oc_syms, core.objects); the labels are
+    # the classes the demo floor carries
+    lines.append("   " + " | ".join(
+        f"{DEF_OC_SYMS[oc].sym} = {label}"
+        for oc, label in ((ObjClass.SCROLL, "Scroll"),
+                          (ObjClass.WEAPON, "Weapon"),
+                          (ObjClass.ARMOR, "Armour"),
+                          (ObjClass.SPBOOK, "Spell Book"),
+                          (ObjClass.WAND, "Wand"))))
     lines.append("")
 
     hero_pos = world.hero.pos
     monster_pos = {m.pos for m in world.actors.values() if not m.is_hero and m.alive}
     triggered = {t.pos for t in world.traps.values() if t.triggered}
     seen = {t.pos for t in world.traps.values() if t.seen and not t.triggered}
+
+    # the items lying on the floor (no carrier, a position): drawn
+    # with their class glyph (C: def_oc_syms[oclass].sym over the
+    # defsym.h OBJCLASS table -- core.objects.class_glyph)
+    floor_items: Dict[Pos, Item] = {}
+    for item in world.items.values():
+        if item.pos is not None and item.container is None:
+            floor_items[item.pos] = item
 
     for y in range(world.map.height):
         row = []
@@ -133,6 +152,11 @@ def render(world: World, log: List[str]) -> str:
                 row.append("M")
             elif pos in triggered:
                 row.append("X")
+            elif pos in floor_items:
+                # the item's class glyph (the defsym.h table); a class
+                # without a symbol (the RANDOM placeholder) leaves the
+                # tile blank
+                row.append(class_glyph(floor_items[pos].oclass) or " ")
             elif pos in seen:
                 row.append("^")
             elif world.map.is_wall(pos):
@@ -145,7 +169,7 @@ def render(world: World, log: List[str]) -> str:
     weapon = wielded_of(world, hero.id)
     weapon_name = weapon.name if weapon is not None else "bare hands"
     # the effective AC is the computed core.worn.uac (base - worn gear)
-    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}")
+    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}")
     lines.append(_inventory_line(world))
     lines.append("")
     lines.append("📜 Log:")

@@ -25,7 +25,11 @@ seeded layout (walls, traps, spawns) is untouched.  The floor carries
 the zap-port demo kit (FLOOR_WANDS / FLOOR_BOOKS, fixed positions):
 the wand of cold + the cone of cold book run the SAME ZapEffect
 (core.zap's shared design), the striking wand the force-bolt effect,
-and the magic missile / healing books the spell side.
+and the magic missile / healing books the spell side.  Two floor
+weapons (FLOOR_WEAPONS, fixed positions) complete the kit: with them
+the floor carries all five item classes the demo plays (armour,
+scrolls, weapons, wands, spell books), so every floor glyph of the
+console has something to point at.
 
 The grid is now rm-like Tiles (STONE boundary ring, ROOM floor, scattered
 STONE obstacles) instead of the old 0/1 ints, so the vision code
@@ -58,7 +62,7 @@ HERO_BASE_AC = 10
 
 # The demo floor armour (PLAN-ARMOR.md Phase 2): (position, name, otype,
 # cursed) at FIXED positions -- they are reserved via
-# generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
+generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
 # added and the seed-42 layout, trap / monster placement and every
 # seeded test are untouched.  The last piece is cursed (PLAN-ARMOR.md
 # risk 3, default yes): it makes the "You can't. It is cursed." doff
@@ -74,7 +78,7 @@ FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
 
 # The demo floor scrolls (the read.c port): (position, name, otype,
 # scroll type) at FIXED positions -- reserved via
-# generate_map(keep_floor=...) alongside HERO_POS and FLOOR_ARMOR, so
+generate_map(keep_floor=...) alongside HERO_POS and FLOOR_ARMOR, so
 # no rng draw is added and the seed-42 layout, trap / monster
 # placement and every seeded test are untouched.  All five
 # implemented scroll types are represented; the cursed-gear demo
@@ -92,12 +96,22 @@ FLOOR_SCROLLS: List[Tuple[Pos, str, ObjType, ScrollType]] = [
      ScrollType.BLANK_PAPER),
 ]
 
+# The demo floor weapons: (position, name, otype) at FIXED positions
+# -- reserved via generate_map(keep_floor=...) alongside the rest, so
+# no rng draw is added and the seed-42 layout is untouched.  The
+# hero's starting short sword is carried and wielded; these give the
+# floor a weapon class of its own (the console's ) glyph).
+FLOOR_WEAPONS: List[Tuple[Pos, str, ObjType]] = [
+    ((18, 10), "dagger", ObjType.DAGGER),
+    ((22, 10), "mace", ObjType.MACE),
+]
+
 # The demo floor wands (the zap.c port): (position, name, otype, wand
 # type, charges) at FIXED positions -- reserved via
-# generate_map(keep_floor=...) alongside the rest, so no rng draw is
+generate_map(keep_floor=...) alongside the rest, so no rng draw is
 # added and the seed-42 layout is untouched.  The striking and cold
 # wands pair with the books below: the wand of cold and the cone of
-# cold book run the SAME ZapEffect (the shared-effect design), the
+cold book run the SAME ZapEffect (the shared-effect design), the
 # striking wand the force-bolt effect (C bhitm WAN_STRIKING ->
 # SPE_FORCE_BOLT).
 FLOOR_WANDS: List[Tuple[Pos, str, ObjType, WandType, int]] = [
@@ -109,7 +123,7 @@ FLOOR_WANDS: List[Tuple[Pos, str, ObjType, WandType, int]] = [
 # The demo floor spellbooks (the spell.c port): (position, name,
 # otype, spell type, charges) at FIXED positions -- the book is the
 # power source (C: the spellbook's pages; one page per successful
-# cast).  The levels mirror core.objects's SPELL rows (magic missile
+cast).  The levels mirror core.objects's SPELL rows (magic missile
 # 2, cone of cold 4, healing 1) and core.spells.SPELL_LEVELS.
 FLOOR_BOOKS: List[Tuple[Pos, str, ObjType, SpellType, int]] = [
     ((18, 11), "book of magic missile", ObjType.SPE_MAGIC_MISSILE,
@@ -157,6 +171,7 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
                      keep_floor=[HERO_POS]
                      + [p for p, _, _, _ in FLOOR_ARMOR]
                      + [p for p, _, _, _ in FLOOR_SCROLLS]
+                     + [p for p, _, _ in FLOOR_WEAPONS]
                      + [p for p, _, _, _, _ in FLOOR_WANDS]
                      + [p for p, _, _, _, _ in FLOOR_BOOKS])
     world = World(map=m)
@@ -235,6 +250,13 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
         it = Item(id=f"scroll_{i}", otype=ObjectType.SCROLL, name=name,
                   otyp=otyp.value, oclass=ObjClass.SCROLL.value, pos=pos,
                   scroll_type=stype)
+        world.items[it.id] = it
+
+    # the demo floor weapons (fixed positions, see FLOOR_WEAPONS
+    # above): fine identity (ObjLike) for the weapon system
+    for i, (pos, name, otyp) in enumerate(FLOOR_WEAPONS):
+        it = Item(id=f"weapon_{i}", otype=ObjectType.WEAPON, name=name,
+                  otyp=otyp.value, oclass=ObjClass.WEAPON.value, pos=pos)
         world.items[it.id] = it
 
     # the demo floor wands (the zap.c port): fine identity (ObjLike)

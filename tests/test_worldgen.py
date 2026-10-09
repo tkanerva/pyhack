@@ -6,7 +6,7 @@ from core.monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from core.objects import ObjClass, ObjType, W_ARM
 from core.weapon import P_SKILLED, Skill
 from core.worn import uac, which_armor
-from core.worldgen import FLOOR_ARMOR, FLOOR_SCROLLS, HERO_BASE_AC, new_world
+from core.worldgen import (FLOOR_ARMOR, FLOOR_SCROLLS, FLOOR_WEAPONS,\n                           HERO_BASE_AC, new_world)
 
 
 def test_layout_counts():
@@ -52,7 +52,7 @@ def test_demo_monsters_carry_their_permonst_types():
         assert mon.mdata is MONS[pm], mid
         assert mon.hp == hp and mon.max_hp == hp, mid
         assert mon.ac == MONS[pm].ac, mid
-    assert {mon.name for mon in w.actors.values() if not m.is_hero} == \
+    assert {mon.name for mon in w.actors.values() if not mon.is_hero} == \
         {"Goblin", "Orc", "Bat"}
 
 
@@ -149,9 +149,26 @@ def test_floor_scrolls_lie_on_floor_tiles():
         assert it.pos == pos and it.container is None
 
 
+def test_floor_weapons_lie_on_floor_tiles():
+    """The demo floor weapons sit on their fixed positions (walkable,
+    never the hero's tile), are carried by nobody, and carry their
+    fine identity."""
+    w = new_world(random.Random(42))
+    for pos, name, otyp in FLOOR_WEAPONS:
+        assert pos != (20, 10)
+        assert w.map.is_walkable(pos)
+        items = w.items_at(pos)
+        assert len(items) == 1, pos
+        it = items[0]
+        assert it.name == name and it.otyp == otyp.value
+        assert it.oclass == ObjClass.WEAPON.value
+        assert it.pos == pos and it.container is None
+
+
 def test_new_world_makes_no_new_rng_draws():
-    """The demo-combat wiring must not add a single rng draw: the
-    seeded layout (walls, traps, spawns) stays exactly as before."""
+    """The demo-combat wiring must not add a single rng draw beyond
+    the one newpw draw of init_energy (worldgen docstring): the
+    whole draw sequence stays exactly as pinned below."""
 
     class CountingRng:
         """Wraps an rng and records the kind of every call, in order."""
@@ -173,7 +190,9 @@ def test_new_world_makes_no_new_rng_draws():
 
     rng = CountingRng(random.Random(42))
     new_world(rng)
-    # the old draw sequence: 15 walls x (x, y) randint, the trap-tile
-    # shuffle, the 10 trap-kind draws, the spawn shuffle -- nothing else
-    assert rng.calls == ["randint"] * 30 + ["shuffle"] \
+    # the draw sequence: 15 walls x (x, y) randint, the init_energy
+    # newpw draw (the ONE draw the spell-power wiring adds), the
+    # trap-tile shuffle, the 10 trap-kind draws, the spawn shuffle --
+    # nothing else
+    assert rng.calls == ["randint"] * 31 + ["shuffle"] \
         + ["choice"] * 10 + ["shuffle"]

@@ -109,6 +109,84 @@ MAXOCLASSES = 18
 
 
 # ------------------------------------------------------------
+# Default object class symbols (defsym.h OBJCLASS table, objclass.h
+# enum objclass_defchars, def_oc_syms in src/drawing.c)
+# ------------------------------------------------------------
+# The one-character glyph each object class is drawn with on the
+# floor.  defsym.h's OBJCLASS(idx, ch, basename, sym, name, explain)
+# table is the single source (C 5.0 replaced the old 3.x `#define
+# OBJ_*` glyph constants with it); objclass.h expands it into enum
+# objclass_defchars (the <CLASS>_SYM values below), and src/drawing.c
+# expands it again into def_oc_syms[MAXOCLASSES] -- the renderer's
+# lookup is def_oc_syms[oclass].sym.  The values are defsym.h's
+# exactly (NetHack 5.0, rev 1.27 of the table).
+
+@dataclass(frozen=True)
+class ClassSym:
+    """C: struct class_sym (objclass.h) -- one default object class
+    symbol: the floor glyph (sym) + the name / explain strings
+    (object_detect / do_look wording in C)."""
+    sym: str
+    name: str
+    explain: str
+
+
+# enum objclass_defchars (objclass.h over defsym.h OBJCLASS_DEFCHAR_ENUM)
+ILLOBJ_SYM = "]"
+WEAPON_SYM = ")"
+ARMOR_SYM = "["
+RING_SYM = "="
+AMULET_SYM = '"'
+TOOL_SYM = "("
+FOOD_SYM = "%"
+POTION_SYM = "!"
+SCROLL_SYM = "?"
+SPBOOK_SYM = "+"
+WAND_SYM = "/"
+GOLD_SYM = "$"   # the COIN row's sname (defsym.h OBJCLASS2)
+GEM_SYM = "*"
+ROCK_SYM = "`"
+BALL_SYM = "0"
+CHAIN_SYM = "_"
+VENOM_SYM = "."
+
+# C: def_oc_syms (src/drawing.c, over the defsym.h OBJCLASS table):
+# index = oclass, slot 0 the "random class" placeholder (C '\0' --
+# no symbol; drawn as blank).
+DEF_OC_SYMS: "tuple[ClassSym, ...]" = (
+    ClassSym("", "", ""),  # placeholder for the "random class"
+    ClassSym(ILLOBJ_SYM, "illegal objects", "strange object"),
+    ClassSym(WEAPON_SYM, "weapons", "weapon"),
+    ClassSym(ARMOR_SYM, "armor", "suit or piece of armor"),
+    ClassSym(RING_SYM, "rings", "ring"),
+    ClassSym(AMULET_SYM, "amulets", "amulet"),
+    ClassSym(TOOL_SYM, "tools",
+             "useful item (pick-axe, key, lamp...)"),
+    ClassSym(FOOD_SYM, "food", "piece of food"),
+    ClassSym(POTION_SYM, "potions", "potion"),
+    ClassSym(SCROLL_SYM, "scrolls", "scroll"),
+    ClassSym(SPBOOK_SYM, "spellbooks", "spellbook"),
+    ClassSym(WAND_SYM, "wands", "wand"),
+    ClassSym(GOLD_SYM, "coins", "pile of coins"),
+    ClassSym(GEM_SYM, "rocks", "gem or rock"),
+    ClassSym(ROCK_SYM, "large stones", "boulder or statue"),
+    ClassSym(BALL_SYM, "iron balls", "iron ball"),
+    ClassSym(CHAIN_SYM, "chains", "iron chain"),
+    ClassSym(VENOM_SYM, "venoms", "splash of venom"),
+)
+
+
+def class_glyph(oclass: int) -> str:
+    """C: def_oc_syms[oclass].sym (src/drawing.c) -- the floor glyph
+    of an object class (the defsym.h OBJCLASS table's character).
+    The RANDOM class (0) and out-of-range classes carry the
+    placeholder's empty glyph (C's '\0' -- draws nothing)."""
+    if 0 <= int(oclass) < len(DEF_OC_SYMS):
+        return DEF_OC_SYMS[int(oclass)].sym
+    return ""
+
+
+# ------------------------------------------------------------
 # Materials (objclass.h)
 # ------------------------------------------------------------
 
@@ -682,6 +760,11 @@ def object_type(otyp: "ObjType | int") -> Object:
 __all__ = [
     "ObjClass", "Material", "Prop", "Skill", "ObjType", "O", "Object",
     "OBJECTS", "BASES", "object_type", "MAXOCLASSES", "NUM_OBJECTS",
+    "ClassSym", "DEF_OC_SYMS", "class_glyph",
+    "ILLOBJ_SYM", "WEAPON_SYM", "ARMOR_SYM", "RING_SYM", "AMULET_SYM",
+    "TOOL_SYM", "FOOD_SYM", "POTION_SYM", "SCROLL_SYM", "SPBOOK_SYM",
+    "WAND_SYM", "GOLD_SYM", "GEM_SYM", "ROCK_SYM", "BALL_SYM",
+    "CHAIN_SYM", "VENOM_SYM",
     "LAST_GENERIC", "FIRST_OBJECT", "OBJCLASS_HACK", "FIRST_AMULET",
     "LAST_AMULET", "FIRST_SPELL", "LAST_SPELL", "FIRST_REAL_GEM",
     "LAST_REAL_GEM", "FIRST_GLASS_GEM", "LAST_GLASS_GEM",
