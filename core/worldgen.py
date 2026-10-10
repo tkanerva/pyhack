@@ -62,7 +62,7 @@ HERO_BASE_AC = 10
 
 # The demo floor armour (PLAN-ARMOR.md Phase 2): (position, name, otype,
 # cursed) at FIXED positions -- they are reserved via
-generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
+# generate_map(keep_floor=...) alongside HERO_POS, so no rng draw is
 # added and the seed-42 layout, trap / monster placement and every
 # seeded test are untouched.  The last piece is cursed (PLAN-ARMOR.md
 # risk 3, default yes): it makes the "You can't. It is cursed." doff
@@ -78,7 +78,7 @@ FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
 
 # The demo floor scrolls (the read.c port): (position, name, otype,
 # scroll type) at FIXED positions -- reserved via
-generate_map(keep_floor=...) alongside HERO_POS and FLOOR_ARMOR, so
+# generate_map(keep_floor=...) alongside HERO_POS and FLOOR_ARMOR, so
 # no rng draw is added and the seed-42 layout, trap / monster
 # placement and every seeded test are untouched.  All five
 # implemented scroll types are represented; the cursed-gear demo
@@ -108,7 +108,7 @@ FLOOR_WEAPONS: List[Tuple[Pos, str, ObjType]] = [
 
 # The demo floor wands (the zap.c port): (position, name, otype, wand
 # type, charges) at FIXED positions -- reserved via
-generate_map(keep_floor=...) alongside the rest, so no rng draw is
+# generate_map(keep_floor=...) alongside the rest, so no rng draw is
 # added and the seed-42 layout is untouched.  The striking and cold
 # wands pair with the books below: the wand of cold and the cone of
 cold book run the SAME ZapEffect (the shared-effect design), the
