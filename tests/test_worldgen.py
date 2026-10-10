@@ -6,8 +6,7 @@ from core.monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from core.objects import ObjClass, ObjType, W_ARM
 from core.weapon import P_SKILLED, Skill
 from core.worn import uac, which_armor
-from core.worldgen import (FLOOR_ARMOR, FLOOR_SCROLLS, FLOOR_WEAPONS,
-                           HERO_BASE_AC, new_world)
+from core.worldgen import (FLOOR_ARMOR, FLOOR_SCROLLS, FLOOR_WEAPONS,\n                           HERO_BASE_AC, new_world)
 
 
 def test_layout_counts():
