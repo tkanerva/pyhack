@@ -19,6 +19,7 @@ from .hacklib import distmin, is_asleep, is_stuck
 from .mhitu import mattacku
 from .pickup import pickup
 from .potions import quaff
+from .rings import tick_rings
 from .scrolls import read_scroll
 from .uhitm import uhitm
 from .rules import (apply_damage, melee_attack, process_events, tick_actor)
@@ -41,6 +42,9 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
     # --- player turn ---
     events += tick_actor(world, "player", rng)
     events += tick_energy(world, world.turn + 1, rng)
+    # per-turn ring effects (C: the RIN_* cases of allmain.c) -- the ring
+    # half of the upkeep, after the status tick
+    events += tick_rings(world, "player", rng)
     if not world.hero.alive:
         return _finish(world, events)
     if not was_asleep:
@@ -84,6 +88,9 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
             continue
         if not world.hero.alive:
             break
+        # per-turn ring effects (uniform for monsters, PLAN-ARMOR.md
+        # decision 1; a no-op for the ring-less demo monsters)
+        events += tick_rings(world, mon_id, rng)
         events += _monster_turn(world, mon_id, rng)
 
     world.turn += 1

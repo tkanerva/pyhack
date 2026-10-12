@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag, auto
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
+from .o_init import ObjTables
+from .rnd import Rng
+
 if TYPE_CHECKING:  # annotation only -- no runtime import cycle
     from .monst import PerMonst
     from .objects import Prop
@@ -422,6 +425,14 @@ class Item:
     # hug / wrap attacks (core.mhitu.u_slip_free), and the grease wears off
     # 1/2 of the time it protects.
     greased: bool = False
+    # object-identity knowledge (C: obj->dknown / obj->known): dknown is
+    # "seen up close" (the ring is on the hand / in the inventory); known
+    # is "the enchantment is revealed" (a charged ring whose type is
+    # known).  Both are mutated ONLY by the core choke point
+    # core.rules.apply_discovery (the DiscoveryEvent), never by the ring /
+    # item modules (core.rings emits the intent, the core applies it).
+    dknown: bool = False
+    known: bool = False
 
 
 # ============================================================
@@ -469,12 +480,21 @@ class Monster:
     wielded: Optional[str] = None    # id of the wielded item (C: uwep)
     ulevel: int = 1                  # hero level (fixed in the demo)
     ustr: int = 12                   # strength (fixed; no STR18)
+    ucon: int = 12                   # constitution (C: A_CON base)
     udex: int = 12                   # dexterity (neutral: no bonus swing)
     uwis: int = 12                   # wisdom (fixed; C: the A_WIS half of
     # newpw() / regen_pw() in core.energy)
     uint: int = 15                   # intelligence (fixed; C: the A_INT half;
     # the Wizard role's starting INT feeds the spell formulas in
     # core.spells)
+    ucha: int = 12                   # charisma (C: A_CHA base; the
+    # RIN_ADORNMENT ring adjusts it -- core.rules.current_ability)
+    # NOTE: the abilities a worn ring changes (RIN_GAIN_STRENGTH /
+    # RIN_GAIN_CONSTITUTION / RIN_ADORNMENT) are COMPUTED, never cached:
+    # core.rules.current_ability returns the base (ustr / ucon / ucha) plus
+    # the spe of the worn ability ring, so don/doff changes the worn mask
+    # and the next query agrees (the core.worn.uac style).  No per-ability
+    # bonus is stored here.
     # spell power (C: you.h uen / uenmax / uenpeak / ueninc[MAXULEV]):
     # the demo default is 0/0/0 (the test heroes never cast); the demo
     # hero's Pw is set by energy.init_energy (C: u_init.c)
@@ -519,6 +539,14 @@ class World:
     # the hero's current view (C: gv.viz_array + gv.viz_rmin/rmax);
     # built by core.vision (vision_recalc), None until first use
     vision: Optional["HeroVision"] = None
+    # per-game object-table state (C: the svb / svd globals of o_init.c):
+    # oc_name_known / oc_encountered / the description shuffle / the
+    # discovery order.  One instance per World (the architecture: all
+    # state in the World).  It owns its own deterministic rng stream so
+    # the description shuffle does NOT perturb a seeded world's layout
+    # draw sequence (the demo's pinned draws stay put).
+    obj_tables: "ObjTables" = field(
+        default_factory=lambda: ObjTables(Rng(b"pyhack-objtables")))
 
     @property
     def hero(self) -> Monster:

@@ -10,9 +10,12 @@ from __future__ import annotations
 
 from typing import List
 
-from .events import DamageEvent, DeathEvent, Event, MessageEvent, StatusEvent
+from . import o_init
+from .events import (DamageEvent, DeathEvent, DiscoveryEvent, Event,
+                     MessageEvent, StatusEvent)
 from .hacklib import (is_asleep, is_blind, is_confused, is_hallucinating,
                       is_poisoned, is_stuck)
+from .objects import FIRST_OBJECT, O, W_RING
 from .types import DamageType, Direction, Monster, Pos, World
 
 ORTHOGONAL: List[Pos] = [(0, 1), (0, -1), (1, 0), (-1, 0)]
@@ -107,17 +110,26 @@ def apply_damage(world: World, target_id: str, amount: int,
     return events
 
 
-def heal(world: World, target_id: str, amount: int) -> List[Event]:
+def heal(world: World, target_id: str, amount: int,
+         message: bool = True) -> List[Event]:
+    """The ONLY way an actor regains hit points (the mirror of
+    apply_damage).  ``message=False`` heals silently -- the per-turn
+    RIN_REGENERATION tick (core.rings.tick_rings) uses it, matching C's
+    silent regen_hp() botl update."""
     target = world.actors[target_id]
     healed = min(amount, target.max_hp - target.hp)
     if healed <= 0:
-        text = "You feel healthy." if target.is_hero \
-            else f"{target.name} is already healthy."
-        return [MessageEvent(text)]
+        if message:
+            text = "You feel healthy." if target.is_hero \
+                else f"{target.name} is already healthy."
+            return [MessageEvent(text)]
+        return []
     target.hp += healed
-    text = "You feel better." if target.is_hero \
-        else f"{target.name} recovers {healed} HP."
-    return [MessageEvent(text)]
+    if message:
+        text = "You feel better." if target.is_hero \
+            else f"{target.name} recovers {healed} HP."
+        return [MessageEvent(text)]
+    return []
 
 
 # ------------------------------------------------------------
@@ -232,6 +244,44 @@ def tick_actor(world: World, actor_id: str, rng) -> List[Event]:
     return events
 
 
+# ------------------------------------------------------------
+# Abilities (C: ACURR + the do_wear.c RIN_* adjust_attrib cases)
+# ------------------------------------------------------------
+
+# C: the ability a ring's adjust_attrib(A_*, spe) changes.  Only the
+# three do_wear.c cases exist; dexterity / wisdom / intelligence have no
+# ring in the C table.
+_ABILITY_RING = {O.RIN_GAIN_STRENGTH: "str",
+                 O.RIN_GAIN_CONSTITUTION: "con",
+                 O.RIN_ADORNMENT: "cha"}
+
+# C: the base-ability field on the Monster (you.h uchain[]), per the
+# ``which`` key.
+_ABILITY_BASE = {"str": "ustr", "con": "ucon", "dex": "udex",
+                 "wis": "uwis", "int": "uint", "cha": "ucha"}
+
+
+def current_ability(mon: Monster, which: str) -> int:
+    """The actor's current value of the ability ``which`` (C: ACURR):
+    the base (ustr / ucon / udex / uwis / uint / ucha) plus the spe of
+    every WORN ability ring (RIN_GAIN_STRENGTH / RIN_GAIN_CONSTITUTION /
+    RIN_ADORNMENT).
+
+    Computed on every query and never cached (the core.worn.uac style):
+    donning / doffing changes the worn mask (Item.owornmask) and the next
+    query agrees, so no per-ability bonus is stored.  ``which`` is one of
+    ``str`` / ``con`` / ``dex`` / ``wis`` / ``int`` / ``cha``.
+    """
+    which = which.lower()
+    if which not in _ABILITY_BASE:
+        raise ValueError(f"unknown ability: {which!r}")
+    value = getattr(mon, _ABILITY_BASE[which])
+    for it in mon.inventory:
+        if it.owornmask & W_RING and _ABILITY_RING.get(it.otyp) == which:
+            value += it.spe
+    return value
+
+
 def find_target_in_line(world: World, start: Pos, direction: Direction,
                         max_range: int = 7):
     """Walk a straight line from `start`.  Returns
@@ -253,6 +303,34 @@ def find_target_in_line(world: World, start: Pos, direction: Direction,
 # ------------------------------------------------------------
 # Event processing (the pure-core side of the event-producing systems)
 # ------------------------------------------------------------
+
+def apply_discovery(world: World, e: DiscoveryEvent) -> List[Event]:
+    """Apply a DiscoveryEvent (C: the makeknown() / observe_object() calls
+    of learnring, src/do_wear.c) -- the single place object-identity
+    knowledge changes.
+
+    Mutates the per-game object table (``world.obj_tables``: oc_name_known
+    via discover_object, oc_encountered via observe_object) and the item
+    (Item.dknown when seen, Item.known when the enchantment is revealed).
+    Idempotent: re-applying a discovery is a no-op (discover_object /
+    observe_object already guard, and the item flags are set, not
+    incremented).  Returns [] -- a discovery produces no further events
+    (C's makeknown updates the inventory window; there is no pline).
+    """
+    if e.otyp >= FIRST_OBJECT and world.obj_tables is not None:
+        if e.mark_known:
+            o_init.discover_object(world.obj_tables, e.otyp, True, False)
+        if e.mark_encountered:
+            o_init.observe_object(world.obj_tables, e.otyp)
+    if e.item_id:
+        item = world.items.get(e.item_id)
+        if item is not None:
+            if e.mark_known or e.mark_encountered:
+                item.dknown = True
+            if e.reveal_spe:
+                item.known = True
+    return []
+
 
 def _apply_status_event(world: World, e: StatusEvent, rng) -> List[Event]:
     """Route one produced StatusEvent to its status setter (the single
@@ -296,6 +374,8 @@ def process_events(world: World, events: List[Event], rng) -> List[Event]:
                                 e.source, message=False)
         elif isinstance(e, StatusEvent):
             out += _apply_status_event(world, e, rng)
+        elif isinstance(e, DiscoveryEvent):
+            out += apply_discovery(world, e)
         else:
             out.append(e)
     return out

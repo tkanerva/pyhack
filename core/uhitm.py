@@ -93,6 +93,7 @@ from .items import wielded_of
 from .mondata import is_flyer
 from .monst import (Attack, MZ_LARGE, PerMonst, S_BLOB, S_ELEMENTAL, S_EYE,
                     S_FUNGUS, S_JELLY, S_LIGHT, S_VORTEX)
+from .rules import current_ability
 from .types import DamageType, Monster, World
 from .weapon import Skills, abon, dmgval, hitval, weapon_hit_bonus
 
@@ -209,8 +210,14 @@ def _weapon_hit_bonus(hero: Monster, weapon, mon: Monster) -> int:
     docstring).
     """
     skills = hero.skills if hero.skills is not None else Skills()
+    # the strength / dexterity are the COMPUTED values (base + the spe of
+    # any worn RIN_GAIN_STRENGTH / dexterity ring -- core.rules.
+    # current_ability), not the raw base fields: a worn ability ring
+    # feeds the to-hit bonus (C: abon(ACURR(A_STR), ACURR(A_DEX), ulev)).
+    # A ring-less hero reads back its base, so the demo is unchanged.
     return (weapon_hit_bonus(skills, weapon)
-            + abon(hero.ustr, hero.udex, hero.ulevel)
+            + abon(current_ability(hero, "str"),
+                   current_ability(hero, "dex"), hero.ulevel)
             + hitval(weapon, mon, in_pool=False))
 
 

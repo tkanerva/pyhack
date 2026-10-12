@@ -107,6 +107,8 @@ from .objects import (ARM_BOOTS, ARM_CLOAK, ARM_GLOVES, ARM_HELM,
                       Prop, W_AMUL, W_ARM, W_ARMC, W_ARMF, W_ARMG,
                       W_ARMH, W_ARMOR, W_ACCESSORY, W_ARMS, W_ARMU,
                       W_WEAPONS, W_RING, W_RINGL, W_RINGR)
+from .rings import ring_on, ring_off
+from .rules import process_events
 from .types import Monster, World
 from .weapon import bimanual, greatest_erosion, is_weptool
 
@@ -434,17 +436,24 @@ def _off_msg(item, mask: int) -> str:
 
 def _type_on(world: World, mon: Monster, item, mask: int) -> List[Event]:
     """The per-type ``<Type>_on()`` side-effect hook (C: the switch in
-    accessory_or_armor_on after setworn()).  STUB: the individual
-    ``<Type>_on()`` functions below raise NotImplementedError until the
-    prop-system port; the hook returns [] in the meantime (no
-    intrinsics in the subset)."""
+    accessory_or_armor_on after setworn()).  Rings dispatch to
+    core.rings.ring_on (PLAN-RING.md: the do_wear.c switch as a producer);
+    the other ``<Type>_on()`` effects (boots / cloak / helmet / shield /
+    shirt / gloves / suit / amulet) are still the no-op STUBs pending the
+    prop-system port (they return [])."""
+    if mask & W_RING:
+        return ring_on(world, mon, item)
     return []
 
 
 def _type_off(world: World, mon: Monster, item, mask: int) -> List[Event]:
     """The per-type ``<Type>_off()`` side-effect hook (C: the
     armoroff / Ring_off / Amulet_off switch after the slot is
-    cleared).  STUB as in _type_on()."""
+    cleared).  Rings dispatch to core.rings.ring_off (PLAN-RING.md);
+    the other ``<Type>_off()`` effects are still the no-op STUBs (they
+    return [])."""
+    if mask & W_RING:
+        return ring_off(world, mon, item)
     return []
 
 
@@ -467,7 +476,11 @@ def dowear(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
     setworn(mon, item, mask)
     events = [MessageEvent(_on_msg(item, mask))]
     events += _type_on(world, mon, item, mask)
-    return events
+    # The ring side effects (core.rings) emit DiscoveryEvent intents; run
+    # them through the core choke points (process_events ->
+    # apply_discovery) so the object-identity mutation happens in the
+    # core, not here (the DamageEvent / StatusEvent pattern).
+    return process_events(world, events, rng)
 
 
 def dotakeoff(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
@@ -511,7 +524,9 @@ def dotakeoff(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
     setworn(mon, None, mask)
     events = [MessageEvent(off)]
     events += _type_off(world, mon, item, mask)
-    return events
+    # as in dowear: apply the ring's DiscoveryEvent intents through the
+    # core (process_events -> apply_discovery).
+    return process_events(world, events, rng)
 
 
 # ------------------------------------------------------------
@@ -1019,15 +1034,31 @@ def Amulet_off(world: World, mon: Monster) -> List[Event]:
     raise NotImplementedError("Amulet_off: the property system is not ported yet")
 
 
-def Ring_on(world: World, mon: Monster) -> List[Event]:
-    """STUB (C: Ring_on): the ring side effects (the adjust_attrib /
-    learnring / toggle_stealth switch)."""
-    raise NotImplementedError("Ring_on: the property system is not ported yet")
+def Ring_on(world: World, ring) -> List[Event]:
+    """C: Ring_on (src/do_wear.c) -- the side effects of putting on
+    ``ring`` (the caller has already set the owornmask).  Delegates to
+    core.rings.ring_on (PLAN-RING.md); the carrier is looked up from the
+    ring's container (C reads the global ``u.``; one mechanism for hero
+    and future monsters, PLAN-ARMOR.md decision 1).
+
+    Kept as the C API surface for the call sites the do_wear / read /
+    mhitu ports will add (C: read.c setworn(obj, mask), Ring_on(obj)).
+    """
+    mon = world.actors.get(ring.container) if ring.container else None
+    if mon is None:
+        return []
+    return ring_on(world, mon, ring)
 
 
-def Ring_off(world: World, mon: Monster) -> List[Event]:
-    """STUB (C: Ring_off): the ring side effects."""
-    raise NotImplementedError("Ring_off: the property system is not ported yet")
+def Ring_off(world: World, ring) -> List[Event]:
+    """C: Ring_off (src/do_wear.c) -- the side effects of taking off
+    ``ring`` (the caller has already cleared the owornmask).  Delegates
+    to core.rings.ring_off (PLAN-RING.md).  See Ring_on for the API-
+    surface note."""
+    mon = world.actors.get(ring.container) if ring.container else None
+    if mon is None:
+        return []
+    return ring_off(world, mon, ring)
 
 
 def welded(item) -> bool:

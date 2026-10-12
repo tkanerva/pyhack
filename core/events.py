@@ -45,6 +45,35 @@ class StatusEvent(Event):
 
 
 @dataclass(frozen=True)
+class DiscoveryEvent(Event):
+    """An object-identity discovery intent (C: the makeknown() /
+    observe_object() calls of learnring in src/do_wear.c).
+
+    The ring / item side (core.rings) only DECIDES what is discovered and
+    emits this intent; the mutation is applied by the core choke point
+    ``core.rules.apply_discovery`` through ``process_events`` -- exactly
+    the DamageEvent / StatusEvent pattern.  This is what keeps the
+    ``Item.dknown`` / ``Item.known`` and the per-game ``oc_name_known`` /
+    ``oc_encountered`` mutations out of the ring module and in the core.
+
+    Fields (what changes):
+    - ``otyp``: the Object type -- the C objects[otyp] row whose
+      oc_name_known / oc_encountered are updated;
+    - ``item_id``: the specific Item to mark seen (Item.dknown);
+    - ``mark_known``: set the type's oc_name_known (C: makeknown);
+    - ``mark_encountered``: mark the type / item encountered (C:
+      observe_object -- the item is dknown);
+    - ``reveal_spe``: reveal the enchantment (Item.known) for a charged
+      ring whose type is now known.
+    """
+    otyp: int
+    item_id: Optional[str] = None
+    mark_known: bool = False
+    mark_encountered: bool = False
+    reveal_spe: bool = False
+
+
+@dataclass(frozen=True)
 class TrapTriggeredEvent(Event):
     trap_id: str
     actor_id: str
