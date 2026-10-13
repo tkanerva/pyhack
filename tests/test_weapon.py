@@ -318,16 +318,16 @@ def test_skill_init_role_flow():
 def test_skill_init_role_magic():
     s = Skills()
     skill_init(s, (DefSkill(Skill.P_ATTACK_SPELL, P_EXPERT),),
-              role="wizard")
+               role="wizard")
     assert s.skill[Skill.P_ATTACK_SPELL] == P_BASIC
     assert s.skill[Skill.P_ENCHANTMENT_SPELL] == P_BASIC
     s2 = Skills()
     skill_init(s2, (DefSkill(Skill.P_HEALING_SPELL, P_EXPERT),),
-              role="monk")
+               role="monk")
     assert s2.skill[Skill.P_HEALING_SPELL] == P_BASIC
     s3 = Skills()
     skill_init(s3, (DefSkill(Skill.P_CLERIC_SPELL, P_EXPERT),),
-              role="cleric")
+               role="cleric")
     assert s3.skill[Skill.P_CLERIC_SPELL] == P_BASIC
 
 
@@ -339,18 +339,21 @@ def test_use_skill_threshold_message():
     assert use_skill(s, Skill.P_DAGGER, 20) == \
         "You feel more confident in your weapon skills."
     assert can_advance(s, Skill.P_DAGGER)
-    # below the threshold: no message
+    # spread over two calls: silent below the threshold, the message
+    # on the call that reaches it (5 + 15 == 20, the practice needed
+    # to advance from unskilled)
     s2 = Skills()
     skill_init(s2, (DefSkill(Skill.P_DAGGER, P_EXPERT),))
     assert use_skill(s2, Skill.P_DAGGER, 5) is None
-    assert use_skill(s2, Skill.P_DAGGER, 15) is None
+    assert use_skill(s2, Skill.P_DAGGER, 15) == \
+        "You feel more confident in your weapon skills."
     assert can_advance(s2, Skill.P_DAGGER)
 
 
 def test_slots_and_advance_cost():
     s = Skills()
     skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),),
-              held=(int(O.DAGGER),))
+               held=(int(O.DAGGER),))
     assert s.skill[Skill.P_DAGGER] == P_BASIC
     assert s.weapon_slots == 1
     use_skill(s, Skill.P_DAGGER, 80)
@@ -375,7 +378,7 @@ def test_slots_and_advance_cost():
 def test_lose_weapon_skill():
     s = Skills()
     skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),),
-              held=(int(O.DAGGER),))
+               held=(int(O.DAGGER),))
     s.weapon_slots = 5
     use_skill(s, Skill.P_DAGGER, 80)
     advance_skill(s, Skill.P_DAGGER)
@@ -392,11 +395,13 @@ def test_drain_weapon_skill():
     s = Skills()
     skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),
                    DefSkill(Skill.P_BOW, P_EXPERT)),
-              held=(int(O.DAGGER), int(O.BOW)))
+               held=(int(O.DAGGER), int(O.BOW)))
     assert s.skill[Skill.P_DAGGER] == P_BASIC and s.skill[Skill.P_BOW] == P_BASIC
     s.weapon_slots = 4
-    use_skill(s, Skill.P_DAGGER, 80); advance_skill(s, Skill.P_DAGGER)
-    use_skill(s, Skill.P_BOW, 80);    advance_skill(s, Skill.P_BOW)
+    use_skill(s, Skill.P_DAGGER, 80)
+    advance_skill(s, Skill.P_DAGGER)
+    use_skill(s, Skill.P_BOW, 80)
+    advance_skill(s, Skill.P_BOW)
     # skill_record = [dagger, bow]; drain picks rn2(2) -> 1 = the bow
     msgs = drain_weapon_skill(s, 1, ScriptedRng(1, 30))
     assert s.skill[Skill.P_BOW] == P_BASIC and s.skill[Skill.P_DAGGER] == P_SKILLED
@@ -409,7 +414,7 @@ def test_drain_weapon_skill():
 def test_peaked_skill():
     s = Skills()
     skill_init(s, (DefSkill(Skill.P_DAGGER, P_BASIC),),
-              held=(int(O.DAGGER),))
+               held=(int(O.DAGGER),))
     assert not can_advance(s, Skill.P_DAGGER)
     assert not could_advance(s, Skill.P_DAGGER)
     assert not peaked_skill(s, Skill.P_DAGGER)  # no practice yet
