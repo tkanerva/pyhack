@@ -206,15 +206,18 @@ def test_constants_are_enums():
 
 def test_flag_combinations():
     # IntFlag: combining stays a flag, membership is a subset check,
-    # and the str() of a combination is readable
+    # and the names of a combination are readable
     g = MONS[M.PM_GOBLIN]
     assert isinstance(g.mflags1, M.M1)
     assert M.M1_HUMANOID in g.mflags1
     assert M.M1_OMNIVORE in g.mflags1
     assert not (g.mflags1 & M.M1_FLY)
-    # format(), not str(): since Python 3.11, str() of a combined
-    # IntFlag is the bare value; format() keeps the readable names
-    assert "HUMANOID" in format(g.mflags1, "")
+    # the readable names of a combination: since Python 3.12, str() of
+    # a combined IntFlag is the bare value, and on current Python (3.14)
+    # format() follows it -- the names are reached on the members (and
+    # in the repr)
+    assert "HUMANOID" in [m.name for m in g.mflags1]
+    assert "HUMANOID" in repr(g.mflags1)
     # the C-defined combined masks work as masks and equal their
     # component combinations
     t = MONS[M.PM_TROLL]
