@@ -328,7 +328,7 @@ def _q1_path(m: Map, srow: int, scol: int, row: int, col: int) -> bool:
         err = dys - dx
         for _ in range(dx - 1, 0, -1):
             if err >= 0:
-                y += 1
+                y -= 1
                 err -= dxs
             x += 1
             err += dys
