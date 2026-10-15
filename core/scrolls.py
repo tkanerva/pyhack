@@ -90,11 +90,11 @@ def _find_scroll(world: World, monster_id: str, item_id: str) -> Optional[Item]:
 
 
 def _yname(mon: Monster, item: Item) -> str:
-    """C Yname2 / Yobjnam2 phrasing: "your X" for the hero,
-    "name's X" for a monster."""
-    if mon.is_hero:
-        return f"your {item.name}"
-    return f"{mon.name}'s {item.name}"
+    """C Yname2 / Yobjnam2 phrasing: "Your X" for the hero,
+    "Name's X" for a monster -- the first letter is capitalized,
+    as the C highc() in the Y*2 variants does."""
+    name = f"your {item.name}" if mon.is_hero else f"{mon.name}'s {item.name}"
+    return name[0].upper() + name[1:]
 
 
 def _cap_spe(item: Item) -> None:
