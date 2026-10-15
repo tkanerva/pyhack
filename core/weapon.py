@@ -695,14 +695,16 @@ def STR18(x: int) -> int:
     return 18 + x
 
 
-def abon(str: int, dex: int, ulevel: int, upolyd: bool = False,
+def abon(str: int, dex: int, ulevel: int = 1, upolyd: bool = False,
          poly_lev: int = 0) -> int:
     """Attack bonus for strength & dexterity (C: abon).
 
     C reads the globals u.*; the effective values are explicit
     parameters here (`str` is ACURR(A_STR) on the 5.0 scale).  When
     polymorphed the bonus is C's adj_lev(&mons[u.umonnum]) - 3, passed
-    as `poly_lev`.
+    as `poly_lev`.  `ulevel` defaults to 1 -- the demo hero's fixed
+    level (core.types.Monster.ulevel) -- so a bare abon(str, dex) reads
+    back the level-1 hero's bonus, low-level kludge included.
     """
     if upolyd:
         return poly_lev - 3
@@ -1020,8 +1022,12 @@ def skill_init(skills: Skills, class_skills: Tuple[DefSkill, ...],
     for i in range(P_NUM_SKILLS):
         if not _restricted(skills, i):
             if skills.max_skill[i] < skills.skill[i]:
-                raise ValueError(
-                    f"skill_init: curr > max: {skill_name(i)}")
+                # C: impossible("skill_init: curr > max: %s", P_NAME(skill))
+                # -- a reported anomaly, not a fatal error: recover by
+                # raising the max to the current skill and continuing
+                # (e.g. the wizard's basic enchantment spells, whose max
+                # the role table did not list).
+                skills.max_skill[i] = skills.skill[i]
             skills.advance[i] = practice_needed_to_advance(
                 skills.skill[i] - 1)
 
