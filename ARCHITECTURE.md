@@ -153,11 +153,36 @@ emoji log strings.
   C seffect_* handlers are STUBs (raise NotImplementedError when read;
   the demo never carries them).
 - The elven test of the enchant-armor effects is by table name
-  ("elven ..."): the ported Object row carries no C OC_ELVEN flag;
-  the test is exact over the demo's elven subset.  Note the C 5.0
-  elven rows (elven mithril coat, elven leather helm) are NOT
-  oc_magic, so they take BOTH the elven and the nonmagical power
-  bonus.
+("elven ..."): the ported Object row carries no C OC_ELVEN flag;
+the test is exact over the demo's elven subset.  Note the C 5.0
+elven rows (elven mithril coat, elven leather helm) are NOT
+oc_magic, so they take BOTH the elven and the nonmagical power
+bonus.
+- Rings (PLAN-RING.md, `core/rings.py`): the worn state is the C
+  mechanism (`Item.owornmask`, `core.worn`), and `core.worn._type_on` /
+  `_type_off` dispatch the W_RING slots to `core.rings.ring_on` /
+  `ring_off` (the do_wear.c `Ring_on` / `Ring_off_or_gone` switch).  The
+  ring effects split two ways, both on the event model: (a) the
+  *discovery* is a new `core.events.DiscoveryEvent` (C learnring's
+  makeknown / observe_object) -- `ring_on` / `ring_off` are pure
+  **producers** that emit the intent, and the mutation of
+  `Item.dknown` / `Item.known` + the per-game `oc_name_known` /
+  `oc_encountered` (a `World.obj_tables` `o_init.ObjTables`, its own
+  deterministic rng stream) happens only in the core choke point
+  `core.rules.apply_discovery`, reached via `process_events` (which
+  `dowear` / `dotakeoff` now run their results through).  (b) the
+  ability a gain-ring changes is **computed, never cached** --
+  `core.rules.current_ability` returns the base plus the spe of the
+  worn ability ring (the `uac` style), and `core.uhitm`'s to-hit `abon`
+  reads it, so a worn strength / dexterity ring feeds to-hit; the AC of
+  a worn RIN_PROTECTION ring is likewise free (computed by `uac`).  The
+  per-turn effects (`core.rings.tick_rings`, called from `step` for hero
+  and monsters) implement RIN_REGENERATION (silent heal 1) and
+  RIN_TELEPORTATION (1/85 chance); the rest are STUBs -- levitation,
+  stealth, invisibility, see-invisible, warning, searching, hunger (no
+  hunger system), polymorph, and the accuracy / damage melee bonuses
+  (the full uhitm port) -- but their DISCOVERY still works and their
+  passive property is still conveyed via `core.props`.
 
 **Intentional simplifications (documented, not bugs):**
 - Monster AI is still a random walk — no awareness/line-of-sight yet.

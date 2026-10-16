@@ -86,10 +86,9 @@ def test_tick_actor_blindness_and_hallucination_decrement():
     w.hero.hallucinating = 2
     tick_actor(w, "player", SeqRng())
     assert w.hero.blind == 1
-    assert w.hero.hallucinating == 2
+    assert w.hero.hallucinating == 1
     assert is_blind(w.hero)
     assert is_hallucinating(w.hero)
     tick_actor(w, "player", SeqRng())
     assert not is_blind(w.hero)
     assert not is_hallucinating(w.hero)
-
