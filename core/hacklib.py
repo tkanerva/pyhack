@@ -224,6 +224,14 @@ def is_asleep(m: Monster) -> bool:
     return m.sleeping > 0
 
 
+def is_fainted(m: Monster) -> bool:
+    """True while the actor is fainted from hunger (C: is_fainted,
+    src/eat.c -- the FAINTED state; the port keeps the unconsciousness
+    duration in the `fainted` counter, the Deaf half of C's faint
+    being dropped)."""
+    return m.fainted > 0
+
+
 def is_stuck(m: Monster) -> bool:
     """True while the actor is stuck in a web / pit."""
     return m.stuck > 0

@@ -65,6 +65,17 @@ FLOOR_BOOKS: List[Tuple[Pos, str, ObjType, SpellType, int]] = [
      SpellType.HEALING, 5),
 ]
 
+# Demo floor foods at FIXED positions (reserved via generate_map): the
+# hunger-system demo kit -- apple / orange / food ration / melon --
+# zero rng draws (PLAN-HUNGER.md decision 9; no starting food in the
+# hero's kit, as in C).
+FLOOR_FOODS: List[Tuple[Pos, str, ObjType]] = [
+    ((16, 10), "apple", ObjType.APPLE),
+    ((24, 10), "orange", ObjType.ORANGE),
+    ((19, 9), "food ration", ObjType.FOOD_RATION),
+    ((21, 9), "melon", ObjType.MELON),
+]
+
 
 def generate_map(rng, width: int = 40, height: int = 20,
                  wall_count: int = 15,
@@ -101,7 +112,8 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
                      + [p for p, _, _, _ in FLOOR_SCROLLS]
                      + [p for p, _, _ in FLOOR_WEAPONS]
                      + [p for p, _, _, _, _ in FLOOR_WANDS]
-                     + [p for p, _, _, _, _ in FLOOR_BOOKS])
+                     + [p for p, _, _, _, _ in FLOOR_BOOKS]
+                     + [p for p, _, _ in FLOOR_FOODS])
     world = World(map=m)
 
     # Wizard role fixed attributes (INT 15, WIS 12 from role.c) feeding spell and energy formulas.
@@ -187,6 +199,13 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
         it = Item(id=f"book_{i}", otype=ObjectType.BOOK, name=name,
                   otyp=otyp.value, oclass=ObjClass.SPBOOK.value, pos=pos,
                   spell_type=stype, charges=charges)
+        world.items[it.id] = it
+
+    # the demo floor foods (fixed positions, see FLOOR_FOODS above):
+    # fine identity (ObjLike) for the hunger system
+    for i, (pos, name, otyp) in enumerate(FLOOR_FOODS):
+        it = Item(id=f"food_{i}", otype=ObjectType.FOOD, name=name,
+                  otyp=otyp.value, oclass=ObjClass.FOOD.value, pos=pos)
         world.items[it.id] = it
 
     floor = [p for p in m.floor_tiles() if p != HERO_POS]

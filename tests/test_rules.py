@@ -81,6 +81,8 @@ def test_tick_actor_poison_deals_one_damage():
 
 
 def test_tick_actor_blindness_and_hallucination_decrement():
+    """C: both are timed properties -- nh_timeout() runs once per
+    round in the main loop, so both decrement every turn."""
     w = make_world()
     w.hero.blind = 2
     w.hero.hallucinating = 2

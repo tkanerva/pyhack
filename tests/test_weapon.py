@@ -266,14 +266,14 @@ def test_abon_table():
     assert abon(117, 10, ulevel=5) == 2   # 18/99
     assert abon(118, 10, ulevel=5) == 3   # 18/100
     # low-level kludge (+1 below level 3) and the dex ladder
-    assert abon(17, 3) == -1              # 1 + 1 - 3
-    assert abon(17, 5) == 0               # 1 + 1 - 2
-    assert abon(17, 7) == 1               # 1 + 1 - 1
-    assert abon(17, 13) == 2              # 1 + 1
-    assert abon(17, 15) == 3              # 1 + 1 + (15-14)
+    assert abon(17, 3, ulevel=1) == -1    # 1 + 1 - 3
+    assert abon(17, 5, ulevel=1) == 0     # 1 + 1 - 2
+    assert abon(17, 7, ulevel=1) == 1     # 1 + 1 - 1
+    assert abon(17, 13, ulevel=1) == 2    # 1 + 1
+    assert abon(17, 15, ulevel=1) == 3    # 1 + 1 + (15-14)
     assert abon(17, 10, ulevel=3) == 1    # no kludge at level 3
-    # polymorphed: the monster's adjusted level minus 3
-    assert abon(10, 10, upolyd=True, poly_lev=7) == 4
+    # polymorphed: the monster's adjusted level minus 3 (ulevel unused)
+    assert abon(10, 10, ulevel=1, upolyd=True, poly_lev=7) == 4
 
 
 def test_dbon_table():
@@ -317,7 +317,10 @@ def test_skill_init_role_flow():
 
 def test_skill_init_role_magic():
     s = Skills()
-    skill_init(s, (DefSkill(Skill.P_ATTACK_SPELL, P_EXPERT),),
+    # the wizard table must cover both spell skills (the role branch
+    # sets both to P_BASIC, C: the WIZARD_SKILLS rows)
+    skill_init(s, (DefSkill(Skill.P_ATTACK_SPELL, P_EXPERT),
+                   DefSkill(Skill.P_ENCHANTMENT_SPELL, P_EXPERT),),
                role="wizard")
     assert s.skill[Skill.P_ATTACK_SPELL] == P_BASIC
     assert s.skill[Skill.P_ENCHANTMENT_SPELL] == P_BASIC

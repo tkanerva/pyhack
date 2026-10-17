@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-from .commands import (CastCommand, Command, MoveCommand, PickupCommand,
-                       QuaffCommand, ReadCommand, TakeOffCommand,
-                       WearCommand, ZapCommand)
+from .commands import (CastCommand, Command, EatCommand, MoveCommand,
+                       PickupCommand, QuaffCommand, ReadCommand,
+                       TakeOffCommand, WearCommand, ZapCommand)
 from .energy import tick_energy
 from .events import Event, GameOverEvent, MessageEvent
-from .hacklib import distmin, is_asleep, is_stuck
+from .hacklib import distmin, is_asleep, is_fainted, is_stuck
+from .hunger import eat_food, tick_hunger
 from .mhitu import mattacku
 from .pickup import pickup
 from .potions import quaff
@@ -36,7 +37,10 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
         return []
 
     hero = world.hero
-    was_asleep = is_asleep(hero)
+    # the unconsciousness gate (C: gm.multi / Sleeping): an asleep or
+    # fainted hero takes no action (the fainted half is the hunger
+    # port, PLAN-HUNGER.md decision 3)
+    was_asleep = is_asleep(hero) or is_fainted(hero)
     events: List[Event] = []
 
     # --- player turn ---
@@ -45,6 +49,10 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
     # per-turn ring effects (C: the RIN_* cases of allmain.c) -- the ring
     # half of the upkeep, after the status tick
     events += tick_rings(world, "player", rng)
+    # per-turn hunger (C: gethungry() from the main loop, once per
+    # round -- it runs while fainted / asleep too, that is how a
+    # faint deepens into starvation)
+    events += tick_hunger(world, "player", rng)
     if not world.hero.alive:
         return _finish(world, events)
     if not was_asleep:
@@ -57,6 +65,8 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
             events += use_wand(world, "player", cmd.wand_type, cmd.direction, rng)
         elif isinstance(cmd, QuaffCommand):
             events += quaff(world, "player", cmd.item_id, rng)
+        elif isinstance(cmd, EatCommand):
+            events += eat_food(world, "player", cmd.item_id, rng)
         elif isinstance(cmd, CastCommand):
             events += cast_spell(world, "player", cmd.book_id, cmd.direction, rng)
         elif isinstance(cmd, ReadCommand):
@@ -151,7 +161,7 @@ def _melee_combat(world: World, attacker_id: str, defender_id: str, rng) -> List
 def _monster_turn(world: World, mon_id: str, rng) -> List[Event]:
     mon = world.actors[mon_id]
     hero = world.hero
-    if is_asleep(mon):
+    if is_asleep(mon) or is_fainted(mon):
         return []
     if hero.alive and distmin(mon.pos, hero.pos) == 1:
         # a monster next to the hero (diagonals included -- C: monsters

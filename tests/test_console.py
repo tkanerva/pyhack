@@ -1,8 +1,8 @@
 """Tests for the console front-end (ui/console.py render()).
 
-The demo cave's floor items -- the five item classes the demo plays
-(wands, scrolls, weapons, armours, spell books) -- and the hero's
-spell power (Pw) both have to show up on the rendered screen.
+The demo cave's floor items -- the six item classes the demo plays
+(wands, scrolls, weapons, armours, spell books, foods) -- and the
+hero's spell power (Pw) both have to show up on the rendered screen.
 """
 import random
 from typing import List
@@ -22,6 +22,7 @@ GLYPHS = {
     ObjectType.ARMOR: "[",    # ARMOR_SYM
     ObjectType.BOOK: "+",     # SPBOOK_SYM
     ObjectType.WAND: "/",     # WAND_SYM
+    ObjectType.FOOD: "%",     # FOOD_SYM
 }
 
 
@@ -52,11 +53,10 @@ def test_render_shows_every_floor_item_with_its_glyph():
             assert rows[y][x] == GLYPHS[it.otype], (it.name, it.pos)
 
 
-def test_render_shows_all_five_floor_item_classes():
-    """The demo cave carries all five floor item classes and every one
+def test_render_shows_all_six_floor_item_classes():
+    """The demo cave carries all six floor item classes and every one
     is visible on the seed-42 screen."""
     w = new_world(random.Random(42))
-    rows = _map_rows(render(w, []), w.map.height)
     shown = {it.otype for it in w.items.values()
              if it.pos is not None and it.container is None
              and not _covered(w, it.pos)}
@@ -81,4 +81,3 @@ def test_render_status_line_shows_power_points():
     """The status line carries the hero's spell power, Pw uen/uenmax."""
     w = make_world(hero=make_hero(uen=7, uenmax=8))
     assert "⚡ Pw: 7/8" in render(w, [])
-

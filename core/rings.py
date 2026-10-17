@@ -257,10 +257,10 @@ def tick_rings(world: World, mon_id: str, rng) -> List[Event]:
     Implemented: RIN_REGENERATION (heal 1 per turn, the ring half of
     allmain.c regen_hp, silent like C's botl update) and
     RIN_TELEPORTATION (a 1/85 chance per turn to teleport, allmain.c
-    ``Teleportation && !rn2(85)``).  STUBs: RIN_HUNGER (the hunger system,
-    eat.c gethungry, is unported) and RIN_POLYMORPH (the polymorph system
-    is unported) -- the properties are conveyed by the worn gear but
-    nothing consumes them yet.
+    ``Teleportation && !rn2(85)``).  The RIN_HUNGER property is consumed
+    by the hunger ticker (core.hunger.tick_hunger, eat.c gethungry);
+    STUB: RIN_POLYMORPH (the polymorph system is unported) -- the
+    property is conveyed by the worn gear but nothing consumes it yet.
 
     Uniform for hero and monsters (PLAN-ARMOR.md decision 1); the demo
     monsters carry no rings, so it is a no-op for them.  Draws the rng
@@ -278,7 +278,8 @@ def tick_rings(world: World, mon_id: str, rng) -> List[Event]:
     # RIN_TELEPORTATION: a 1/85 chance (C: !rn2(85)).
     if Prop.TELEPORT in props and rng.randint(1, 85) == 1:
         events += teleport_to_floor(world, mon_id, rng)
-    # STUB: RIN_HUNGER -- the hunger system (eat.c gethungry) is unported.
+    # NOTE: RIN_HUNGER -- the Hunger property is consumed by the hunger
+    # ticker (core.hunger.tick_hunger, eat.c gethungry), not here.
     # STUB: RIN_POLYMORPH -- the polymorph system is unported.
     return events
 

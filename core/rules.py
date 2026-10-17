@@ -13,10 +13,10 @@ from typing import List
 from . import o_init
 from .events import (DamageEvent, DeathEvent, DiscoveryEvent, Event,
                      MessageEvent, StatusEvent)
-from .hacklib import (is_asleep, is_blind, is_confused, is_hallucinating,
-                      is_poisoned, is_stuck)
+from .hacklib import (is_asleep, is_blind, is_confused, is_fainted,
+                      is_hallucinating, is_poisoned, is_stuck)
 from .objects import FIRST_OBJECT, O, W_RING
-from .types import DamageType, Direction, Monster, Pos, World
+from .types import DamageType, Direction, HungerState, Monster, Pos, World
 
 ORTHOGONAL: List[Pos] = [(0, 1), (0, -1), (1, 0), (-1, 0)]
 
@@ -227,6 +227,16 @@ def tick_actor(world: World, actor_id: str, rng) -> List[Event]:
         a.sleeping -= 1
         if a.is_hero:
             events.append(MessageEvent("💤 You are asleep."))
+    if is_fainted(a):
+        a.fainted -= 1
+        if a.fainted == 0:
+            # C: the faint's nomovemsg ("You regain consciousness.")
+            # + unfaint()'s uhs fixup (the HDeaf cure is dropped --
+            # no deafness in the port, PLAN-HUNGER.md decision 2)
+            if a.is_hero:
+                events.append(MessageEvent("You regain consciousness."))
+            if int(a.uhs) > int(HungerState.FAINTING):
+                a.uhs = HungerState.FAINTING
     if is_stuck(a):
         a.stuck -= 1
     if is_confused(a):

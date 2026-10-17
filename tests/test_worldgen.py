@@ -6,8 +6,9 @@ from core.monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from core.objects import ObjClass, ObjType, W_ARM
 from core.weapon import P_SKILLED, Skill
 from core.worn import uac, which_armor
-from core.worldgen import (FLOOR_ARMOR, FLOOR_SCROLLS, FLOOR_WEAPONS,
-                           HERO_BASE_AC, new_world)
+from core.types import HungerState
+from core.worldgen import (FLOOR_ARMOR, FLOOR_FOODS, FLOOR_SCROLLS,
+                           FLOOR_WEAPONS, HERO_BASE_AC, new_world)
 
 
 def test_layout_counts():
@@ -164,6 +165,25 @@ def test_floor_weapons_lie_on_floor_tiles():
         assert it.name == name and it.otyp == otyp.value
         assert it.oclass == ObjClass.WEAPON.value
         assert it.pos == pos and it.container is None
+
+
+def test_floor_foods_lie_on_floor_tiles():
+    """The demo floor foods (the hunger port) sit on their fixed
+    positions (walkable, never the hero's tile), are carried by
+    nobody, and carry their fine identity; the hero starts at the C
+    init_uhunger value (900 / NOT_HUNGRY)."""
+    w = new_world(random.Random(42))
+    for pos, name, otyp in FLOOR_FOODS:
+        assert pos != (20, 10)
+        assert w.map.is_walkable(pos)
+        items = w.items_at(pos)
+        assert len(items) == 1, pos
+        it = items[0]
+        assert it.name == name and it.otyp == otyp.value
+        assert it.oclass == ObjClass.FOOD.value
+        assert it.pos == pos and it.container is None
+    assert w.hero.uhunger == 900
+    assert w.hero.uhs == HungerState.NOT_HUNGRY
 
 
 def test_new_world_makes_no_new_rng_draws():

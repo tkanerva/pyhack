@@ -56,6 +56,7 @@ class DamageType(Enum):
     POISON = auto()
     ACID = auto()
     CANCELLATION = auto()
+    STARVING = auto()       # new: C done(STARVING) / done(CHOKING) killers ("starvation" / "Choked on ..."); DeathEvent.by keeps them distinct
 
 
 class ObjectType(Enum):
@@ -148,6 +149,20 @@ class SpellType(Enum):
     CANCELLATION = auto()
     TELEPORT = auto()
     HEALING = auto()
+
+
+class HungerState(IntEnum):
+    """C: the hunger_state_types enum (include/hack.h, values kept
+    exactly) -- the hero's hunger state `u.uhs`, computed by the
+    thresholds in core.hunger.newuhs (src/eat.c) and shown on the
+    status line (the HU_STAT texts, C botl.c)."""
+    SATIATED = 0
+    NOT_HUNGRY = 1
+    HUNGRY = 2
+    WEAK = 3
+    FAINTING = 4
+    FAINTED = 5
+    STARVED = 6
 
 
 class ZapEffect(Enum):
@@ -468,6 +483,16 @@ class Monster:
     confused: int = 0          # turns of confusion remaining
     blind: int = 0             # turns of blindness remaining
     hallucinating: int = 0     # turns of hallucinating remaining
+    # hunger (C: you.h u.uhunger / u.uhs -- src/eat.c).  The gauge is
+    # 0..2000 (start 900, the init_uhunger value; negative = the
+    # starving deficit); uhs is the computed HungerState.  fainted is
+    # the C FAINTED state's unconsciousness counter (the nomul(-
+    # duration) of the faint -- the Deaf half is dropped, pyhack has no
+    # deafness); core.rules.tick_actor ticks it down, core.hunger.
+    # newuhs sets it.
+    uhunger: int = 900
+    uhs: "HungerState" = HungerState.NOT_HUNGRY
+    fainted: int = 0
     is_undead: bool = False
     is_demon: bool = False
     is_golem: bool = False

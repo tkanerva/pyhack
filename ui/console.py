@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from core.commands import (CastCommand, Command, MoveCommand, PickupCommand,
-                           ReadCommand, TakeOffCommand, WaitCommand,
-                           WearCommand, ZapCommand)
+from core.commands import (CastCommand, Command, EatCommand, MoveCommand,
+                           PickupCommand, ReadCommand, TakeOffCommand,
+                           WaitCommand, WearCommand, ZapCommand)
+from core.hunger import HU_STAT
 from core.items import wielded_of
 from core.objects import DEF_OC_SYMS, ObjClass, class_glyph
 from core.spells import SPELL_ZAPS
-from core.types import Direction, Item, ObjectType, Pos, World
+from core.types import Direction, HungerState, Item, ObjectType, Pos, World
 from core.worn import W_ACCESSORY, W_ARMOR, uac
 
 # The old code lower-cased the key before comparing against "\x1b[A",
@@ -56,9 +57,9 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     `t<letter>` to take off, `r<letter>` to read a scroll, `z<letter>`
     to zap a wand (+ the direction prompt), `c<letter>` to cast a
     spell (the direction prompt only for the beam spells -- the
-    self spells cast at once) (the letters are the inventory letters
-    shown in the screen's inventory line), `q` to quit; anything else
-    is a wait.
+    self spells cast at once), `e<letter>` to eat a food (the letters
+    are the inventory letters shown in the screen's inventory line),
+    `q` to quit; anything else is a wait.
     """
     key = input(prompt).strip().lower()
     if key == "q":
@@ -89,6 +90,8 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
                                  else None)
                     return CastCommand(item_id, direction)
                 return WaitCommand()
+            if key[0] == "e":
+                return EatCommand(item_id)
             return WaitCommand()
     if key in ARROWS:
         dx, dy = ARROWS[key]
@@ -126,7 +129,8 @@ def render(world: World, log: List[str]) -> str:
                           (ObjClass.WEAPON, "Weapon"),
                           (ObjClass.ARMOR, "Armour"),
                           (ObjClass.SPBOOK, "Spell Book"),
-                          (ObjClass.WAND, "Wand"))))
+                          (ObjClass.WAND, "Wand"),
+                          (ObjClass.FOOD, "Food"))))
     lines.append("")
 
     hero_pos = world.hero.pos
@@ -168,8 +172,12 @@ def render(world: World, log: List[str]) -> str:
     hero = world.hero
     weapon = wielded_of(world, hero.id)
     weapon_name = weapon.name if weapon is not None else "bare hands"
+    # the hunger text on the bottom line (C: the hu_stat[] table of
+    # eat.c, printed by botl.c when uhs != NOT_HUNGRY)
+    hu = (" | 🍖 " + HU_STAT[int(hero.uhs)].strip()
+          if hero.uhs != HungerState.NOT_HUNGRY else "")
     # the effective AC is the computed core.worn.uac (base - worn gear)
-    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}")
+    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}{hu}")
     lines.append(_inventory_line(world))
     lines.append("")
     lines.append("📜 Log:")

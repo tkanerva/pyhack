@@ -186,6 +186,14 @@ def cast_spell(world: World, caster_id: str, book_id: str,
                              if caster.is_hero
                              else f"{caster.name} doesn't have enough energy!")]
 
+    # C: spelleffects_check -- `if (u.uhunger <= 10)` (the hunger
+    # port; the SPE_DETECT_FOOD exception is irrelevant, the demo
+    # books carry no such spell) -- no time, no draw, no page
+    if caster.uhunger <= 10:
+        return [MessageEvent("You are too hungry to cast that spell."
+                             if caster.is_hero
+                             else f"{caster.name} is too hungry to cast that spell.")]
+
     # 2. C: the failure roll -- `rnd(100) > percent_success(spell)` --
     # a fizzle costs the turn, NOT the energy (the drain in C is in
     # spelleffects, after the check) and no book page
