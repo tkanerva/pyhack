@@ -18,6 +18,7 @@ from conftest import SeqRng, make_hero, make_world
 
 def _typed(pm: int, pos=(7, 4), hp=8, **kw) -> Monster:
     data = MONS[pm]
+    assert data is not None
     return Monster(id=f"mon_{pm}", name=data.pmnames[2], pos=pos, hp=hp,
                    max_hp=hp, ac=data.ac, mdata=data, **kw)
 

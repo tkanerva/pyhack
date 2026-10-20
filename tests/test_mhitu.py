@@ -28,6 +28,7 @@ from conftest import SeqRng, make_hero, make_world
 def _typed(pm: int, pos=(7, 4), hp=8, **kw) -> Monster:
     """A runtime Monster carrying a PerMonst type (the mhitu path)."""
     data = MONS[pm]
+    assert data is not None
     return Monster(id=f"mon_{pm}", name=data.pmnames[2], pos=pos, hp=hp,
                    max_hp=hp, ac=data.ac, mdata=data, **kw)
 
@@ -361,13 +362,13 @@ _COARSE = {
 }
 
 
-def _wear(w, otyp: ObjType, mask: int, name=None, spe=0, cursed=False,
-          greased=False) -> Item:
+def _wear(w, otyp: ObjType, mask: int, name: str | None = None, spe=0,
+          cursed=False, greased=False) -> Item:
     """Carry a fine-identity item on the hero, pre-worn with ``mask``
     (0 = carried, not worn)."""
     o = OBJECTS[otyp.value]
     it = Item(id=f"ph3_{next(_worn_ids)}", otype=_COARSE[int(o.oclass)],
-              name=name if name is not None else (o.name or o.descr),
+              name=name if name is not None else o.name,
               otyp=otyp.value, oclass=int(o.oclass), spe=spe, cursed=cursed,
               greased=greased, owornmask=mask, container="player")
     w.hero.inventory.append(it)

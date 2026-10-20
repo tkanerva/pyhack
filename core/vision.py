@@ -131,10 +131,11 @@ def _fresh_hero_vision(m: Map) -> HeroVision:
 
 
 def _ensure(world: World) -> None:
-    """Lazily run vision_init() + vision_reset().  C does that in
-    newgame()/mklev(); a bare World built by tests gets it on first
-    vision use."""
-    if world.map.viz_clear is None:
+    """Lazily run vision_reset().  C does that in newgame()/mklev(); a
+    bare World built by tests gets it on first vision use.  The
+    Map's sight arrays are always allocated (Map.__init__), so the
+    sentinel is the vision_initialized flag, not a None array."""
+    if not world.map.vision_initialized:
         vision_reset(world)
 
 
@@ -146,6 +147,7 @@ def vision_init(world: World) -> None:
     m.viz_clear = [[False] * m.width for _ in range(m.height)]
     m.left_ptrs = [[0] * m.width for _ in range(m.height)]
     m.right_ptrs = [[0] * m.width for _ in range(m.height)]
+    m.vision_initialized = True
     world.vision = _fresh_hero_vision(m)
 
 
@@ -248,13 +250,12 @@ def vision_reset(world: World) -> None:
     Call after level generation (C: after mklev()) and after a bulk
     terrain change.  Must run after the level's objects are in place."""
     m = world.map
-    if m.viz_clear is None:
-        vision_init(world)
     m.viz_clear = [[False] * m.width for _ in range(m.height)]
     m.left_ptrs = [[0] * m.width for _ in range(m.height)]
     m.right_ptrs = [[0] * m.width for _ in range(m.height)]
     for y in range(m.height):
         _rescan_row(world, y)
+    m.vision_initialized = True
     world.vision = _fresh_hero_vision(m)
 
 
@@ -509,11 +510,17 @@ class _VisionC:
             for i in range(left, right + 1):
                 self.func(i, srow, self.arg)
         else:
-            rowp = self.cs_rows[srow]
+            # array mode (func is None): the sight arrays are present
+            assert self.cs_rows is not None
+            assert self.row_min is not None
+            assert self.row_max is not None
+            cs_rows, row_min, row_max = (self.cs_rows,
+                                         self.row_min, self.row_max)
+            rowp = cs_rows[srow]
             for i in range(left, right + 1):
                 rowp[i] = COULD_SEE
-            self.row_min[srow] = left
-            self.row_max[srow] = right
+            row_min[srow] = left
+            row_max[srow] = right
         # Check what could be seen in the quadrants.  We need to check
         # for valid rows here, since right_side()/left_side() don't.
         nrow = srow + 1
@@ -538,13 +545,19 @@ class _VisionC:
             for i in range(a, b + 1):
                 self.func(i, row, self.arg)
             return
-        rowp = self.cs_rows[row]
+        # array mode (func is None): the sight arrays are present
+        assert self.cs_rows is not None
+        assert self.row_min is not None
+        assert self.row_max is not None
+        cs_rows, row_min, row_max = (self.cs_rows,
+                                     self.row_min, self.row_max)
+        rowp = cs_rows[row]
         for i in range(a, b + 1):
             rowp[i] = COULD_SEE
-        if a < self.row_min[row]:
-            self.row_min[row] = a
-        if b > self.row_max[row]:
-            self.row_max[row] = b
+        if a < row_min[row]:
+            row_min[row] = a
+        if b > row_max[row]:
+            row_max[row] = b
 
     def _qpath(self, row: int, col: int) -> bool:
         """Clear line of sight from the start to (row, col) on the
@@ -793,16 +806,30 @@ def vision_recalc(world: World) -> None:
     world.vision = hv
 
 
+def _hero_vision(world: World) -> HeroVision:
+    """The hero's current view (C: gv.viz_array), never None.
+
+    Runs _ensure() first so a bare World (tests) gets its sight data
+    set up on first query, like the other vision entry points; the
+    guard below keeps the query total for a World that has never had
+    any vision set up (an empty see-nothing view)."""
+    _ensure(world)
+    vision = world.vision
+    if vision is None:
+        vision = _fresh_hero_vision(world.map)
+    return vision
+
+
 def can_see(world: World, pos: Pos) -> bool:
     """C: cansee(x, y).  Can the hero *see* this location (IN_SIGHT)?
     Requires vision_recalc() to have run (new_world() and step() do)."""
-    return world.vision.could_see[pos[1]][pos[0]] & IN_SIGHT
+    return bool(_hero_vision(world).could_see[pos[1]][pos[0]] & IN_SIGHT)
 
 
 def could_see(world: World, pos: Pos) -> bool:
     """C: couldsee(x, y).  Does the hero have a clear line of sight to
     this location (COULD_SEE), lit or not?"""
-    return world.vision.could_see[pos[1]][pos[0]] & COULD_SEE
+    return bool(_hero_vision(world).could_see[pos[1]][pos[0]] & COULD_SEE)
 
 
 # ============================================================

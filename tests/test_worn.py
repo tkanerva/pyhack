@@ -8,7 +8,7 @@ the predicates and the ARM_BONUS math are checked against the C values
 import itertools
 
 from core.objects import (OBJECTS, ObjClass, ObjType, W_AMUL, W_ARM,
-                          W_ARMC, W_ARMF, W_ARMG, W_ARMH, W_ARMOR,
+                          W_ARMC, W_ARMF, W_ARMG, W_ARMH,
                           W_ARMS, W_ARMU, W_RING, W_RINGL, W_RINGR)
 from core.types import Item, Monster, ObjectType
 from core.worn import (AC_MAX, ac_bonus, ac_value, arm_bonus, armor_slot,
@@ -29,13 +29,14 @@ _COARSE = {
 }
 
 
-def _item(otyp: ObjType, name=None, spe=0, cursed=False, owornmask=0) -> Item:
+def _item(otyp: ObjType, name: str | None = None, spe=0, cursed=False,
+          owornmask=0) -> Item:
     """A runtime Item with the fine identity of table row `otyp`."""
     o = OBJECTS[otyp.value]
     oclass = int(o.oclass)
     return Item(
         id=f"it_{next(_ids)}", otype=_COARSE[oclass],
-        name=name if name is not None else (o.name or o.descr),
+        name=name if name is not None else o.name,
         otyp=otyp.value, oclass=oclass, spe=spe, cursed=cursed,
         owornmask=owornmask)
 
@@ -153,8 +154,8 @@ def test_ac_bonus_sums_the_seven_slots():
 def test_ac_bonus_protection_rings():
     w = make_world()
     hero = w.hero
-    left = _add(w, hero, _item(ObjType.RIN_PROTECTION, spe=2,
-                               owornmask=W_RINGL))
+    _add(w, hero, _item(ObjType.RIN_PROTECTION, spe=2,
+                        owornmask=W_RINGL))
     right = _add(w, hero, _item(ObjType.RIN_PROTECTION, spe=1,
                                 owornmask=W_RINGR))
     assert ac_bonus(w, hero) == 3

@@ -46,7 +46,7 @@ def _item(otyp: ObjType, owornmask: int = 0) -> Item:
     oclass = int(o.oclass)
     return Item(
         id=f"it_{otyp.name.lower()}", otype=_COARSE[oclass],
-        name=o.name or o.descr,
+        name=o.name,
         otyp=otyp.value, oclass=oclass, owornmask=owornmask)
 
 

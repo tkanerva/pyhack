@@ -61,9 +61,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag
 
-# ------------------------------------------------------------
-# Monster classes (defsym.h MONSYM table: S_* indices 1..60)
-# ------------------------------------------------------------
 
 class MonsterClass(IntEnum):
     """Monster class index (C: S_*; defsym.h MONSYM table)."""
@@ -213,9 +210,6 @@ DEFCHARS: dict[MonsterClass, str] = {
     S_WORM_TAIL: '~', S_MIMIC_DEF: ']',
 }
 
-# ------------------------------------------------------------
-# Attack types and damage types (monattk.h)
-# ------------------------------------------------------------
 
 class AtkType(IntEnum):
     """Attack type (C: AT_*; monattk.h)."""
@@ -413,13 +407,6 @@ MR2_DISPLACED = MR.DISPLACED
 MR2_STRENGTH = MR.STRENGTH
 MR2_FUMBLING = MR.FUMBLING
 
-# ------------------------------------------------------------
-# Flag bitmaps (monflag.h M1_*/M2_*/M3_*).
-# The C-defined combined masks (M1_NOLIMBS, M1_OMNIVORE,
-# M3_WANTSALL, M3_COVETOUS, M3_WAITMASK) are kept as members too:
-# in IntFlag a value that is a combination of earlier members is a
-# named alias of that combination, exactly like the C #defines.
-# ------------------------------------------------------------
 
 class M1(IntFlag):
     """mflags1 bits (C: M1_*)."""
@@ -592,10 +579,6 @@ M3_INFRAVISION = M3.INFRAVISION
 M3_INFRAVISIBLE = M3.INFRAVISIBLE
 M3_DISPLACES = M3.DISPLACES
 
-# ------------------------------------------------------------
-# Size, sound, weight, alignment, gender (monflag.h / ms_sounds /
-# weight.h / align.h)
-# ------------------------------------------------------------
 
 class MSize(IntEnum):
     """Physical size (C: MZ_*; permonst.msize is 3 bits)."""
@@ -755,11 +738,6 @@ MH_DWARF = M2.DWARF
 MH_GNOME = M2.GNOME
 MH_ORC = M2.ORC
 
-# ------------------------------------------------------------
-# Genocide / generation masks (monflag.h G_*) -- two bit spaces:
-# mons[].geno (constant during the game) and mvitals[].mvflags
-# (variant during the game, along with G_NOCORPSE).
-# ------------------------------------------------------------
 
 class Geno(IntFlag):
     """mons[].geno bits (C: G_*, the constant part)."""
@@ -785,7 +763,7 @@ G_NOCORPSE = Geno.NOCORPSE
 G_IGNORE = Geno.IGNORE
 G_FREQ = 0x0007  # creation frequency mask, not a flag
 
-# mvitals flags (variant during the game)
+
 class MvitalsFlag(IntFlag):
     """mvitals[].mvflags bits (C: G_KNOWN & friends, monflag.h)."""
     EXTINCT = 0x01
@@ -953,8 +931,16 @@ def defch(mcls: MonsterClass) -> str:
 
 
 def monname(data: PerMonst, mgender: MGender = NEUTRAL) -> str:
-    """The name of a monster type for a gender (C: monname)."""
-    return data.pmnames[mgender]
+    """The name of a monster type for a gender (C: monname).
+
+    Single-name (NAM()) monsters store only the neutral name (the
+    male/female slots are None); a request for male/female falls back
+    to the neutral name, matching C (where NAM() sets all three slots
+    to the same string)."""
+    name = data.pmnames[mgender]
+    if name is None:
+        name = data.pmnames[2]  # NEUTRAL
+    return name
 
 
 def is_golem(data: PerMonst) -> bool:
@@ -999,9 +985,11 @@ def _validate() -> None:
     # exactly the subset is present
     present = {i for i, m in enumerate(MONS) if m is not None}
     assert present == set(SUBSET_PM)
-    # the special section anchor
-    assert MONS[SPECIAL_PM].mlet == S_WORM_TAIL
-    assert MONS[SPECIAL_PM].pmnames[2] == "long worm tail"
+    # the special section anchor (SPECIAL_PM is always implemented)
+    worm_tail = MONS[SPECIAL_PM]
+    assert worm_tail is not None
+    assert worm_tail.mlet == S_WORM_TAIL
+    assert worm_tail.pmnames[2] == "long worm tail"
     # adult dragon block: gray first, yellow last (defended() relies
     # on the range being 10 entries)
     assert PM_YELLOW_DRAGON - PM_GRAY_DRAGON + 1 == 10
@@ -1009,6 +997,10 @@ def _validate() -> None:
     # its fields fit the C field widths
     for idx in SUBSET_PM:
         m = MONS[idx]
+        # SUBSET_PM is exactly the set of indices that carry a table
+        # row (checked just above: present == set(SUBSET_PM)), so this
+        # is never None; the assert narrows the sparse-table type.
+        assert m is not None
         assert m.pmnames[2] == PM_NAMES[idx], (idx, m.pmnames[2])
         assert isinstance(m.mlet, MonsterClass)
         assert 1 <= m.mlet < MAXMCLASSES

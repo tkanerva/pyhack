@@ -195,10 +195,10 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
         world.items[it.id] = it
 
     # Floor spellbooks: fine identity (ObjLike) + effect tag for cast dispatch + fixed pages.
-    for i, (pos, name, otyp, stype, charges) in enumerate(FLOOR_BOOKS):
+    for i, (pos, name, otyp, btype, charges) in enumerate(FLOOR_BOOKS):
         it = Item(id=f"book_{i}", otype=ObjectType.BOOK, name=name,
                   otyp=otyp.value, oclass=ObjClass.SPBOOK.value, pos=pos,
-                  spell_type=stype, charges=charges)
+                  spell_type=btype, charges=charges)
         world.items[it.id] = it
 
     # the demo floor foods (fixed positions, see FLOOR_FOODS above):
@@ -223,6 +223,10 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
     goblin = MONS[PM_GOBLIN]
     orc = MONS[PM_HILL_ORC]
     bat = MONS[PM_BAT]
+    # all three are demo monsters in the implemented subset (never None)
+    assert goblin is not None
+    assert orc is not None
+    assert bat is not None
 
     spawns = floor[:]
     rng.shuffle(spawns)

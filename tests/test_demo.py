@@ -24,6 +24,7 @@ from conftest import SeqRng, make_hero, make_world
 def _typed(pm: int, pos=(7, 4), hp=8, **kw) -> Monster:
     """A runtime Monster carrying a PerMonst type (the mhitu path)."""
     data = MONS[pm]
+    assert data is not None
     return Monster(id=f"mon_{pm}", name=data.pmnames[2], pos=pos, hp=hp,
                    max_hp=kw.pop("max_hp", hp), ac=data.ac, mdata=data, **kw)
 
