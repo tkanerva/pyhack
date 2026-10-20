@@ -48,12 +48,6 @@ def obj(name: str, **kw) -> FakeObj:
     return FakeObj(int(t), int(OBJECTS[int(t)].oclass), **kw)
 
 
-@dataclass
-class FakeMon:
-    """Minimal struct-monst stand-in for the MonLike protocol."""
-    mdata: object
-
-
 class ScriptedRng:
     """Preset-value rng: rnd(x) == 1 + v % x, rn2(x) == v % x,
     d(n, x) == n + sum(v % x).  An exhausted script raises, which
@@ -72,11 +66,11 @@ class ScriptedRng:
         return n + sum(self.values.pop(0) % x for _ in range(n))
 
 
-goblin = FakeMon(MONS[PM_GOBLIN])
-vampire = FakeMon(MONS[PM_VAMPIRE])
-gray_dragon = FakeMon(MONS[PM_GRAY_DRAGON])
-garter_snake = FakeMon(MONS[PM_GARTER_SNAKE])
-stone_golem = FakeMon(MONS[PM_STONE_GOLEM])
+goblin = MONS[PM_GOBLIN]
+vampire = MONS[PM_VAMPIRE]
+gray_dragon = MONS[PM_GRAY_DRAGON]
+garter_snake = MONS[PM_GARTER_SNAKE]
+stone_golem = MONS[PM_STONE_GOLEM]
 
 
 # ------------------------------------------------------------
@@ -146,7 +140,7 @@ def test_hitval_base_and_enchantment():
 
 
 def test_hitval_blessed_vs_blessing_haters():
-    assert hates_blessings(vampire.mdata)
+    assert hates_blessings(vampire)
     assert hitval(obj("DAGGER", blessed=True), vampire) == 2 + 2
     assert hitval(obj("DAGGER"), vampire) == 2
     assert hitval(obj("DAGGER", blessed=True), goblin) == 2  # no bonus
@@ -168,7 +162,7 @@ def test_hitval_pick_vs_wallwalkers():
     pm = replace(MONS[PM_GHOST],
                  mflags1=MONS[PM_GHOST].mflags1 | M1_THICK_HIDE)
     # 4 = WHACK in the weptool's oc_hitbon slot (5.0) + 2 pick bonus
-    assert hitval(obj("PICK_AXE"), FakeMon(pm)) == 4 + 2
+    assert hitval(obj("PICK_AXE"), pm) == 4 + 2
 
 
 def test_weptool_hitbon_is_strike_mode_in_5_0():
@@ -213,7 +207,7 @@ def test_dmgval_thick_skinned_nullifies_flimsy_weapons():
 
 
 def test_dmgval_shade_ignores_non_glare_weapons():
-    shade = FakeMon(replace(MONS[PM_GHOST], pmidx=PM_NAMES.index("shade")))
+    shade = replace(MONS[PM_GHOST], pmidx=PM_NAMES.index("shade"))
     assert dmgval(obj("DAGGER"), shade, ScriptedRng(3)) == 0
 
 
@@ -224,9 +218,9 @@ def test_dmgval_additive_bonuses_keep_rng_order():
     assert (dmgval(obj("SILVER_DAGGER", blessed=True), vampire,
                    ScriptedRng(1, 3, 9)) == 2 + 4 + 10)
     # axe vs a wooden creature: rnd(6) base + rnd(4) axe
-    wood_golem = FakeMon(replace(MONS[PM_STONE_GOLEM],
-                                 pmidx=PM_NAMES.index("wood golem")))
-    assert hates_silver(wood_golem.mdata) is False
+    wood_golem = replace(MONS[PM_STONE_GOLEM],
+                         pmidx=PM_NAMES.index("wood golem"))
+    assert hates_silver(wood_golem) is False
     assert dmgval(obj("AXE"), wood_golem, ScriptedRng(3, 9)) == 4 + 2
     # goblin hates nothing: no bonus rolls, no dice after the base
     assert dmgval(obj("SILVER_DAGGER", blessed=True), goblin,

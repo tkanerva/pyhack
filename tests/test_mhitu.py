@@ -67,8 +67,8 @@ def test_getmattk_returns_the_indexed_attack():
     mon = _Attacker([a, b, Attack(AT_CLAW, AD_PHYS, 1, 4),
                      Attack(0, 0, 0, 0), Attack(0, 0, 0, 0),
                      Attack(0, 0, 0, 0)])
-    assert getmattk(mon, 0, [0] * 6) is a
-    assert getmattk(mon, 1, [0] * 6) is b
+    assert getmattk(mon.mdata, 0, [0] * 6) is a
+    assert getmattk(mon.mdata, 1, [0] * 6) is b
 
 
 def test_getmattk_substitutes_repeated_disease_with_stun():
@@ -78,10 +78,10 @@ def test_getmattk_substitutes_repeated_disease_with_stun():
     mon = _Attacker([d1, d2, Attack(0, 0, 0, 0), Attack(0, 0, 0, 0),
                      Attack(0, 0, 0, 0), Attack(0, 0, 0, 0)])
     # first attack already hit -> the second disease becomes a stun
-    sub = getmattk(mon, 1, [1, 0, 0, 0, 0, 0])
+    sub = getmattk(mon.mdata, 1, [1, 0, 0, 0, 0, 0])
     assert sub.adtyp == AD_STUN
     # first attack missed -> no substitution
-    assert getmattk(mon, 1, [0, 0, 0, 0, 0, 0]) is d2
+    assert getmattk(mon.mdata, 1, [0, 0, 0, 0, 0, 0]) is d2
 
 
 # ------------------------------------------------------------
@@ -93,7 +93,7 @@ def test_hitmu_produces_damage_event_and_message():
     mon = _typed(PM_GOBLIN, pos=(7, 4))
     w.actors[mon.id] = mon
     mattk = Attack(AT_BITE, AD_PHYS, 1, 6)
-    events, dmg = hitmu(w, mon, w.hero, mattk, SeqRng(4))
+    events, dmg = hitmu(w, mon.mdata, mon, w.hero, mattk, SeqRng(4))
     assert dmg == 4
     assert w.hero.alive and w.hero.hp == 25   # mhitu never mutates the hero
     de = [e for e in events if isinstance(e, DamageEvent)]
@@ -110,7 +110,7 @@ def test_hitmu_disease_bite_adds_a_poison_status():
     w.actors[mon.id] = mon
     mattk = Attack(AT_BITE, AD_DRST, 1, 3)
     # d(1,3) -> 2 ; poison duration rnd(20) -> 7
-    events, dmg = hitmu(w, mon, w.hero, mattk, SeqRng(2, 7))
+    events, dmg = hitmu(w, mon.mdata, mon, w.hero, mattk, SeqRng(2, 7))
     assert dmg == 2
     de = [e for e in events if isinstance(e, DamageEvent)][0]
     assert de.damage_type == DamageType.POISON
@@ -124,7 +124,7 @@ def test_hitmu_negative_ac_reduces_damage():
     w.actors[mon.id] = mon
     mattk = Attack(AT_BITE, AD_PHYS, 1, 6)
     # d(1,6)=6 ; negative-AC reduction rnd(3)=3 -> 6-3=3
-    events, dmg = hitmu(w, mon, w.hero, mattk, SeqRng(6, 3))
+    events, dmg = hitmu(w, mon.mdata, mon, w.hero, mattk, SeqRng(6, 3))
     assert dmg == 3
 
 
