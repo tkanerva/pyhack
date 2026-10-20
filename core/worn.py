@@ -240,10 +240,15 @@ def setnotworn(mon: Monster, item) -> None:
         setworn(mon, None, item.owornmask)
 
 
-def which_armor(world: World, mon: Monster, mask: int):
+def which_armor(world: Optional[World], mon: Monster, mask: int):
     """The item ``mon`` wears in the slot(s) ``mask`` selects (C:
     which_armor, src/worn.c -- the ``minvent`` scan applied uniformly
-    to hero and monsters; PLAN-ARMOR.md decision 1)."""
+    to hero and monsters; PLAN-ARMOR.md decision 1).
+
+    ``world`` is currently unused (the scan is over ``mon.inventory``);
+    it is ``Optional`` so callers that have no World in scope may pass
+    ``None``.
+    """
     for it in mon.inventory:
         if it.owornmask & mask:
             return it
@@ -474,7 +479,7 @@ def dowear(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
         return [MessageEvent(err)]
     mask = _wear_mask(world, mon, item)
     setworn(mon, item, mask)
-    events = [MessageEvent(_on_msg(item, mask))]
+    events: List[Event] = [MessageEvent(_on_msg(item, mask))]
     events += _type_on(world, mon, item, mask)
     # The ring side effects (core.rings) emit DiscoveryEvent intents; run
     # them through the core choke points (process_events ->
@@ -522,7 +527,7 @@ def dotakeoff(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
     mask = item.owornmask & (W_ARMOR | W_ACCESSORY)
     off = _off_msg(item, mask)
     setworn(mon, None, mask)
-    events = [MessageEvent(off)]
+    events: List[Event] = [MessageEvent(off)]
     events += _type_off(world, mon, item, mask)
     # as in dowear: apply the ring's DiscoveryEvent intents through the
     # core (process_events -> apply_discovery).
@@ -899,7 +904,7 @@ def disintegrate_arm(world: World, mon_id: str, rng) -> List[Event]:
             continue
         # maybe_destroy_armor: no artifact in the subset, so the
         # resistance check (obj_resists(armor, 0, 90)) never fires
-        events = [MessageEvent(f"Your {it.name} {verb}")]
+        events: List[Event] = [MessageEvent(f"Your {it.name} {verb}")]
         _remove_destroyed(world, mon, it)
         return events
     return []

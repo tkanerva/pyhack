@@ -210,7 +210,7 @@ def _chwepon(world: World, mon: Monster, weapon: Item, s: int,
     xtime = "moment" if s * s == 1 else "while"
     verb = "violently glows" if s == 0 else "glows"
     name = _yname(mon, weapon)
-    events = [MessageEvent(f"{name} {verb} for a {xtime}.")]
+    events: List[Event] = [MessageEvent(f"{name} {verb} for a {xtime}.")]
 
     weapon.spe += s
     if s > 0 and weapon.cursed:
@@ -277,7 +277,7 @@ def _seffect_enchant_armor(world: World, mon: Monster, scroll: Item,
     xtime = "moment" if s * s == 1 else "while"
     verb = "violently glows" if s == 0 else "glows"
     name = _yname(mon, armor)
-    events = [MessageEvent(f"{name} {verb} for a {xtime}.")]
+    events: List[Event] = [MessageEvent(f"{name} {verb} for a {xtime}.")]
     if scursed and not armor.cursed:
         armor.cursed = True      # C: curse(otmp)
     elif sblessed and not armor.blessed:
@@ -303,7 +303,7 @@ def _seffect_remove_curse(world: World, mon: Monster, scroll: Item) -> List[Even
     or every worn item (C: the wornmask condition) is uncursed --
     silently, as C's uncurse() (src/mkobj.c) does.  The scroll hides
     itself from its own scan (C skips it when its quantity is 1)."""
-    events = [MessageEvent(
+    events: List[Event] = [MessageEvent(
         "You feel like someone is helping you." if mon.is_hero
         else f"{mon.name} feels like someone is helping.")]
     if scroll.cursed:

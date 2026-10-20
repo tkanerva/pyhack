@@ -494,17 +494,16 @@ HIT_BONUS_SOURCES = (_blessed_hit, _kebab_hit, _trident_hit, _pick_hit)
 # `otmp->oartifact && spec_abon(otmp, mon)`.
 
 
-def hitval(otmp: ObjLike, mon: MonLike, in_pool: bool = False) -> int:
-    """The "to hit" bonus of weapon `otmp` against monster `mon`
-    (C: hitval).
+def hitval(otmp: ObjLike, pm: PerMonst, in_pool: bool = False) -> int:
+    """The "to hit" bonus of weapon `otmp` against a monster of type
+    `pm` (C: hitval).
 
-    `mon` needs `.mdata` (PerMonst); the monster's position is a map
-    query the caller resolves and passes as `in_pool` (C:
-    is_pool(mon->mx, mon->my)).  Note the 5.0 weptool quirk in the
-    module docstring: the table's oc1 (oc_hitbon) slot holds the strike
-    mode for weptools, so they add it here.
+    The monster's position is a map query the caller resolves and
+    passes as `in_pool` (C: is_pool(mon->mx, mon->my)).  Note the 5.0
+    weptool quirk in the module docstring: the table's oc1 (oc_hitbon)
+    slot holds the strike mode for weptools, so they add it here.
     """
-    ctx = CombatCtx(otmp, mon.mdata, in_pool)
+    ctx = CombatCtx(otmp, pm, in_pool)
     is_weapon = (int(otmp.oclass) == int(ObjClass.WEAPON)
                  or is_weptool(otmp))
     tmp = 0
@@ -618,12 +617,11 @@ DMG_BONUS_SOURCES = (_blessed_dmg, _axe_dmg, _silver_dmg)
 #  -> bonus = (bonus + 1) / 2).
 
 
-def dmgval(otmp: ObjLike, mon: MonLike, rng: RngLike) -> int:
-    """The damage bonus of weapon `otmp` against monster `mon`
-    (C: dmgval).  `rng` is the game RNG (C: the global RNG); rolls
+def dmgval(otmp: ObjLike, pm: PerMonst, rng: RngLike) -> int:
+    """The damage bonus of weapon `otmp` against a monster of type
+    `pm` (C: dmgval).  `rng` is the game RNG (C: the global RNG); rolls
     happen only when the corresponding bonus actually applies.
     """
-    pm = mon.mdata
     otyp = int(otmp.otyp)
     ctx = CombatCtx(otmp, pm)
     is_weapon = (int(otmp.oclass) == int(ObjClass.WEAPON)

@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 
 from .monst import (
-    PerMonst, Attack, MONS, PM_NAMES, NUMMONS, SPECIAL_PM,
+    PerMonst, Attack, DmgType, MONS, PM_NAMES, NUMMONS, SPECIAL_PM,
     G_KNOWN, G_GENOD, G_EXTINCT, G_GONE, MV_KNOWS_EGG,
     S_ANT, S_BLOB, S_COCKATRICE, S_DOG, S_EYE, S_FELINE, S_GREMLIN,
     S_HUMANOID, S_IMP, S_JELLY, S_KOBOLD, S_LEPRECHAUN, S_MIMIC,
@@ -965,7 +965,7 @@ M_SEEN_ACID = 0x0080
 M_SEEN_REFL = 0x0100
 
 
-def cvt_adtyp_to_mseenres(adtyp: int) -> int:
+def cvt_adtyp_to_mseenres(adtyp: DmgType) -> int:
     table = {
         AD_MAGM: M_SEEN_MAGR, AD_FIRE: M_SEEN_FIRE, AD_COLD: M_SEEN_COLD,
         AD_SLEE: M_SEEN_SLEEP, AD_DISN: M_SEEN_DISINT,

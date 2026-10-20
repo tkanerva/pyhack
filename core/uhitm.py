@@ -142,16 +142,17 @@ class _RngLike:
 # To-hit (C: known_hitum)
 # ------------------------------------------------------------
 
-def known_hitum(mon: Monster, hero: Monster) -> int:
+def known_hitum(mdat: PerMonst, hero: Monster) -> int:
     """The bare-hand to-hit base: the target number the hero must roll
-    (d20) at or under to hit ``mon`` (C: known_hitum).
+    (d20) at or under to hit the monster of type ``mdat`` (C:
+    known_hitum).
 
     This is ``20 - monster AC`` -- the same convention the simple
     ``rules.melee_attack`` path uses.  When the hero wields a weapon,
     ``uhitm`` adds the weapon / skill / ability bonus on top (see
     ``_weapon_hit_bonus``).
     """
-    return 20 - mon.mdata.ac
+    return 20 - mdat.ac
 
 
 # ------------------------------------------------------------
@@ -193,8 +194,9 @@ def hmonas(mon: Monster, hero: Monster) -> bool:
 # The melee-weapon path (the demo's weapon subset)
 # ------------------------------------------------------------
 
-def _weapon_hit_bonus(hero: Monster, weapon, mon: Monster) -> int:
-    """The hero's total to-hit bonus with ``weapon`` against ``mon``.
+def _weapon_hit_bonus(hero: Monster, weapon, mdat: PerMonst) -> int:
+    """The hero's total to-hit bonus with ``weapon`` against the
+    monster of type ``mdat``.
 
     The demo's subset of C's ``find_roll_to_hit``, as a sum of the
     committed ``core.weapon`` sources (all pure, no rng draws):
@@ -218,10 +220,11 @@ def _weapon_hit_bonus(hero: Monster, weapon, mon: Monster) -> int:
     return (weapon_hit_bonus(skills, weapon)
             + abon(current_ability(hero, "str"),
                    current_ability(hero, "dex"), hero.ulevel)
-            + hitval(weapon, mon, in_pool=False))
+            + hitval(weapon, mdat, in_pool=False))
 
 
-def _weapon_attack(mon: Monster, hero: Monster, weapon, rng) -> List[Event]:
+def _weapon_attack(mdat: PerMonst, mon: Monster, hero: Monster, weapon,
+                   rng) -> List[Event]:
     """The hero's melee weapon attack (C: the ``hmon_hitmon_weapon_melee``
     subset).
 
@@ -237,11 +240,11 @@ def _weapon_attack(mon: Monster, hero: Monster, weapon, rng) -> List[Event]:
     Like ``uhitm`` this is a producer: it returns the event *intents*
     and mutates nothing.
     """
-    threshold = known_hitum(mon, hero) + _weapon_hit_bonus(hero, weapon,
-                                                           mon)
+    threshold = known_hitum(mdat, hero) + _weapon_hit_bonus(
+        hero, weapon, mdat)
     roll = _rnd(rng, 20)
     if roll <= threshold:
-        dmg = dmgval(weapon, mon, _RngLike(rng))
+        dmg = dmgval(weapon, mdat, _RngLike(rng))
         events: List[Event] = [
             MessageEvent(f"⚔️ You hit {mon.name} for {dmg} damage with "
                          f"your {weapon.name}.")
@@ -274,11 +277,12 @@ def uhitm(world: World, mon_id: str, rng) -> List[Event]:
     hero = world.hero
     if mon.mdata is None or not mon.alive or not hero.alive:
         return []
+    mdat = mon.mdata  # narrowed: the guard above guarantees it is set
     weapon = wielded_of(world, hero.id)
     if weapon is not None:
-        return _weapon_attack(mon, hero, weapon, rng)
+        return _weapon_attack(mdat, mon, hero, weapon, rng)
 
-    threshold = known_hitum(mon, hero)
+    threshold = known_hitum(mdat, hero)
     roll = _rnd(rng, 20)
     if roll <= threshold:
         dmg = _dice(rng, 1, hero.damage)

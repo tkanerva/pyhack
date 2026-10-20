@@ -105,6 +105,7 @@ class ObjClass(IntEnum):
     CHAIN = 16
     VENOM = 17
 
+
 MAXOCLASSES = 18
 
 
@@ -365,6 +366,7 @@ class Skill(IntEnum):
     P_TWO_WEAPON_COMBAT = 36
     P_RIDING = 37
 
+
 P_NUM_SKILLS = 38
 
 # armor categories (objclass.h enum obj_armor_types)
@@ -382,8 +384,8 @@ PIERCE, SLASH, WHACK = 1, 2, 4
 
 @dataclass(frozen=True)
 class Object:
-    name: str                    # actual name (None = no description)
-    descr: str                   # description when name unknown
+    name: str                    # actual name
+    descr: str | None            # description when name unknown (NoDes = None)
     oprop: int = 0               # intrinsic property conveyed
     oclass: int = ObjClass.ILLOBJ
     delay: int = 0               # delay when using such an object
@@ -654,7 +656,12 @@ from .objects_data import OBJECTS, _OBJTYPE_NAMES  # noqa: E402
 # coarse-grained core.types.ObjectType is replaced by this enum as
 # each system gets re-ported on the real table.)
 
-ObjType = IntEnum("ObjType", {n: i for i, n in enumerate(_OBJTYPE_NAMES)})
+# mypy cannot statically determine the members of a dynamically built
+# IntEnum (the functional API with a non-literal mapping); the members
+# are the _OBJTYPE_NAMES tuple, resolved at runtime.  A literal form
+# would mean spelling out all 383 names, so the [misc] error is
+# suppressed at the single construction site.
+ObjType = IntEnum("ObjType", {n: i for i, n in enumerate(_OBJTYPE_NAMES)})  # type: ignore[misc]
 O = ObjType  # short alias for table lookups
 
 # C enum markers

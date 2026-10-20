@@ -118,8 +118,8 @@ from .monst import (
     AD_FIRE, AD_FAMN, AD_HALU, AD_MAGM, AD_PHYS, AD_PEST, AD_SITM, AD_SLEE,
     AD_SEDU, AD_SSEX, AD_STUN, AD_DRST, AD_WRAP,
     AT_BITE, AT_BOOM, AT_BUTT, AT_ENGL, AT_EXPL, AT_HUGS, AT_KICK, AT_NONE,
-    AT_STNG, AT_TENT, AT_TUCH, NATTK, Attack, PerMonst, PM_WOOD_NYMPH,
-    distance_atk_type,
+    AT_STNG, AT_TENT, AT_TUCH, NATTK, Attack, DmgType, PerMonst,
+    PM_WOOD_NYMPH, distance_atk_type,
 )
 from .objects import (OBJECTS, ObjType, W_AMUL, W_ARM, W_ARMC, W_ARMF,
                       W_ARMG, W_ARMH, W_ARMS, W_ARMU)
@@ -156,7 +156,7 @@ _AD_TO_DAMAGE = {
 }
 
 
-def adtyp_to_damage(adtyp: int) -> DamageType:
+def adtyp_to_damage(adtyp: DmgType) -> DamageType:
     """Map a C damage type (AD_*) to the game's ``DamageType``.
 
     The game model has a coarser damage vocabulary than the C ``AD_*``
@@ -195,7 +195,7 @@ def _dice(rng, n: int, x: int) -> int:
 # Attack selection (C: getmattk)
 # ------------------------------------------------------------
 
-def getmattk(mon: Monster, indx: int, prev_result: List[int]) -> Attack:
+def getmattk(mdat: PerMonst, indx: int, prev_result: List[int]) -> Attack:
     """Select the monster's next attack (C: getmattk), possibly
     substituting for its usual one.
 
@@ -208,7 +208,6 @@ def getmattk(mon: Monster, indx: int, prev_result: List[int]) -> Attack:
     damage) need hero energy / per-instance monster state / artifacts /
     resistances and are deferred with those ports.
     """
-    mdat: PerMonst = mon.mdata
     attk = mdat.mattk[indx]
     if (indx > 0
             and prev_result[indx - 1] > M_ATTK_MISS
@@ -302,16 +301,15 @@ def mtrapped_in_pit(mon: Monster) -> bool:
 # A hit (C: hitmu) -- produces events, returns (events, damage)
 # ------------------------------------------------------------
 
-def hitmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
-          rng, midnight: bool = False) -> Tuple[List[Event], int]:
+def hitmu(world: World, mdat: PerMonst, mon: Monster, hero: Monster,
+          mattk: Attack, rng, midnight: bool = False) -> Tuple[List[Event], int]:
     """The monster's attack landed on the hero (C: hitmu).
 
     Returns ``(events, damage)``: the ``DamageEvent`` / ``MessageEvent``
     / ``StatusEvent`` intents to emit, and the raw damage dealt (so the
-    caller can stop producing further attacks once the hero is down).  
+    caller can stop producing further attacks once the hero is down).
     No state is mutated here -- ``process_events`` applies the events.
     """
-    mdat: PerMonst = mon.mdata
     events: List[Event] = []
 
     # base damage d(damn, damd); undead at midnight deal it twice
@@ -343,7 +341,7 @@ def hitmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
 
     # the hero's passive counterattack (a no-op until the hero can be a
     # monster with passive attacks, i.e. polymorph)
-    events += passiveum(world, hero, mon, mattk, rng)
+    events += passiveum(world, mdat, hero, mon, mattk, rng)
 
     return events, dmg
 
@@ -370,7 +368,6 @@ def explmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
     elemental damage depending on the damage type) and the attacker takes
     the full blast as self-damage -- which is what kills an exploder.
     """
-    mdat: PerMonst = mon.mdata
     # a cancelled exploder doesn't go off (C: if (mtmp->mcan) return)
     if getattr(mon, "mcan", 0):
         return []
@@ -397,8 +394,8 @@ def explmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
 # Passive counterattack (C: passiveum) -- scoped
 # ------------------------------------------------------------
 
-def passiveum(world: World, hero: Monster, mon: Monster, mattk: Attack,
-              rng) -> List[Event]:
+def passiveum(world: World, mdat: PerMonst, hero: Monster, mon: Monster,
+              mattk: Attack, rng) -> List[Event]:
     """The hero's passive counterattack, if it is a monster with one
     (C: passiveum).
 
@@ -424,7 +421,7 @@ def passiveum(world: World, hero: Monster, mon: Monster, mattk: Attack,
     else:
         tmp = 0
     events: List[Event] = []
-    if oldu.adtyp == AD_ACID and not is_undead(mon.mdata):
+    if oldu.adtyp == AD_ACID and not is_undead(mdat):
         if _rnd(rng, 2) == 1:
             events.append(MessageEvent(f"{mon.name} is splashed by your acid!"))
             if tmp:
@@ -486,7 +483,7 @@ def mattacku(world: World, mon_id: str, rng, midnight: bool = False) -> List[Eve
     for i in range(NATTK):
         if hero_hp <= 0:
             break
-        mattk = getmattk(mon, i, prev)
+        mattk = getmattk(mdat, i, prev)
         aatyp = mattk.aatyp
         if aatyp in (AT_NONE, AT_BOOM):
             continue
@@ -509,7 +506,8 @@ def mattacku(world: World, mon_id: str, rng, midnight: bool = False) -> List[Eve
         j = _rnd(rng, 20 + i)
         if tmp > j:
             prev[i] = M_ATTK_HIT
-            hit_events, dmg = hitmu(world, mon, hero, mattk, rng, midnight)
+            hit_events, dmg = hitmu(world, mdat, mon, hero, mattk, rng,
+                                    midnight)
             events += hit_events
             hero_hp -= dmg
         else:

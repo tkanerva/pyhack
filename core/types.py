@@ -325,7 +325,7 @@ def accessible(typ: TerrainType) -> bool:
 
 def is_pool(typ: TerrainType) -> bool:
     """C: IS_POOL."""
-    TerrainType.POOL <= typ <= TerrainType.DRAWBRIDGE_UP
+    return TerrainType.POOL <= typ <= TerrainType.DRAWBRIDGE_UP
 
 
 @dataclass
@@ -351,17 +351,27 @@ class Map:
     """Rectangular tile grid: tiles[y][x] is a Tile (C: levl[x][y]).
 
     Also owns the level-local sight data of core/vision.py (viz_clear
-    + the left/right pointer rows).  It stays None until vision_init() /
-    vision_reset() have run: new_world() does that, and a bare World
-    built by tests is set up lazily on first vision use.
+    + the left/right pointer rows).  The arrays are allocated here so
+    they are never None; they hold zero/False placeholders until
+    vision_reset() runs the row scan.  new_world() does that; a bare
+    World built by tests is set up lazily on first vision use (see
+    vision._ensure() and the vision_initialized flag).
     """
 
     def __init__(self, tiles: List[List[Tile]]):
         self.tiles = tiles
-        # C: viz_clear[], left_ptrs[], right_ptrs[] (vision.c)
-        self.viz_clear: Optional[List[List[bool]]] = None
-        self.left_ptrs: Optional[List[List[int]]] = None
-        self.right_ptrs: Optional[List[List[int]]] = None
+        # C: viz_clear[], left_ptrs[], right_ptrs[] (vision.c).  Allocated
+        # up front (zeroed) so the arrays are never None; vision_reset()
+        # fills them with the real row pointers.
+        w = len(tiles[0]) if tiles else 0
+        h = len(tiles)
+        self.viz_clear: List[List[bool]] = [[False] * w for _ in range(h)]
+        self.left_ptrs: List[List[int]] = [[0] * w for _ in range(h)]
+        self.right_ptrs: List[List[int]] = [[0] * w for _ in range(h)]
+        # True once vision_init()/vision_reset() have run; _ensure() uses
+        # it to trigger the lazy setup for a bare World (tests) that
+        # skipped new_world().
+        self.vision_initialized: bool = False
 
     @property
     def width(self) -> int:
