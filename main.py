@@ -22,6 +22,9 @@ def main() -> None:
 
     print("🎮 PyHack — functional core, events out")
     print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | Q to quit")
+    print("   > go down the stairs | < climb back up: the dungeon has 3")
+    print("   levels; level 2+ generates on first visit and stays intact when")
+    print("   you come back.  Reaching the bottom level wins!")
     print("   r<letter> read a scroll | z<letter> zap a wand | c<letter> cast a spell")
     print("   e<letter> eat a food (the demo floor carries an apple, an orange,")
     print("   a food ration and a melon -- pick them up with g first)")

@@ -9,13 +9,14 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from core.commands import (CastCommand, Command, EatCommand, MoveCommand,
-                           PickupCommand, ReadCommand, TakeOffCommand,
-                           WaitCommand, WearCommand, ZapCommand)
+                           PickupCommand, ReadCommand, StairsCommand,
+                           TakeOffCommand, WaitCommand, WearCommand, ZapCommand)
 from core.hunger import HU_STAT
 from core.items import wielded_of
 from core.objects import DEF_OC_SYMS, ObjClass, class_glyph
 from core.spells import SPELL_ZAPS
-from core.types import Direction, HungerState, Item, ObjectType, Pos, World
+from core.types import (Direction, HungerState, Item, ObjectType, Pos,
+                        STAIR_DOWN, TerrainType, World)
 from core.worn import W_ACCESSORY, W_ARMOR, uac
 
 # The old code lower-cased the key before comparing against "\x1b[A",
@@ -59,13 +60,20 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     spell (the direction prompt only for the beam spells -- the
     self spells cast at once), `e<letter>` to eat a food (the letters
     are the inventory letters shown in the screen's inventory line),
-    `q` to quit; anything else is a wait.
+    `>` to go down the stairs / `<` to climb up (C: the '>' / '<'
+    commands), `q` to quit; anything else is a wait.
     """
     key = input(prompt).strip().lower()
     if key == "q":
         return None
     if key == "g":
         return PickupCommand()
+    # the stair commands (C: '>' -> dodown, '<' -> doup); input().lower()
+    # leaves both glyphs alone
+    if key == ">":
+        return StairsCommand(up=False)
+    if key == "<":
+        return StairsCommand(up=True)
     if len(key) == 2 and key[1].isalpha():
         item_id = _item_by_letter(world, key[1])
         if item_id is not None:
@@ -118,8 +126,9 @@ def _inventory_line(world: World) -> str:
 
 def render(world: World, log: List[str]) -> str:
     lines: List[str] = []
-    lines.append("🗺️  Cave Map")
-    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall")
+    lines.append(f"🗺️  Level {world.lev} of {world.max_lev}")
+    # the stair glyphs are C's defsym.h S_downstair '>' / S_upstair '<'
+    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall | > = Stairs down | < = Stairs up")
     # the floor-glyph legend: the glyphs come from the same defsym.h
     # table the map uses (def_oc_syms, core.objects); the labels are
     # the classes the demo floor carries
@@ -163,6 +172,12 @@ def render(world: World, log: List[str]) -> str:
                 row.append(class_glyph(floor_items[pos].oclass) or " ")
             elif pos in seen:
                 row.append("^")
+            elif world.map.tile_at(pos).typ == TerrainType.STAIRS:
+                # the stair glyph under the hero/monsters/traps/items
+                # (C draws the stair glyph beneath them; a floor item
+                # on a stair keeps its glyph -- the renderer stays total)
+                tile = world.map.tile_at(pos)
+                row.append(">" if tile.stair_dir == STAIR_DOWN else "<")
             elif world.map.is_wall(pos):
                 row.append("#")
             else:
