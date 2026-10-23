@@ -7,13 +7,22 @@ from typing import List, Optional, Tuple
 from .energy import init_energy
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType, W_ARM
-from .types import (Item, Map, Monster, ObjectType, Pos, ScrollType, SpellType,
-                    Tile, TerrainType, Trap, TrapType, WandType, World)
+from .stairs import rebuild_stairs
+from .types import (Item, Map, Monster, ObjectType, Pos, ScrollType,
+                    SpellType, STAIR_DOWN, STAIR_UP, Tile, TerrainType, Trap,
+                    TrapType, WandType, World)
 from .vision import vision_init, vision_recalc, vision_reset
 from .weapon import P_SKILLED, Skill, Skills
 
 HERO_POS: Pos = (20, 10)
 HERO_HP = 25
+
+# The fixed level-1 down stairs (top middle of the map; always ROOM in
+# the generator, nothing else lives there -- reserved via keep_floor
+# like FLOOR_ARMOR, zero rng draws).  C's newgame puts the hero ON
+# these stairs (mklev(); u_on_upstairs()); the seeded demo keeps
+# HERO_POS instead (PLAN-STAIRS.md decision 6 / §4).
+LEVEL1_DN_STAIRS: Pos = (20, 2)
 
 # Hero's base AC 10 (C: mons[PM_HUMAN].ac). Effective AC is 5 (chain mail -5) from core.worn.uac, matching the old demo.
 HERO_BASE_AC = 10
@@ -105,7 +114,8 @@ def _hero_skills() -> Skills:
     return skills
 
 
-def new_world(rng, width: int = 40, height: int = 20) -> World:
+def new_world(rng, width: int = 40, height: int = 20,
+              levels: int = 3) -> World:
     m = generate_map(rng, width, height,
                      keep_floor=[HERO_POS]
                      + [p for p, _, _, _ in FLOOR_ARMOR]
@@ -113,8 +123,14 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
                      + [p for p, _, _ in FLOOR_WEAPONS]
                      + [p for p, _, _, _, _ in FLOOR_WANDS]
                      + [p for p, _, _, _, _ in FLOOR_BOOKS]
-                     + [p for p, _, _ in FLOOR_FOODS])
+                     + [p for p, _, _ in FLOOR_FOODS]
+                     + [LEVEL1_DN_STAIRS])
+    # the level-1 down stairs: fixed position, zero rng draws; level 1
+    # gets NO up stairs (C: dlevel == 1 -> no upstairs)
+    m.tiles[LEVEL1_DN_STAIRS[1]][LEVEL1_DN_STAIRS[0]] = Tile(
+        typ=TerrainType.STAIRS, stair_dir=STAIR_DOWN)
     world = World(map=m)
+    world.max_lev = levels
 
     # Wizard role fixed attributes (INT 15, WIS 12 from role.c) feeding spell and energy formulas.
     hero = Monster(
@@ -256,4 +272,88 @@ def new_world(rng, width: int = 40, height: int = 20) -> World:
     vision_init(world)
     vision_reset(world)
     vision_recalc(world)
+
+    # the level-1 stairways (the single fixed down stairs)
+    rebuild_stairs(world)
     return world
+
+
+def generate_level(world: World, lev: int, rng) -> Map:
+    """Generate level `lev` on first visit (C: mklev() in goto_level;
+    the demo keeps the result in world.levels afterwards, the getlev()
+    equivalent, PLAN-STAIRS.md decision 4).
+
+    Draw order is sacred (PLAN-STAIRS.md §2.6.2 / §7): the map (15
+    wall pairs), the down-stair pick (if not the bottom level), the
+    up-stair pick (if not level 1), the trap-tile shuffle + 10 kind
+    draws, the spawn shuffle + 9 monster placements -- all on the same
+    injected rng stream, at the moment the hero first descends (C: the
+    main stream in mklev).  Stair tiles are reserved from traps /
+    monsters (the up stairs are the hero's arrival point when
+    descending); the two picks are independent draws, the second
+    excluding the first's tile.  No floor items (the oinit object
+    distribution is deferred, §5).
+
+    C: generate_stairs -- down stairs unless Is_botlevel, up stairs
+    unless dlevel == 1, down FIRST, then up.
+    """
+    m = generate_map(rng)
+    stair_positions: List[Pos] = []
+    if lev < world.max_lev:
+        p = rng.choice(m.floor_tiles())
+        m.tiles[p[1]][p[0]] = Tile(typ=TerrainType.STAIRS,
+                                   stair_dir=STAIR_DOWN)
+        stair_positions.append(p)
+    if lev > 1:
+        opts = [p for p in m.floor_tiles() if p not in stair_positions]
+        p = rng.choice(opts)
+        m.tiles[p[1]][p[0]] = Tile(typ=TerrainType.STAIRS,
+                                   stair_dir=STAIR_UP)
+        stair_positions.append(p)
+
+    floor = [p for p in m.floor_tiles() if p not in stair_positions]
+
+    # 10 traps of the same kinds level 1 uses
+    trap_tiles = floor[:]
+    rng.shuffle(trap_tiles)
+    kinds = [TrapType.PIT, TrapType.SPIKED_PIT, TrapType.FIRE_TRAP,
+             TrapType.ARROW_TRAP]
+    for i in range(10):
+        world.traps[f"trap_{lev}_{i}"] = Trap(
+            id=f"trap_{lev}_{i}", trap_type=rng.choice(kinds),
+            pos=trap_tiles[i], lev=lev)
+
+    # 9 monsters, the level-1 composition (4 goblins / 2 orcs / 3
+    # bats, the committed PerMonst types -- no rng draws for the data)
+    goblin = MONS[PM_GOBLIN]
+    orc = MONS[PM_HILL_ORC]
+    bat = MONS[PM_BAT]
+    assert goblin is not None
+    assert orc is not None
+    assert bat is not None
+
+    spawns = floor[:]
+    rng.shuffle(spawns)
+    idx = 0
+
+    def next_pos() -> Pos:
+        nonlocal idx
+        p = spawns[idx]
+        idx += 1
+        return p
+
+    for i in range(4):
+        world.actors[f"goblin_{lev}_{i}"] = Monster(
+            id=f"goblin_{lev}_{i}", name="Goblin", pos=next_pos(),
+            hp=8, max_hp=8, ac=goblin.ac, damage=2, mdata=goblin,
+            lev=lev)
+    for i in range(2):
+        world.actors[f"orc_{lev}_{i}"] = Monster(
+            id=f"orc_{lev}_{i}", name="Orc", pos=next_pos(),
+            hp=15, max_hp=15, ac=orc.ac, damage=4, mdata=orc, lev=lev)
+    for i in range(3):
+        world.actors[f"bat_{lev}_{i}"] = Monster(
+            id=f"bat_{lev}_{i}", name="Bat", pos=next_pos(),
+            hp=4, max_hp=4, ac=bat.ac, damage=1, is_flying=True,
+            mdata=bat, lev=lev)
+    return m
