@@ -328,6 +328,13 @@ def is_pool(typ: TerrainType) -> bool:
     return TerrainType.POOL <= typ <= TerrainType.DRAWBRIDGE_UP
 
 
+# C: rm.h -- the levl[x][y].ladder mask of a STAIRS tile: which way
+# the staircase goes.  A STAIRS tile with stair_dir == 0 is a bug;
+# worldgen always sets it (PLAN-STAIRS.md decision 1).
+STAIR_UP = 1    # C: LA_UP
+STAIR_DOWN = 2  # C: LA_DOWN
+
+
 @dataclass
 class Tile:
     """One level location (C: struct rm, reduced).
@@ -335,10 +342,15 @@ class Tile:
     STUB: the remaining rm fields (glyph, seenv, lit, waslit, roomno,
     edge, candig) are not ported yet -- they come with the display
     (glyph/seenv), lighting (lit/waslit) and room-aware (roomno/edge)
-    work.  door_mask is only meaningful for DOOR/SDOOR tiles.
+    work.  door_mask is only meaningful for DOOR/SDOOR tiles;
+    stair_dir only for STAIRS tiles.
     """
     typ: TerrainType = TerrainType.ROOM
     door_mask: DoorMask = DoorMask(0)
+    # the staircase direction of a STAIRS tile (C: levl[x][y].ladder,
+    # LA_UP / LA_DOWN); 0 for every other terrain -- worldgen is the
+    # only writer (PLAN-STAIRS.md decision 1)
+    stair_dir: int = 0
 
     def is_door_open(self) -> bool:
         """A door is passable unless closed/locked/trapped (C: the
@@ -414,6 +426,27 @@ class Map:
         ]
 
 
+@dataclass(frozen=True)
+class Stairway:
+    """A staircase on the current level (C: one entry of the gs.stairs
+    list of struct stairway, src/stairs.c; the sx / sy / up /
+    u_traversed half -- isladder is dropped, no ladders, and the
+    destination level is not stored: in the main dungeon it is
+    ``world.lev +/- 1``, derivable from the direction, C: tolev).
+
+    ``world.stairs`` holds ONLY the current level's stairways; it is
+    rebuilt on every level entry by core.stairs.rebuild_stairs (which
+    scans the map's STAIRS tiles -- the demo equivalent of the
+    stairway_add calls in mkstairs / restore.c after the
+    stairway_free_all of goto_level).  ``traversed`` is the C
+    u_traversed, kept for C fidelity: it feeds C's
+    stairs_description() branch text, which the demo doesn't have.
+    """
+    pos: Pos
+    up: bool
+    traversed: bool = False
+
+
 # ============================================================
 # Items
 # ============================================================
@@ -428,6 +461,9 @@ class Item:
     cursed: bool = False
     pos: Optional[Pos] = None          # where it lies on the floor, if anywhere
     container: Optional[str] = None    # id of the monster carrying it, if any
+    # the dungeon level the item is on (see Monster.lev); a carried
+    # item keeps its carrier's level
+    lev: int = 1
     wand_type: Optional[WandType] = None
     potion_type: Optional[PotionType] = None
     spell_type: Optional[SpellType] = None
@@ -483,6 +519,11 @@ class Monster:
     damage: int = 2            # melee damage = 1d`damage`
     alive: bool = True
     is_hero: bool = False
+    # the dungeon level the actor is on (C: the per-level monster
+    # lists; pyhack keeps one flat list and discriminates by lev).
+    # The hero's lev tracks World.lev (core.stairs.goto_level);
+    # monsters on other levels are frozen (decision 3).
+    lev: int = 1
     mdata: Optional["PerMonst"] = None  # permonst type (C: mtmp->data);
     # None for the flat-stat demo monsters (they use the simple melee
     # path); set for monsters that go through the C-port systems
@@ -554,6 +595,8 @@ class Trap:
     id: str
     trap_type: TrapType
     pos: Pos
+    # the dungeon level the trap is on (see Monster.lev)
+    lev: int = 1
     triggered: bool = False
     disarmed: bool = False
     seen: bool = False
@@ -566,6 +609,21 @@ class Trap:
 @dataclass
 class World:
     map: Map
+    # non-CURRENT levels, keyed by level number (the getlev()
+    # equivalent: a visited level's full state is kept in memory until
+    # game over -- PLAN-STAIRS.md decision 3 / §4).  On a level change
+    # the old world.map is parked here and the target's parked map (if
+    # visited) is taken back into world.map; level 1 is parked too once
+    # the hero leaves it.  world.map stays a plain field (every existing
+    # system reads it unmodified).
+    levels: "dict[int, Map]" = field(default_factory=dict)
+    # current level number (C: u.uz.dlevel); max_lev is the bottom
+    # level (C: num_dunlevs) -- reaching it wins (decision 4.8)
+    lev: int = 1
+    max_lev: int = 1
+    # the CURRENT level's stairways (C: gs.stairs); rebuilt on every
+    # level entry by core.stairs.rebuild_stairs
+    stairs: "list[Stairway]" = field(default_factory=list)
     actors: "dict[str, Monster]" = field(default_factory=dict)
     traps: "dict[str, Trap]" = field(default_factory=dict)
     items: "dict[str, Item]" = field(default_factory=dict)
@@ -588,12 +646,17 @@ class World:
         return self.actors["player"]
 
     def monster_at(self, pos: Pos) -> Optional[Monster]:
-        """First living actor standing on `pos`, if any."""
+        """First living actor on THIS level standing on `pos`, if any.
+        The lev filter keeps other levels' actors out (decision 3: a
+        missed filter is a cross-level ghost monster)."""
         for m in self.actors.values():
-            if m.alive and m.pos == pos:
+            if m.alive and m.lev == self.lev and m.pos == pos:
                 return m
         return None
 
     def items_at(self, pos: Pos) -> List[Item]:
-        """Items lying on `pos` (C: the svl.level.objects[x][y] chain)."""
-        return [it for it in self.items.values() if it.pos == pos]
+        """Items lying on `pos` on THIS level (C: the
+        svl.level.objects[x][y] chain; the lev filter keeps other
+        levels' floor items out)."""
+        return [it for it in self.items.values()
+                if it.lev == self.lev and it.pos == pos]

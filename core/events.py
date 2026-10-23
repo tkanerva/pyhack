@@ -94,6 +94,18 @@ class ZapEvent(Event):
 
 
 @dataclass(frozen=True)
+class LevelChangeEvent(Event):
+    """The hero changed dungeon level (C: the goto_level transition).
+
+    ``lev`` is the level now occupied (C: u.uz after the transition);
+    ``first_visit`` is True when the level was generated for this
+    entry (C: the mklev() vs getlev() branch of goto_level).
+    """
+    lev: int
+    first_visit: bool
+
+
+@dataclass(frozen=True)
 class GameOverEvent(Event):
     victory: bool
     reason: str

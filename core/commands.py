@@ -71,6 +71,15 @@ class PickupCommand:
     """Pick up the topmost item on the hero's tile (C: 'g')."""
 
 
+@dataclass(frozen=True)
+class StairsCommand:
+    """Use the staircase under the hero (C: '>' -> dodown, '<' ->
+    doup -- two C functions with one shared skeleton, collapsed into
+    one command; PLAN-STAIRS.md decision 2).  ``up`` is True for the
+    '<' command."""
+    up: bool
+
+
 Command = Union[MoveCommand, WaitCommand, ZapCommand, QuaffCommand,
                 CastCommand, ReadCommand, EatCommand, WearCommand,
-                TakeOffCommand, PickupCommand]
+                TakeOffCommand, PickupCommand, StairsCommand]
