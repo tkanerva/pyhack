@@ -183,6 +183,40 @@ bonus.
   hunger system), polymorph, and the accuracy / damage melee bonuses
   (the full uhitm port) -- but their DISCOVERY still works and their
   passive property is still conveyed via `core.props`.
+- The stairs system (PLAN-STAIRS.md, `core/stairs.py`): the dungeon is
+  now multi-level (3 levels in the demo).  Stairs are TERRAIN
+  (`TerrainType.STAIRS` + `Tile.stair_dir` STAIR_UP/STAIR_DOWN, C:
+  `levl[x][y].typ == STAIRS` + the `ladder` mask) plus per-level
+  STAIRWAY RECORDS (`World.stairs`, C: `gs.stairs`), rebuilt on every
+  level entry (`rebuild_stairs` scans the map -- the demo equivalent
+  of the `stairway_add` calls after `stairway_free_all`).  One
+  command: `StairsCommand(up)` (C: '>' -> `dodown`, '<' -> `doup`,
+  collapsed) -> `step()` -> `go_stairs()`, which does the C stair
+  lookup + the verbatim refusal lines ("You can't go up/down here.")
+  and the stuck refusal, then `goto_level()` (C: `do.c goto_level`,
+  demo subset): park the old level in `World.levels` (the getlev()
+  equivalent -- levels stay in memory, coming back up restores
+  everything), first visit -> `worldgen.generate_level` (C: `mklev()`,
+  the same rng stream, draw order: map -> down stair -> up stair ->
+  traps -> monsters, stair tiles reserved) else take the parked map
+  back, place the hero on the destination's matching staircase (C:
+  `u_on_dnstairs` / `u_on_upstairs`), the 50/50 arrival collision (C:
+  `u_collide_m`; an immovable monster is dropped, the demo has no
+  limbo), the vision reset/recalc, and the events (`LevelChangeEvent`
+  + "You descend/climb up the stairs." + the first-visit level line).
+  Reaching `World.max_lev` wins (`GameOverEvent`).  Level membership
+  on `Monster` / `Trap` / `Item` (`lev`) is filtered in exactly four
+  places: `World.monster_at`, `World.items_at`, `check_traps`, and
+  `step`'s monster loop (monsters on other levels are frozen).  The
+  old `TrapType.STAIRS_DOWN/UP` placeholders are gone (C has no
+  TT_STAIRS).  The level-1 down stairs sit at fixed `(20, 2)`
+  (reserved via keep_floor, zero rng draws -- the seed-42 layout and
+  draw sequence are untouched); the hero keeps the seeded `(20, 10)`
+  instead of starting on the stairs (C `newgame` deviation, house
+  rule).  Deferred (PLAN-STAIRS.md §5): digging, trap-door / portal
+  level destinations, fall damage, bones, regions, monster migration,
+  level save/restore, first-sight stair messages, ladders, branch
+  levels, treasure on levels 2..N.
 
 **Intentional simplifications (documented, not bugs):**
 - Monster AI is still a random walk — no awareness/line-of-sight yet.
