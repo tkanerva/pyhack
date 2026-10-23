@@ -131,8 +131,6 @@ TRAP_EFFECTS: "dict[TrapType, TrapEffect]" = {
     TrapType.MAGIC_PORTAL: _teleport_effect,
     TrapType.LEVEL_TELEPORTER: _teleport_effect,
     TrapType.TRAPDOOR: _trapdoor_effect,
-    TrapType.STAIRS_DOWN: _trapdoor_effect,
-    TrapType.STAIRS_UP: _teleport_effect,
 }
 
 
@@ -142,6 +140,9 @@ def check_traps(world: World, actor_id: str, rng) -> List[Event]:
     actor = world.actors[actor_id]
     events: List[Event] = []
     for trap in world.traps.values():
+        if trap.lev != world.lev:
+            # other level: frozen (PLAN-STAIRS.md decision 3)
+            continue
         if trap.pos != actor.pos or trap.triggered or trap.disarmed:
             continue
         if rng.randint(1, 100) <= 30:

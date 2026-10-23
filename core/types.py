@@ -41,8 +41,10 @@ class TrapType(Enum):
     ROLLING_BOULDER = auto()
     MAGIC_PORTAL = auto()
     LEVEL_TELEPORTER = auto()
-    STAIRS_DOWN = auto()
-    STAIRS_UP = auto()
+    # C has no TT_STAIRS: stairs are STAIRS TERRAIN (Tile.typ +
+    # Tile.stair_dir, PLAN-STAIRS.md decision 1) -- the old
+    # STAIRS_DOWN / STAIRS_UP placeholders were the last two members
+    # and are removed by the stairs port (no value shift).
 
 
 class DamageType(Enum):

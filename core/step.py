@@ -12,7 +12,7 @@ from typing import List, Optional, Tuple
 
 from .commands import (CastCommand, Command, EatCommand, MoveCommand,
                        PickupCommand, QuaffCommand, ReadCommand,
-                       TakeOffCommand, WearCommand, ZapCommand)
+                       StairsCommand, TakeOffCommand, WearCommand, ZapCommand)
 from .energy import tick_energy
 from .events import Event, GameOverEvent, MessageEvent
 from .hacklib import distmin, is_asleep, is_fainted, is_stuck
@@ -22,6 +22,7 @@ from .pickup import pickup
 from .potions import quaff
 from .rings import tick_rings
 from .scrolls import read_scroll
+from .stairs import go_stairs
 from .uhitm import uhitm
 from .rules import (apply_damage, melee_attack, process_events, tick_actor)
 from .spells import cast_spell
@@ -77,6 +78,8 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
             events += dotakeoff(world, "player", cmd.item_id, rng)
         elif isinstance(cmd, PickupCommand):
             events += pickup(world, "player", rng)
+        elif isinstance(cmd, StairsCommand):
+            events += go_stairs(world, cmd.up, rng)
         # WaitCommand: a deliberate pass (no trap re-roll, unlike the old demo)
 
     # --- monster turns ---
@@ -90,6 +93,10 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
             continue
         mon = world.actors[mon_id]
         if not mon.alive:
+            continue
+        if mon.lev != world.lev:
+            # frozen: a monster on another level (C: it lives in the
+            # saved level and only acts when the hero is there)
             continue
         if not world.hero.alive:
             break
