@@ -63,6 +63,12 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     `>` to go down the stairs / `<` to climb up (C: the '>' / '<'
     commands), `q` to quit; anything else is a wait.
     """
+    if world.occupation is not None:
+        # C: while an occupation runs the bottom line shows the
+        # occupation text and key input is queued (the occupation
+        # consumes the turn) -- any key is a wait
+        input(f"You are {world.occupation.text}... (any key waits): ")
+        return WaitCommand()
     key = input(prompt).strip().lower()
     if key == "q":
         return None
@@ -191,8 +197,11 @@ def render(world: World, log: List[str]) -> str:
     # eat.c, printed by botl.c when uhs != NOT_HUNGRY)
     hu = (" | 🍖 " + HU_STAT[int(hero.uhs)].strip()
           if hero.uhs != HungerState.NOT_HUNGRY else "")
+    # the running occupation text (C: the go.occtxt bottom line)
+    occ = (" | 🍽️ " + world.occupation.text
+           if world.occupation is not None else "")
     # the effective AC is the computed core.worn.uac (base - worn gear)
-    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}{hu}")
+    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}{hu}{occ}")
     lines.append(_inventory_line(world))
     lines.append("")
     lines.append("📜 Log:")

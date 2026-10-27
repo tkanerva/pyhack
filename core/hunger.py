@@ -26,7 +26,18 @@ Ported onto the committed systems; the C provenance per function:
 - eat_food       eat.c doeat() subset: the carried-food find, the
                  is_edible refusal ("You cannot eat that!"), the
                  worn refusal, the fprefx first-bite messages, the
-                 useup, the lesshungry(obj_nutrition)
+                 meal (the C multi-turn occupation, see below), the
+                 first bite (C: start_eating's immediate bite), the
+                 useup when the piece is gone
+- _meal          eat.c eatfood() (the occupation fn) as a generator
+                 (PLAN-OCCUPATION.md): one bite per round (the C
+                 bite() -> lesshungry / consume_oeaten), the piece
+                 consumed when it is gone (C: done_eating's useup +
+                 the "You finish eating ..." line), the choke end
+                 (C: bite() returning 1), the stolen-food abort (C:
+                 the do_reset_eat branch), the interrupted-meal
+                 cleanup (C: reset_eat -- the piece keeps its
+                 oeaten bookkeeping for the resume)
 - lesshungry / morehungry  eat.c: the gauge up / down with the >=1500
                  fullwarning line and the >=2000 choke
 - choke          eat.c choke(): the SATIATED-only gate, the
@@ -42,10 +53,16 @@ cannot reach, not separate handlers).
 
 Simplifications (documented, not bugs):
 
-- ONE TURN PER MEAL (the house rule, PLAN-HUNGER.md decision 5): C's
-  multi-turn occupation (reqtime / usedtime / nmod, bite(),
-  reset_eat, "resume your meal", the oeaten bookkeeping, the tins)
-  is dropped; the whole item is consumed for its full nutrition
+- The multi-turn meal IS the C occupation, now as a generator
+  (PLAN-OCCUPATION.md): the one-turn house rule of PLAN-HUNGER.md
+  decision 5 is superseded -- reqtime (the table's oc_delay, scaled
+  by the remaining piece), nmod (the nutrition per bite), the first
+  bite on the command turn (C: start_eating), one bite per round
+  (C: eatfood + bite), the interrupted-meal resume with reduced
+  duration (C: the already_partly_eaten path), the choke end (the
+  meal dies with a survived choke, the piece stays).  Still out: the
+  tins (opentin), the corpse / glob specifics, the weight bookkeeping
+  (recalc_wt), the "resume your meal" do-again prompt
 - no polymorphic edibility (the fire-elemental / metallivorous /
   ghoul / gelatinous-cube is_edible branches): the demo hero is a
   fixed human -- edibility is the FOOD_CLASS test
@@ -82,11 +99,12 @@ the FAINTING branch).
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Generator, List, Optional
 
 from .events import Event, MessageEvent
-from .hacklib import sgn
+from .hacklib import rounddiv, sgn
 from .items import consume_item
+from .occupation import OccupationStopped, start_occupation
 from .objects import (O, ObjClass, Prop, W_AMUL, W_ARMOR, W_RINGL, W_RINGR,
                       W_TOOL, object_type)
 from .rules import apply_damage, current_ability
@@ -403,12 +421,92 @@ def _fprefx(mon: Monster, item: Item) -> List[Event]:
     return [MessageEvent(f"This {item.name} is {taste}")]
 
 
+def _meal_plan(item: Item, resume: bool):
+    """C: the doeat reqtime / nmod calculation (src/eat.c:3054-3081),
+    the demo subset: the bite size is the remaining nutrition over
+    the duration, and the duration is the table's oc_delay scaled by
+    the remaining piece (the C rounddiv recompute of the
+    already_partly_eaten path).  Returns (reqtime, nmod), or None
+    when the piece is fully eaten (or the table row has no delay).
+    """
+    row = object_type(item.otyp)
+    full = row.nutrition
+    left = full - item.oeaten
+    if left <= 0 or row.delay <= 0:
+        return None
+    if resume:
+        # C: reqtime = rounddiv(oc_delay * oeaten_remaining, basenutrit)
+        reqtime = max(1, rounddiv(row.delay * left, full))
+    else:
+        reqtime = row.delay
+    # C: nmod = the nutrition per bite (the oeaten / reqtime split)
+    nmod = max(1, rounddiv(left, reqtime))
+    return reqtime, nmod
+
+
+def _meal(world: World, actor_id: str, item_id: str,
+          nmod: int) -> Generator[List[Event], None, List[Event]]:
+    """C: eatfood() (src/eat.c:524-546) -- the eating occupation as a
+    generator: one bite per round (the C bite() call), the piece
+    consumed when it is gone (C: done_eating).  The state (the item,
+    the bite size, the meal progress) is in this frame -- the C
+    svc.context.victual struct.
+
+    The FIRST bite was already eaten on the command turn (C:
+    start_eating's immediate bite); the loop is the C eatfood() body:
+    validate the piece (C: the "maybe it was stolen?" branch ->
+    do_reset_eat), bite (C: bite() -> lesshungry + consume_oeaten),
+    the choke end (C: bite() returning 1), and the completion
+    (C: done_eating's useup + "You finish eating ...")."""
+    mon = world.actors[actor_id]
+    ev: List[Event] = []
+    try:
+        while True:
+            rng = yield ev  # sent: this round's rng; yielded: events
+            item = world.items.get(item_id)
+            if item is None or item.container != actor_id:
+                # C: the eaten piece is gone (stolen / used up) --
+                # do_reset_eat: the meal ends, no message
+                return []
+            full = object_type(item.otyp).nutrition
+            pre = mon.uhs
+            pre_h = mon.uhunger
+            ev += lesshungry(world, actor_id, nmod, rng, item=item)
+            item.oeaten = min(item.oeaten + nmod, full)
+            if not mon.alive:
+                # the choke death (C: done(CHOKING)) -- the step's
+                # _finish ends the game; the piece stays
+                return ev
+            if pre == HungerState.SATIATED and pre_h + nmod >= HUNGER_CAP:
+                # the choke (death or the survived vomit): C's bite()
+                # returns 1 and the meal ends -- the piece stays for
+                # a later resume
+                return ev
+            if item.oeaten >= full:
+                # done (C: done_eating): consume the piece
+                consume_item(world, actor_id, item.id)
+                return ev + [MessageEvent(
+                    f"You finish eating the {item.name}.")]
+    except OccupationStopped:
+        # C: reset_eat() -- the piece stays carried with its oeaten
+        # bookkeeping; the resume is an EatCommand on the same item
+        return []
+
+
 def eat_food(world: World, actor_id: str, item_id: str,
              rng) -> List[Event]:
     """C: doeat() (src/eat.c), the carried-food subset: find, the
-    edibility refusals, the fprefx first-bite feedback, the useup,
-    the lesshungry(obj_nutrition).  One turn (house rule): C's
-    multi-turn occupation is dropped (PLAN-HUNGER.md decision 5)."""
+    edibility refusals, the fprefx first-bite feedback, the meal.
+
+    The meal is the C multi-turn occupation as a generator
+    (PLAN-OCCUPATION.md): the first bite happens on THIS turn (C:
+    start_eating's immediate bite), and when the piece is not done
+    the remainder runs as world.occupation (one bite per round, the
+    _meal generator).  A partially eaten piece is resumed with a
+    reduced duration (C: the already_partly_eaten path).  The old
+    one-turn house rule (PLAN-HUNGER.md decision 5) is superseded;
+    the one-turn foods (the delay 1 apple / orange / melon) behave
+    exactly as before."""
     item = _find_food(world, actor_id, item_id)
     if item is None:
         return [MessageEvent("You don't have such food.")]
@@ -419,14 +517,45 @@ def eat_food(world: World, actor_id: str, item_id: str,
     # C: doeat's worn refusal
     if item.owornmask & (W_ARMOR | W_TOOL | W_AMUL):
         return [MessageEvent("You can't eat something you're wearing.")]
+    # C: unreachable (the input is queued while an occupation runs);
+    # the direct-call guard (step() never dispatches two commands)
+    if world.occupation is not None:
+        return [MessageEvent("You are already busy.")]
+    resume = item.oeaten > 0
+    plan = _meal_plan(item, resume)
+    if plan is None:
+        # the piece is fully eaten (a stale item) -- C: the doeat
+        # used-up branch (the zero_victual reset)
+        consume_item(world, actor_id, item.id)
+        return []
+    reqtime, nmod = plan
     mon = world.actors[actor_id]
+    full = object_type(item.otyp).nutrition
     events: List[Event] = []
-    events += _fprefx(mon, item)
-    consume_item(world, actor_id, item.id)
-    # C: obj_nutrition() -- the table's oc_nutrition for the demo
-    # food (the corpse/egg cases are out, PLAN-HUNGER.md 4); the meal
-    # chokes with its food (C: bite() -> choke(piece))
-    events += lesshungry(world, actor_id,
-                         object_type(item.otyp).nutrition, rng,
-                         item=item)
+    if resume:
+        # C: You("%s %s.", (reqtime == 1) ? "eat" : "begin eating",
+        #     doname(otmp))
+        verb = "eat" if reqtime == 1 else "begin eating"
+        events.append(MessageEvent(f"You {verb} the {item.name}."))
+    else:
+        events += _fprefx(mon, item)
+    # the first bite (C: the start_eating bite) -- the meal chokes
+    # with its food (C: bite() -> choke(piece))
+    pre = mon.uhs
+    pre_h = mon.uhunger
+    events += lesshungry(world, actor_id, nmod, rng, item=item)
+    item.oeaten = min(item.oeaten + nmod, full)
+    if item.oeaten >= full:
+        # a one-bite piece (C: the reqtime 1 path -- no finish line;
+        # the fprefx was the whole feedback)
+        consume_item(world, actor_id, item.id)
+        return events
+    if not mon.alive:
+        return events  # the choke death -- the step ends the game
+    if pre == HungerState.SATIATED and pre_h + nmod >= HUNGER_CAP:
+        return events  # the choke vomit -- the meal ends, the piece stays
+    # the remainder of the meal (C: set_occupation(eatfood, "eating %s",
+    # food_xname(otmp, TRUE)) -- the xname carries the "the")
+    start_occupation(world, _meal(world, actor_id, item.id, nmod),
+                     f"eating the {item.name}")
     return events

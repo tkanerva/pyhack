@@ -88,6 +88,12 @@ Already in pyhack that the port builds on:
    dropped — the house rule is one turn per use (quaff / read / cast).
    Full nutrition at once via `lesshungry(obj_nutrition)`; the whole
    item is consumed (the demo food is quantity 1; no splitting).
+
+   **SUPERSEDED (PLAN-OCCUPATION.md):** the multi-turn meal is now the
+   C occupation, as a generator (`core.occupation` + `core.hunger.
+   _meal`).  Decision 5 stands for the OTHER one-turn uses (quaff /
+   read / cast) only; the delay-1 foods (apple / orange / melon)
+   keep their one-turn behaviour.
 6. **Death through the choke point.** Starvation and choking deaths go
    through `rules.apply_damage` (the only way an actor loses HP) with a
    new `DamageType.STARVING` (C: `done(STARVING)`, killer

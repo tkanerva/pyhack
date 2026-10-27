@@ -18,6 +18,7 @@ from .events import Event, GameOverEvent, MessageEvent
 from .hacklib import distmin, is_asleep, is_fainted, is_stuck
 from .hunger import eat_food, tick_hunger
 from .mhitu import mattacku
+from .occupation import run_occupation
 from .pickup import pickup
 from .potions import quaff
 from .rings import tick_rings
@@ -57,7 +58,19 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
     if not world.hero.alive:
         return _finish(world, events)
     if not was_asleep:
-        if isinstance(cmd, MoveCommand):
+        if world.occupation is not None:
+            # A long-duration task consumes the whole turn (C: the
+            # moveloop's `if (gm.multi >= 0 && go.occupation)` block,
+            # allmain.c:486): the command is dropped (C queues it for
+            # later; the demo is one command per turn), the task ticks
+            # (run_occupation also runs the C monster_nearby()
+            # interruption check after the tick), and the per-turn
+            # upkeep above (the hunger included) already ran -- the C
+            # order (the per-hero-time things before the occupation
+            # block).  A fainted / asleep hero suspends the task (the
+            # gm.multi >= 0 half of the C guard).
+            events += run_occupation(world, rng)
+        elif isinstance(cmd, MoveCommand):
             if is_stuck(world.hero):
                 events.append(MessageEvent("🕸️ You are stuck and cannot move."))
             else:

@@ -619,47 +619,78 @@ def test_eat_cursed_food_terrible():
 
 
 def test_eat_bland_rations():
-    """C: the CRAM / K / C ration half of give_feedback (from 200:
-    the meal tops out at 800, below the 1500 fullwarning line)."""
+    """C: the CRAM / K / C ration half of give_feedback, the meal as
+    the C occupation (PLAN-OCCUPATION.md): the K / C rations are the
+    delay 1 one-bite pieces (unchanged behaviour); the CRAM ration
+    (delay 3, nutrition 600) eats its first bite (200) on the command
+    turn and the rest runs as the occupation."""
     for otyp in (O.CRAM_RATION, O.K_RATION, O.C_RATION):
         w = make_world()
         r = add_food(w, make_food(otyp))
         set_hunger(w, 200)
         ev = eat_food(w, "player", r.id, SeqRng())
         assert texts(ev) == [f"This {object_type(otyp).name} is bland."], otyp
+        if otyp == O.CRAM_RATION:
+            assert w.hero.uhunger == 400             # 200 + 600/3
+            assert r.oeaten == 200
+            assert w.occupation is not None
+        else:
+            assert w.hero.uhunger == 200 + object_type(otyp).nutrition
+            assert r not in w.hero.inventory
+            assert w.occupation is None
 
 
 def test_eat_food_ration_tiers():
     """C: the FOOD_RATION cases of fprefx (nutrition 800): the
-    <=200 / <700 / else split, on the pre-meal gauge."""
+    <=200 / <700 / else split, on the pre-meal gauge.  The meal is
+    the C occupation: the first bite is 160 on the command turn, the
+    rest one per round -- the fullwarning line (>= 1500) is crossed
+    only by the LAST bite of the 800-start meal."""
+    from core.occupation import run_occupation
     w = make_world()
     r = add_food(w, make_food(O.FOOD_RATION))
     set_hunger(w, 200)
     ev = eat_food(w, "player", r.id, SeqRng())
     assert texts(ev) == ["This food really hits the spot!"]
-    assert w.hero.uhunger == 1000
+    assert w.hero.uhunger == 360                   # 200 + 160
     w = make_world()
     r = add_food(w, make_food(O.FOOD_RATION))
     set_hunger(w, 500)
     ev = eat_food(w, "player", r.id, SeqRng())
     assert texts(ev) == ["This satiates your stomach!"]
-    assert w.hero.uhunger == 1300
+    assert w.hero.uhunger == 660                   # 500 + 160
     w = make_world()
     r = add_food(w, make_food(O.FOOD_RATION))
     set_hunger(w, 800)
     ev = eat_food(w, "player", r.id, SeqRng())
-    # above 700: no fprefx feedback, but 800 + 800 = 1600 crosses the
-    # 1500 fullwarning line
-    assert texts(ev) == ["You're having a hard time getting all of it down."]
+    # above 700: no fprefx feedback; the first bite lands at 960
+    assert texts(ev) == []
+    assert w.hero.uhunger == 960
+    for _ in range(3):
+        ev = run_occupation(w, SeqRng())
+        assert texts(ev) == []
+    ev = run_occupation(w, SeqRng())
+    # the last bite (1440 -> 1600) crosses the 1500 fullwarning line
+    assert texts(ev) == ["You're having a hard time getting all of it down.",
+                         "You finish eating the food ration."]
     assert w.hero.uhunger == 1600
 
 
 def test_eat_tripe_ration():
-    """C: the human (non-carnivorous, humanoid) branch of fprefx."""
+    """C: the human (non-carnivorous, humanoid) branch of fprefx; the
+    tripe ration (delay 2, nutrition 200) is the first multi-bite
+    piece of the demo kit: first bite 100 on the command turn, the
+    rest runs as the occupation."""
+    from core.occupation import run_occupation
     w = make_world()
     t = add_food(w, make_food(O.TRIPE_RATION))
     ev = eat_food(w, "player", t.id, SeqRng())
     assert texts(ev) == ["Yak - dog food!"]
+    assert w.hero.uhunger == 1000           # 900 + 100
+    assert t.oeaten == 100
+    assert w.occupation is not None
+    ev = run_occupation(w, SeqRng())
+    assert texts(ev) == ["You finish eating the tripe ration."]
     assert w.hero.uhunger == 1100           # 900 + 200
 
 

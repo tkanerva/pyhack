@@ -27,7 +27,10 @@ def main() -> None:
     print("   you come back.  Reaching the bottom level wins!")
     print("   r<letter> read a scroll | z<letter> zap a wand | c<letter> cast a spell")
     print("   e<letter> eat a food (the demo floor carries an apple, an orange,")
-    print("   a food ration and a melon -- pick them up with g first)")
+    print("   a food ration and a melon -- pick them up with g first).  The big")
+    print("   foods are a multi-turn meal (a food ration: 5 turns, first bite")
+    print("   instant): a monster that comes near interrupts it, and eating")
+    print("   the same item again resumes where you left off.")
     print("   (zaps and beam spells ask for the direction: n/s/e/w/ne/nw/se/sw)")
     print("   The floor scrolls (enchant weapon/armor, remove curse, "
           "teleportation, blank paper) are read with r<letter> -- the "

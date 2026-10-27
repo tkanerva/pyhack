@@ -16,6 +16,7 @@ from .rnd import Rng
 if TYPE_CHECKING:  # annotation only -- no runtime import cycle
     from .monst import PerMonst
     from .objects import Prop
+    from .occupation import Occupation
     from .vision import HeroVision
     from .weapon import Skills
 
@@ -496,6 +497,11 @@ class Item:
     # item modules (core.rings emits the intent, the core applies it).
     dknown: bool = False
     known: bool = False
+    # nutrition already eaten out of this food piece (C: obj->oeaten,
+    # the eating-occupation meal bookkeeping, PLAN-OCCUPATION.md):
+    # 0 for a full piece; on an interrupted meal the remainder stays
+    # here so the item can be resumed with a reduced duration
+    oeaten: int = 0
 
 
 # ============================================================
@@ -642,6 +648,12 @@ class World:
     # draw sequence (the demo's pinned draws stay put).
     obj_tables: "ObjTables" = field(
         default_factory=lambda: ObjTables(Rng(b"pyhack-objtables")))
+    # the hero's running long-duration task (C: go.occupation +
+    # go.occtxt, the set_occupation mechanism): a generator whose
+    # frame holds the task state (PLAN-OCCUPATION.md); None when the
+    # hero is not mid-task.  Advanced by core.occupation
+    # (run_occupation) at the top of the hero's turn in step().
+    occupation: Optional["Occupation"] = None
 
     @property
     def hero(self) -> Monster:

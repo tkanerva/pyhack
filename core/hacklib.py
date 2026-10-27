@@ -195,6 +195,20 @@ def online2(a: Pos, b: Pos) -> bool:
     return dy == 0 or dx == 0 or dy == dx or dy == -dx
 
 
+def rounddiv(x: int, y: int) -> int:
+    """Division rounding half up (C: rounddiv, src/hack.c) -- the C
+    code's sign handling included, so negative operands round the C
+    way (the eating meal math, PLAN-OCCUPATION.md, uses it)."""
+    if y == 0:
+        raise ZeroDivisionError("rounddiv: division by zero")
+    sign = -1 if (x < 0) != (y < 0) else 1
+    x, y = abs(x), abs(y)
+    r = x // y
+    if 2 * (x % y) >= y:
+        r += 1
+    return sign * r
+
+
 def swapbits(val: int, bita: int, bitb: int) -> int:
     """Swap bit `bita` with bit `bitb` in val (C: swapbits)."""
     tmp = ((val >> bita) & 1) ^ ((val >> bitb) & 1)
