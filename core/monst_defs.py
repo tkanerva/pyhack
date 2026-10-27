@@ -1,0 +1,881 @@
+"""The C definitions behind the monster table (core.monst).
+
+Everything include/monsters.h and the headers it pulls in *declare*:
+
+- the constants the table uses, as real enum types where C has an
+  enum or a bit-mask family: `MonsterClass` (S_*), `AtkType` /
+  `DmgType` (AT_*/AD_*), the `M1` / `M2` / `M3` flag bitmaps, `MR`
+  (resists/conveyances), `Geno` and `MvitalsFlag` (the two G_* bit
+  spaces), `MSize` (MZ_*), `MSound` (MS_*), `MGender`.  The C-style
+  names (S_ANT, M1_FLY, MR_POISON, ...) are kept as module-level
+  aliases of the enum members so the transcribed code reads like the
+  C it came from; plain ints are kept only where C has no enum either
+  (WT_* body weights, the A_* alignment bounds, G_FREQ which is a
+  mask, and the table indices/counts);
+- `Attack` / `PerMonst` -- the struct attack / struct permonst rows;
+- the `_mon` builder (the C MON() macro) and its `_nam` helper;
+- the PM_* anchors -- the C enum monnums the game code refers to.
+
+Why this module exists (and why it is not monst.py): the big tables
+live in monst_data.py and their rows are built with the names defined
+here.  While the tables and these definitions shared one module the
+two imported each other -- monst -> monst_data -> monst -- and a type
+checker cannot determine the type of a module-level constant that is
+read from a module it is still analysing, so every mention of (say)
+AT_BITE or MR_POISON in the table needed an explicit annotation to
+silence a "Cannot determine type" error.  Splitting the definitions
+out gives a one-way chain:
+
+    monst_defs  ->  (nothing)
+    monst_data  ->  monst_defs
+    monst       ->  monst_defs + monst_data
+
+with no cycle, so the C-like integer constants stay unannotated and
+still type-check.  Import core.monst (the public API); import this
+module only from monst.py and monst_data.py.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import IntEnum, IntFlag
+
+
+class MonsterClass(IntEnum):
+    """Monster class index (C: S_*; defsym.h MONSYM table)."""
+    ANT = 1
+    BLOB = 2
+    COCKATRICE = 3
+    DOG = 4
+    EYE = 5
+    FELINE = 6
+    GREMLIN = 7
+    HUMANOID = 8
+    IMP = 9
+    JELLY = 10
+    KOBOLD = 11
+    LEPRECHAUN = 12
+    MIMIC = 13
+    NYMPH = 14
+    ORC = 15
+    PIERCER = 16
+    QUADRUPED = 17
+    RODENT = 18
+    SPIDER = 19
+    TRAPPER = 20
+    UNICORN = 21
+    VORTEX = 22
+    WORM = 23
+    XAN = 24
+    LIGHT = 25
+    ZRUTY = 26
+    ANGEL = 27
+    BAT = 28
+    CENTAUR = 29
+    DRAGON = 30
+    ELEMENTAL = 31
+    FUNGUS = 32
+    GNOME = 33
+    GIANT = 34
+    INVISIBLE = 35
+    JABBERWOCK = 36
+    KOP = 37
+    LICH = 38
+    MUMMY = 39
+    NAGA = 40
+    OGRE = 41
+    PUDDING = 42
+    QUANTMECH = 43
+    RUSTMONST = 44
+    SNAKE = 45
+    TROLL = 46
+    UMBER = 47
+    VAMPIRE = 48
+    WRAITH = 49
+    XORN = 50
+    YETI = 51
+    ZOMBIE = 52
+    HUMAN = 53
+    GHOST = 54
+    GOLEM = 55
+    DEMON = 56
+    EEL = 57
+    LIZARD = 58
+    WORM_TAIL = 59
+    MIMIC_DEF = 60
+
+
+# C-style aliases (kept for parallelism with include/*.h; the
+# transcribed code refers to constants by their C names)
+S_ANT = MonsterClass.ANT
+S_BLOB = MonsterClass.BLOB
+S_COCKATRICE = MonsterClass.COCKATRICE
+S_DOG = MonsterClass.DOG
+S_EYE = MonsterClass.EYE
+S_FELINE = MonsterClass.FELINE
+S_GREMLIN = MonsterClass.GREMLIN
+S_HUMANOID = MonsterClass.HUMANOID
+S_IMP = MonsterClass.IMP
+S_JELLY = MonsterClass.JELLY
+S_KOBOLD = MonsterClass.KOBOLD
+S_LEPRECHAUN = MonsterClass.LEPRECHAUN
+S_MIMIC = MonsterClass.MIMIC
+S_NYMPH = MonsterClass.NYMPH
+S_ORC = MonsterClass.ORC
+S_PIERCER = MonsterClass.PIERCER
+S_QUADRUPED = MonsterClass.QUADRUPED
+S_RODENT = MonsterClass.RODENT
+S_SPIDER = MonsterClass.SPIDER
+S_TRAPPER = MonsterClass.TRAPPER
+S_UNICORN = MonsterClass.UNICORN
+S_VORTEX = MonsterClass.VORTEX
+S_WORM = MonsterClass.WORM
+S_XAN = MonsterClass.XAN
+S_LIGHT = MonsterClass.LIGHT
+S_ZRUTY = MonsterClass.ZRUTY
+S_ANGEL = MonsterClass.ANGEL
+S_BAT = MonsterClass.BAT
+S_CENTAUR = MonsterClass.CENTAUR
+S_DRAGON = MonsterClass.DRAGON
+S_ELEMENTAL = MonsterClass.ELEMENTAL
+S_FUNGUS = MonsterClass.FUNGUS
+S_GNOME = MonsterClass.GNOME
+S_GIANT = MonsterClass.GIANT
+S_INVISIBLE = MonsterClass.INVISIBLE
+S_JABBERWOCK = MonsterClass.JABBERWOCK
+S_KOP = MonsterClass.KOP
+S_LICH = MonsterClass.LICH
+S_MUMMY = MonsterClass.MUMMY
+S_NAGA = MonsterClass.NAGA
+S_OGRE = MonsterClass.OGRE
+S_PUDDING = MonsterClass.PUDDING
+S_QUANTMECH = MonsterClass.QUANTMECH
+S_RUSTMONST = MonsterClass.RUSTMONST
+S_SNAKE = MonsterClass.SNAKE
+S_TROLL = MonsterClass.TROLL
+S_UMBER = MonsterClass.UMBER
+S_VAMPIRE = MonsterClass.VAMPIRE
+S_WRAITH = MonsterClass.WRAITH
+S_XORN = MonsterClass.XORN
+S_YETI = MonsterClass.YETI
+S_ZOMBIE = MonsterClass.ZOMBIE
+S_HUMAN = MonsterClass.HUMAN
+S_GHOST = MonsterClass.GHOST
+S_GOLEM = MonsterClass.GOLEM
+S_DEMON = MonsterClass.DEMON
+S_EEL = MonsterClass.EEL
+S_LIZARD = MonsterClass.LIZARD
+S_WORM_TAIL = MonsterClass.WORM_TAIL
+S_MIMIC_DEF = MonsterClass.MIMIC_DEF
+
+MAXMCLASSES = 61
+
+# default display character per class (sym.h mon_defchars)
+DEFCHARS: dict[MonsterClass, str] = {
+    S_ANT: 'a', S_BLOB: 'b', S_COCKATRICE: 'c', S_DOG: 'd', S_EYE: 'e',
+    S_FELINE: 'f', S_GREMLIN: 'g', S_HUMANOID: 'h', S_IMP: 'i',
+    S_JELLY: 'j', S_KOBOLD: 'k', S_LEPRECHAUN: 'l', S_MIMIC: 'm',
+    S_NYMPH: 'n', S_ORC: 'o', S_PIERCER: 'p', S_QUADRUPED: 'q',
+    S_RODENT: 'r', S_SPIDER: 's', S_TRAPPER: 't', S_UNICORN: 'u',
+    S_VORTEX: 'v', S_WORM: 'w', S_XAN: 'x', S_LIGHT: 'y', S_ZRUTY: 'z',
+    S_ANGEL: 'A', S_BAT: 'B', S_CENTAUR: 'C', S_DRAGON: 'D',
+    S_ELEMENTAL: 'E', S_FUNGUS: 'F', S_GNOME: 'G', S_GIANT: 'H',
+    S_INVISIBLE: 'I', S_JABBERWOCK: 'J', S_KOP: 'K', S_LICH: 'L',
+    S_MUMMY: 'M', S_NAGA: 'N', S_OGRE: 'O', S_PUDDING: 'P',
+    S_QUANTMECH: 'Q', S_RUSTMONST: 'R', S_SNAKE: 'S', S_TROLL: 'T',
+    S_UMBER: 'U', S_VAMPIRE: 'V', S_WRAITH: 'W', S_XORN: 'X',
+    S_YETI: 'Y', S_ZOMBIE: 'Z', S_HUMAN: '@', S_GHOST: ' ',
+    S_GOLEM: "'", S_DEMON: '&', S_EEL: ';', S_LIZARD: ':',
+    S_WORM_TAIL: '~', S_MIMIC_DEF: ']',
+}
+
+
+class AtkType(IntEnum):
+    """Attack type (C: AT_*; monattk.h)."""
+    ANY = -1
+    NONE = 0
+    CLAW = 1
+    BITE = 2
+    KICK = 3
+    BUTT = 4
+    TUCH = 5
+    STNG = 6
+    HUGS = 7
+    SPIT = 10
+    ENGL = 11
+    BREA = 12
+    EXPL = 13
+    BOOM = 14
+    GAZE = 15
+    TENT = 16
+    WEAP = 254
+    MAGC = 255
+
+
+AT_ANY = AtkType.ANY
+AT_NONE = AtkType.NONE
+AT_CLAW = AtkType.CLAW
+AT_BITE = AtkType.BITE
+AT_KICK = AtkType.KICK
+AT_BUTT = AtkType.BUTT
+AT_TUCH = AtkType.TUCH
+AT_STNG = AtkType.STNG
+AT_HUGS = AtkType.HUGS
+AT_SPIT = AtkType.SPIT
+AT_ENGL = AtkType.ENGL
+AT_BREA = AtkType.BREA
+AT_EXPL = AtkType.EXPL
+AT_BOOM = AtkType.BOOM
+AT_GAZE = AtkType.GAZE
+AT_TENT = AtkType.TENT
+AT_WEAP = AtkType.WEAP
+AT_MAGC = AtkType.MAGC
+
+NATTK = 6
+
+
+class DmgType(IntEnum):
+    """Damage type (C: AD_*; monattk.h)."""
+    ANY = -1
+    PHYS = 0
+    MAGM = 1
+    FIRE = 2
+    COLD = 3
+    SLEE = 4
+    DISN = 5
+    ELEC = 6
+    DRST = 7
+    ACID = 8
+    SPC1 = 9
+    SPC2 = 10
+    BLND = 11
+    STUN = 12
+    SLOW = 13
+    PLYS = 14
+    DRLI = 15
+    DREN = 16
+    LEGS = 17
+    STON = 18
+    STCK = 19
+    SGLD = 20
+    SITM = 21
+    SEDU = 22
+    TLPT = 23
+    RUST = 24
+    CONF = 25
+    DGST = 26
+    HEAL = 27
+    WRAP = 28
+    WERE = 29
+    DRDX = 30
+    DRCO = 31
+    DRIN = 32
+    DISE = 33
+    DCAY = 34
+    SSEX = 35
+    HALU = 36
+    DETH = 37
+    PEST = 38
+    FAMN = 39
+    SLIM = 40
+    ENCH = 41
+    CORR = 42
+    POLY = 43
+    CLRC = 240
+    SPEL = 241
+    RBRE = 242
+    SAMU = 252
+    CURS = 253
+
+
+AD_ANY = DmgType.ANY
+AD_PHYS = DmgType.PHYS
+AD_MAGM = DmgType.MAGM
+AD_FIRE = DmgType.FIRE
+AD_COLD = DmgType.COLD
+AD_SLEE = DmgType.SLEE
+AD_DISN = DmgType.DISN
+AD_ELEC = DmgType.ELEC
+AD_DRST = DmgType.DRST
+AD_ACID = DmgType.ACID
+AD_SPC1 = DmgType.SPC1
+AD_SPC2 = DmgType.SPC2
+AD_BLND = DmgType.BLND
+AD_STUN = DmgType.STUN
+AD_SLOW = DmgType.SLOW
+AD_PLYS = DmgType.PLYS
+AD_DRLI = DmgType.DRLI
+AD_DREN = DmgType.DREN
+AD_LEGS = DmgType.LEGS
+AD_STON = DmgType.STON
+AD_STCK = DmgType.STCK
+AD_SGLD = DmgType.SGLD
+AD_SITM = DmgType.SITM
+AD_SEDU = DmgType.SEDU
+AD_TLPT = DmgType.TLPT
+AD_RUST = DmgType.RUST
+AD_CONF = DmgType.CONF
+AD_DGST = DmgType.DGST
+AD_HEAL = DmgType.HEAL
+AD_WRAP = DmgType.WRAP
+AD_WERE = DmgType.WERE
+AD_DRDX = DmgType.DRDX
+AD_DRCO = DmgType.DRCO
+AD_DRIN = DmgType.DRIN
+AD_DISE = DmgType.DISE
+AD_DCAY = DmgType.DCAY
+AD_SSEX = DmgType.SSEX
+AD_HALU = DmgType.HALU
+AD_DETH = DmgType.DETH
+AD_PEST = DmgType.PEST
+AD_FAMN = DmgType.FAMN
+AD_SLIM = DmgType.SLIM
+AD_ENCH = DmgType.ENCH
+AD_CORR = DmgType.CORR
+AD_POLY = DmgType.POLY
+AD_CLRC = DmgType.CLRC
+AD_SPEL = DmgType.SPEL
+AD_RBRE = DmgType.RBRE
+AD_SAMU = DmgType.SAMU
+AD_CURS = DmgType.CURS
+
+
+def distance_atk_type(atyp: AtkType) -> bool:
+    """DISTANCE_ATTK_TYPE: spit / breath / magic / gaze (monattk.h)."""
+    return atyp in (AT_SPIT, AT_BREA, AT_MAGC, AT_GAZE)
+
+
+# ------------------------------------------------------------
+# Resists / conveyances (monflag.h MR_*/MR2_*).
+# C shares one bit space between mons[].mresists (resists) and
+# mons[].mconveys (conveyed by eating).
+# ------------------------------------------------------------
+
+class MR(IntFlag):
+    """Resistance/conveyance bits (C: MR_* resists, MR2_* conveys)."""
+    FIRE = 0x01
+    COLD = 0x02
+    SLEEP = 0x04
+    DISINT = 0x08
+    ELEC = 0x10
+    POISON = 0x20
+    ACID = 0x40
+    STONE = 0x80
+    SEE_INVIS = 0x0100
+    LEVITATE = 0x0200
+    WATERWALK = 0x0400
+    MAGBREATH = 0x0800
+    DISPLACED = 0x1000
+    STRENGTH = 0x2000
+    FUMBLING = 0x4000
+
+
+MR_FIRE = MR.FIRE
+MR_COLD = MR.COLD
+MR_SLEEP = MR.SLEEP
+MR_DISINT = MR.DISINT
+MR_ELEC = MR.ELEC
+MR_POISON = MR.POISON
+MR_ACID = MR.ACID
+MR_STONE = MR.STONE
+MR2_SEE_INVIS = MR.SEE_INVIS
+MR2_LEVITATE = MR.LEVITATE
+MR2_WATERWALK = MR.WATERWALK
+MR2_MAGBREATH = MR.MAGBREATH
+MR2_DISPLACED = MR.DISPLACED
+MR2_STRENGTH = MR.STRENGTH
+MR2_FUMBLING = MR.FUMBLING
+
+
+class M1(IntFlag):
+    """mflags1 bits (C: M1_*)."""
+    FLY = 0x00000001
+    SWIM = 0x00000002
+    AMORPHOUS = 0x00000004
+    WALLWALK = 0x00000008
+    CLING = 0x00000010
+    TUNNEL = 0x00000020
+    NEEDPICK = 0x00000040
+    CONCEAL = 0x00000080
+    HIDE = 0x000100
+    AMPHIBIOUS = 0x000200
+    BREATHLESS = 0x000400
+    NOTAKE = 0x000800
+    NOEYES = 0x00001000
+    NOHANDS = 0x00002000
+    NOLIMBS = NOEYES | NOHANDS
+    NOHEAD = 0x00008000
+    MINDLESS = 0x00010000
+    HUMANOID = 0x00020000
+    ANIMAL = 0x00040000
+    SLITHY = 0x00080000
+    UNSOLID = 0x00100000
+    THICK_HIDE = 0x00200000
+    OVIPAROUS = 0x00400000
+    REGEN = 0x00800000
+    SEE_INVIS = 0x01000000
+    TPORT = 0x02000000
+    TPORT_CNTRL = 0x04000000
+    ACID = 0x08000000
+    POIS = 0x10000000
+    CARNIVORE = 0x20000000
+    HERBIVORE = 0x40000000
+    OMNIVORE = CARNIVORE | HERBIVORE
+    METALLIVORE = 0x80000000
+
+
+M1_FLY = M1.FLY
+M1_SWIM = M1.SWIM
+M1_AMORPHOUS = M1.AMORPHOUS
+M1_WALLWALK = M1.WALLWALK
+M1_CLING = M1.CLING
+M1_TUNNEL = M1.TUNNEL
+M1_NEEDPICK = M1.NEEDPICK
+M1_CONCEAL = M1.CONCEAL
+M1_HIDE = M1.HIDE
+M1_AMPHIBIOUS = M1.AMPHIBIOUS
+M1_BREATHLESS = M1.BREATHLESS
+M1_NOTAKE = M1.NOTAKE
+M1_NOEYES = M1.NOEYES
+M1_NOHANDS = M1.NOHANDS
+M1_NOLIMBS = M1.NOLIMBS
+M1_NOHEAD = M1.NOHEAD
+M1_MINDLESS = M1.MINDLESS
+M1_HUMANOID = M1.HUMANOID
+M1_ANIMAL = M1.ANIMAL
+M1_SLITHY = M1.SLITHY
+M1_UNSOLID = M1.UNSOLID
+M1_THICK_HIDE = M1.THICK_HIDE
+M1_OVIPAROUS = M1.OVIPAROUS
+M1_REGEN = M1.REGEN
+M1_SEE_INVIS = M1.SEE_INVIS
+M1_TPORT = M1.TPORT
+M1_TPORT_CNTRL = M1.TPORT_CNTRL
+M1_ACID = M1.ACID
+M1_POIS = M1.POIS
+M1_CARNIVORE = M1.CARNIVORE
+M1_HERBIVORE = M1.HERBIVORE
+M1_OMNIVORE = M1.OMNIVORE
+M1_METALLIVORE = M1.METALLIVORE
+
+
+class M2(IntFlag):
+    """mflags2 bits (C: M2_*)."""
+    NOPOLY = 0x00000001
+    UNDEAD = 0x00000002
+    WERE = 0x00000004
+    HUMAN = 0x00000008
+    ELF = 0x00000010
+    DWARF = 0x00000020
+    GNOME = 0x00000040
+    ORC = 0x00000080
+    DEMON = 0x00000100
+    MERC = 0x00000200
+    LORD = 0x00000400
+    PRINCE = 0x00000800
+    MINION = 0x00001000
+    GIANT = 0x00002000
+    SHAPESHIFTER = 0x00004000
+    MALE = 0x00010000
+    FEMALE = 0x00020000
+    NEUTER = 0x00040000
+    PNAME = 0x00080000
+    HOSTILE = 0x00100000
+    PEACEFUL = 0x00200000
+    DOMESTIC = 0x00400000
+    WANDER = 0x00800000
+    STALK = 0x01000000
+    NASTY = 0x02000000
+    STRONG = 0x04000000
+    ROCKTHROW = 0x08000000
+    GREEDY = 0x10000000
+    JEWELS = 0x20000000
+    COLLECT = 0x40000000
+    MAGIC = 0x80000000
+
+
+M2_NOPOLY = M2.NOPOLY
+M2_UNDEAD = M2.UNDEAD
+M2_WERE = M2.WERE
+M2_HUMAN = M2.HUMAN
+M2_ELF = M2.ELF
+M2_DWARF = M2.DWARF
+M2_GNOME = M2.GNOME
+M2_ORC = M2.ORC
+M2_DEMON = M2.DEMON
+M2_MERC = M2.MERC
+M2_LORD = M2.LORD
+M2_PRINCE = M2.PRINCE
+M2_MINION = M2.MINION
+M2_GIANT = M2.GIANT
+M2_SHAPESHIFTER = M2.SHAPESHIFTER
+M2_MALE = M2.MALE
+M2_FEMALE = M2.FEMALE
+M2_NEUTER = M2.NEUTER
+M2_PNAME = M2.PNAME
+M2_HOSTILE = M2.HOSTILE
+M2_PEACEFUL = M2.PEACEFUL
+M2_DOMESTIC = M2.DOMESTIC
+M2_WANDER = M2.WANDER
+M2_STALK = M2.STALK
+M2_NASTY = M2.NASTY
+M2_STRONG = M2.STRONG
+M2_ROCKTHROW = M2.ROCKTHROW
+M2_GREEDY = M2.GREEDY
+M2_JEWELS = M2.JEWELS
+M2_COLLECT = M2.COLLECT
+M2_MAGIC = M2.MAGIC
+
+
+class M3(IntFlag):
+    """mflags3 bits (C: M3_*)."""
+    WANTSAMUL = 0x0001
+    WANTSBELL = 0x0002
+    WANTSBOOK = 0x0004
+    WANTSCAND = 0x0008
+    WANTSARTI = 0x0010
+    WANTSALL = WANTSAMUL | WANTSBELL | WANTSBOOK | WANTSCAND | WANTSARTI
+    WAITFORU = 0x0040
+    CLOSE = 0x0080
+    COVETOUS = 0x001f  # == WANTSALL (C defines the same value twice)
+    WAITMASK = WAITFORU | CLOSE
+    INFRAVISION = 0x0100
+    INFRAVISIBLE = 0x0200
+    DISPLACES = 0x0400
+
+
+M3_WANTSAMUL = M3.WANTSAMUL
+M3_WANTSBELL = M3.WANTSBELL
+M3_WANTSBOOK = M3.WANTSBOOK
+M3_WANTSCAND = M3.WANTSCAND
+M3_WANTSARTI = M3.WANTSARTI
+M3_WANTSALL = M3.WANTSALL
+M3_WAITFORU = M3.WAITFORU
+M3_CLOSE = M3.CLOSE
+M3_COVETOUS = M3.COVETOUS
+M3_WAITMASK = M3.WAITMASK
+M3_INFRAVISION = M3.INFRAVISION
+M3_INFRAVISIBLE = M3.INFRAVISIBLE
+M3_DISPLACES = M3.DISPLACES
+
+
+class MSize(IntEnum):
+    """Physical size (C: MZ_*; permonst.msize is 3 bits)."""
+    TINY = 0
+    SMALL = 1
+    MEDIUM = 2
+    HUMAN = MEDIUM  # human-sized (C: MZ_HUMAN MZ_MEDIUM)
+    LARGE = 3
+    HUGE = 4
+    GIGANTIC = 7
+
+
+MZ_TINY = MSize.TINY
+MZ_SMALL = MSize.SMALL
+MZ_MEDIUM = MSize.MEDIUM
+MZ_HUMAN = MSize.HUMAN
+MZ_LARGE = MSize.LARGE
+MZ_HUGE = MSize.HUGE
+MZ_GIGANTIC = MSize.GIGANTIC
+
+
+class MSound(IntEnum):
+    """Sound made (C: enum ms_sounds; permonst.msound is 6 bits)."""
+    SILENT = 0
+    BARK = 1
+    MEW = 2
+    ROAR = 3
+    BELLOW = 4
+    GROWL = 5
+    SQEEK = 6
+    SQAWK = 7
+    CHIRP = 8
+    HISS = 9
+    BUZZ = 10
+    GRUNT = 11
+    NEIGH = 12
+    MOO = 13
+    WAIL = 14
+    GURGLE = 15
+    BURBLE = 16
+    TRUMPET = 17
+    ANIMAL = TRUMPET  # "up to here are animal noises" (C: MS_ANIMAL)
+    SHRIEK = 18
+    BONES = 19
+    LAUGH = 20
+    MUMBLE = 21
+    IMITATE = 22
+    WERE = 23
+    ORC = 24
+    HUMANOID = 25
+    ARREST = 26
+    SOLDIER = 27
+    GUARD = 28
+    DJINNI = 29
+    NURSE = 30
+    SEDUCE = 31
+    VAMPIRE = 32
+    BRIBE = 33
+    CUSS = 34
+    RIDER = 35
+    LEADER = 36
+    NEMESIS = 37
+    GUARDIAN = 38
+    SELL = 39
+    ORACLE = 40
+    PRIEST = 41
+    SPELL = 42
+    BOAST = 43
+    GROAN = 44
+    FERRY = 45  # see module docstring: not in the pinned monflag.h
+
+
+MS_SILENT = MSound.SILENT
+MS_BARK = MSound.BARK
+MS_MEW = MSound.MEW
+MS_ROAR = MSound.ROAR
+MS_BELLOW = MSound.BELLOW
+MS_GROWL = MSound.GROWL
+MS_SQEEK = MSound.SQEEK
+MS_SQAWK = MSound.SQAWK
+MS_CHIRP = MSound.CHIRP
+MS_HISS = MSound.HISS
+MS_BUZZ = MSound.BUZZ
+MS_GRUNT = MSound.GRUNT
+MS_NEIGH = MSound.NEIGH
+MS_MOO = MSound.MOO
+MS_WAIL = MSound.WAIL
+MS_GURGLE = MSound.GURGLE
+MS_BURBLE = MSound.BURBLE
+MS_TRUMPET = MSound.TRUMPET
+MS_ANIMAL = MSound.ANIMAL
+MS_SHRIEK = MSound.SHRIEK
+MS_BONES = MSound.BONES
+MS_LAUGH = MSound.LAUGH
+MS_MUMBLE = MSound.MUMBLE
+MS_IMITATE = MSound.IMITATE
+MS_WERE = MSound.WERE
+MS_ORC = MSound.ORC
+MS_HUMANOID = MSound.HUMANOID
+MS_ARREST = MSound.ARREST
+MS_SOLDIER = MSound.SOLDIER
+MS_GUARD = MSound.GUARD
+MS_DJINNI = MSound.DJINNI
+MS_NURSE = MSound.NURSE
+MS_SEDUCE = MSound.SEDUCE
+MS_VAMPIRE = MSound.VAMPIRE
+MS_BRIBE = MSound.BRIBE
+MS_CUSS = MSound.CUSS
+MS_RIDER = MSound.RIDER
+MS_LEADER = MSound.LEADER
+MS_NEMESIS = MSound.NEMESIS
+MS_GUARDIAN = MSound.GUARDIAN
+MS_SELL = MSound.SELL
+MS_ORACLE = MSound.ORACLE
+MS_PRIEST = MSound.PRIEST
+MS_SPELL = MSound.SPELL
+MS_BOAST = MSound.BOAST
+MS_GROAN = MSound.GROAN
+MS_FERRY = MSound.FERRY
+
+# monster body weights (weight.h; named constants, not an enum)
+WT_ETHEREAL = 0
+WT_JELLY = 50
+WT_ELF = 800
+WT_HUMAN = 1450
+WT_BABY_DRAGON = 1500
+WT_DRAGON = 4500
+WT_NYMPH = 600
+
+# alignment (align.h).  A_* are the bounds of the aligntyp scale, not
+# a closed set: permonst.maligntyp stores degrees (e.g. -7, 4), so it
+# stays a plain int.
+A_NONE = -128
+A_CHAOTIC = -1
+A_NEUTRAL = 0
+A_LAWFUL = 1
+
+NORMAL_SPEED = 12
+
+
+class MGender(IntEnum):
+    """Name gender (C: enum mgender)."""
+    MALE = 0
+    FEMALE = 1
+    NEUTRAL = 2
+
+
+MALE = MGender.MALE
+FEMALE = MGender.FEMALE
+NEUTRAL = MGender.NEUTRAL
+NUM_MGENDERS = 3
+
+# monster race aliases (monflag.h MH_*, == the M2_* kind bits)
+MH_HUMAN = M2.HUMAN
+MH_ELF = M2.ELF
+MH_DWARF = M2.DWARF
+MH_GNOME = M2.GNOME
+MH_ORC = M2.ORC
+
+
+class Geno(IntFlag):
+    """mons[].geno bits (C: G_*, the constant part)."""
+    UNIQ = 0x1000
+    NOHELL = 0x0800
+    HELL = 0x0400
+    NOGEN = 0x0200
+    SGROUP = 0x0080
+    LGROUP = 0x0040
+    GENO = 0x0020
+    NOCORPSE = 0x0010
+    IGNORE = 0x8000  # mkclass() argument; never stored in mons[].geno
+
+
+G_UNIQ = Geno.UNIQ
+G_NOHELL = Geno.NOHELL
+G_HELL = Geno.HELL
+G_NOGEN = Geno.NOGEN
+G_SGROUP = Geno.SGROUP
+G_LGROUP = Geno.LGROUP
+G_GENO = Geno.GENO
+G_NOCORPSE = Geno.NOCORPSE
+G_IGNORE = Geno.IGNORE
+G_FREQ = 0x0007  # creation frequency mask, not a flag
+
+
+class MvitalsFlag(IntFlag):
+    """mvitals[].mvflags bits (C: G_KNOWN & friends, monflag.h)."""
+    EXTINCT = 0x01
+    GENOD = 0x02
+    KNOWN = 0x04
+    KNOWS_EGG = 0x08  # C: MV_KNOWS_EGG
+    GONE = GENOD | EXTINCT
+
+
+G_KNOWN = MvitalsFlag.KNOWN
+G_GENOD = MvitalsFlag.GENOD
+G_EXTINCT = MvitalsFlag.EXTINCT
+G_GONE = MvitalsFlag.GONE
+MV_KNOWS_EGG = MvitalsFlag.KNOWS_EGG
+
+# ------------------------------------------------------------
+# Monster numbering (permonst.h enum monnums)
+# ------------------------------------------------------------
+
+NON_PM = -1
+LOW_PM = NON_PM + 1          # 0
+LEAVESTATUE = NON_PM - 1     # -2
+
+
+# ------------------------------------------------------------
+# Structures (permonst.h)
+# ------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Attack:
+    """One attack form (C: struct attack)."""
+    aatyp: AtkType
+    adtyp: DmgType
+    damn: int
+    damd: int
+
+
+@dataclass(frozen=True)
+class PerMonst:
+    """One monster type (C: struct permonst, 5.0 field order).
+
+    pmnames: (male, female, neutral); male/female are None for
+    single-name monsters (C NAM()).
+    maligntyp: alignment degree, not just A_* (the table stores
+    values like -7 and 4), so a plain int.
+    geno: Geno bits | G_FREQ (C: unsigned short).
+    """
+    pmnames: tuple[str | None, str | None, str]
+    pmidx: int
+    mlet: MonsterClass        # S_* class index (5.0)
+    mlevel: int
+    mmove: int
+    ac: int
+    mr: int
+    maligntyp: int
+    geno: int
+    mattk: tuple[Attack, ...]
+    cwt: int
+    cnutrit: int
+    msound: MSound
+    msize: MSize
+    mresists: MR
+    mconveys: MR
+    mflags1: M1
+    mflags2: M2
+    mflags3: M3
+    difficulty: int
+    mcolor: int
+
+
+# C: NO_ATTK -- the all-zero no-attack row (monst.c)
+NO_ATK = Attack(AtkType.NONE, DmgType.PHYS, 0, 0)
+
+
+def _nam(name: str) -> tuple[str | None, str | None, str]:
+    return (None, None, name)
+
+
+def _mon(pmidx, mlet, name, lvl, mov, ac, mr, aln, geno,
+         a1, a2, a3, a4, a5, a6, wt, nut, snd, siz, res, conv,
+         f1, f2, f3, diff, col) -> PerMonst:
+    return PerMonst(
+        _nam(name), pmidx, mlet, lvl, mov, ac, mr, aln, geno,
+        (a1, a2, a3, a4, a5, a6), wt, nut, snd, siz, res, conv,
+        f1, f2, f3, diff, col,
+    )
+
+
+NUMMONS = 383
+HIGH_PM = NUMMONS - 1
+# mons[SPECIAL_PM..HIGH_PM] are never generated randomly and cannot be
+# polymorphed into (permonst.h)
+SPECIAL_PM = 330
+
+# PM_ identifiers the game code refers to (subset + anchors)
+PM_COCKATRICE = 10
+PM_IMP = 52
+PM_QUASIT = 54
+PM_KOBOLD = 59
+PM_LARGE_KOBOLD = 60
+PM_LEPRECHAUN = 63
+PM_LARGE_MIMIC = 65
+PM_WOOD_NYMPH = 67
+PM_GOBLIN = 70
+PM_HOBGOBLIN = 71
+PM_HILL_ORC = 73
+PM_SEWER_RAT = 88
+PM_GIANT_RAT = 89
+PM_CAVE_SPIDER = 94
+PM_CENTIPEDE = 95
+PM_GIANT_SPIDER = 96
+PM_XAN = 117
+PM_YELLOW_LIGHT = 118
+PM_ZRUTY = 120
+PM_BAT = 126
+PM_GIANT_BAT = 127
+PM_GRAY_DRAGON = 143
+PM_BLACK_DRAGON = 149
+PM_YELLOW_DRAGON = 152
+PM_FIRE_ELEMENTAL = 155
+PM_HILL_GIANT = 171
+PM_OGRE = 203
+PM_GARTER_SNAKE = 214
+PM_SNAKE = 215
+PM_TROLL = 220
+PM_VAMPIRE = 226
+PM_WRAITH = 230
+PM_OWLBEAR = 235
+PM_KOBOLD_ZOMBIE = 239
+PM_HUMAN_ZOMBIE = 244
+PM_GHOUL = 246
+PM_SKELETON = 248
+PM_FLESH_GOLEM = 255
+PM_STONE_GOLEM = 257
+PM_GHOST = 287
+PM_MAIL_DAEMON = 314
+PM_LONG_WORM_TAIL = 330

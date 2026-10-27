@@ -1,3 +1,191 @@
+# Changes: ObjType is a literal enum (core/objects_enum.py)
+
+Pending git push.  No behaviour change: the members and their values
+are identical (asserted at import), the C numbering is untouched and
+the suite (391 tests) passes unmodified.
+
+## Why
+
+The typing baseline below left 283 errors, all of them one systematic
+problem: `"type[ObjType]" has no attribute "DAGGER"` -- and 282 more
+like it, in 11 files.  `core/weapon.py` had 165, `o_init.py` 31,
+`worldgen.py` 27, `worn.py` 21, `rings.py` and `hunger.py` 11 each.
+
+`ObjType` was built with the functional API:
+
+    ObjType = IntEnum("ObjType", {n: i for i, n in enumerate(NAMES)})
+
+so its members exist only at run time and a type checker sees a bare
+`type[ObjType]` with no attributes.  Nothing at the use sites can fix
+that: an annotation says what a name holds, and the problem is that
+the members are unknowable.  Reading the names from a data table does
+not help either -- `IntEnum("ObjType", NAMES)` is not a literal, and
+mypy rejects it with *"Second argument of IntEnum() must be string,
+tuple, list or dict literal for mypy to determine Enum members"*.
+What mypy does read statically is a literal class body.
+
+## What
+
+`core/objects_enum.py` is new, and holds the enum spelled out -- one
+member per line, in C order, with the comments that group the table
+(weapons / armor / rings / ... / misc):
+
+```python
+class ObjType(IntEnum):
+    STRANGE_OBJECT = 0          # C: slot 0, the real strange object
+    GENERIC_ILLOBJ = auto()     # C: slots [1..17], the generic class
+    ...                         #     placeholders
+    ACID_VENOM = auto()         # C: 479
+```
+
+The C markers that close OBJECTS_ENUM (`LAST_GENERIC`, `FIRST_OBJECT`,
+`FIRST_AMULET`, `LAST_SPELL`, ..., `NUM_OBJECTS`) are defined there too
+-- they are plain ints read off the members, exactly as before -- plus
+the `O` alias.  `objects.py` re-exports all of it, `__all__` is
+unchanged, so no importer was touched.
+
+`core/objects.py` keeps the assembly (`BASES`, `object_type()`, the
+import-time sanity checks).  Its `_validate()` gained the guard that
+makes the double expansion safe: the enum (objects_enum) and the name
+column (objects_data) are the same C table expanded twice -- which is
+what the C preprocessor does -- and the two must agree on names, order
+and values or the import fails.  Only `STRANGE_OBJECT` needs an
+explicit value; the rest is `auto()` (the C enum's implicit previous +
+1), so a new row means one new name, not 480 renumbered integers.
+
+## Result
+
+| | before | after |
+|---|---|---|
+| mypy errors | 283 | **0** |
+| files with errors | 11 | 0 |
+| source files checked | 66 | 67 (`+objects_enum.py`) |
+
+`mypy` with no arguments now reports *"Success: no issues found in 67
+source files"*.
+
+Typing the enum for real immediately surfaced three genuine mismatches
+that the `Any` had been hiding: `_ABILITY_RING` (`core/rules.py` and
+its copy in `core/rings.py`) is keyed by `ObjType` members but looked
+up with `Item.otyp`, a plain `int`.  Both mappings are now
+`Dict[int, str]`, which is what the table-driven code uses everywhere
+(an `IntEnum` member *is* its int at run time, so the lookups behave
+exactly as before).
+
+## Files changed
+
+| file | change |
+|---|---|
+| `core/objects_enum.py` | **new** -- the literal `ObjType` enum (480 members), the C enum markers, the `O` alias |
+| `core/objects.py` | the functional `IntEnum(...)` and the markers move out; re-exports them; `_validate()` asserts the enum agrees with `_OBJTYPE_NAMES`; docstring |
+| `core/objects_data.py` | docstring: `_OBJTYPE_NAMES` is the name column, cross-checked against the enum |
+| `core/rules.py` | `_ABILITY_RING: Dict[int, str]` (was inferred `dict[ObjType, str]`) |
+| `core/rings.py` | the same for its `_ABILITY_RING` copy |
+| `mypy.ini` | the default config, written around the two structural fixes |
+| `README.md` | the "Type check" section |
+| `CHANGES.md` | this file |
+
+## Suggested commit sequence (house style: one commit per task)
+
+1. `objects: the ObjType enum as a literal class body
+   (core/objects_enum.py) so mypy can see its 480 members`
+   (core/objects_enum.py new, core/objects.py, core/objects_data.py,
+   core/rules.py, core/rings.py)
+2. `mypy: default mypy.ini + the zero-error baseline`
+   (mypy.ini, README.md, CHANGES.md)
+
+---
+
+# Changes: typing baseline (module split + mypy.ini)
+
+Pending git push.  No behaviour change: the modules were moved, not
+edited -- the table contents, the C numbering and the RNG draw order
+are untouched and the suite (391 tests) passes unmodified.
+
+## Why
+
+`mypy` on the project reported 1366 errors, 1083 of them the same
+systematic one: `Cannot determine type of "HI_METAL"` (and 1082 more
+like it) throughout `core/objects_data.py` and `core/monst_data.py`.
+The cause was an import cycle -- `objects.py` imported its table back
+from `objects_data.py`, which imported the constants and the builders
+from `objects.py` -- so a type checker could not determine the type of
+a module-level constant read from a module it was still analysing.
+The alternative fix was an explicit annotation (`HI_METAL: int = ...`)
+on every one of those C constants.
+
+Instead the file structure now mirrors the C source, which *declares*
+in the headers and *defines* in the .c table:
+
+| module | C counterpart | contents |
+|---|---|---|
+| `objects_defs.py` | objects.h + objclass.h, prop.h, skills.h, defsym.h, color.h | the enums and constants, `Object` (struct objclass), the `_*` builders (the objects.h row macros) |
+| `objects_data.py` | objects.c | `_OBJTYPE_NAMES` + `OBJECTS` (moved verbatim) |
+| `objects.py` | -- | the public API: `ObjType`, the C enum markers, `BASES`, `object_type()`, the sanity checks; re-exports everything else |
+| `monst_defs.py` | monsters.h + monflag.h, permonst.h | the enums and the C-style aliases, `Attack` / `PerMonst`, `_mon` (MON()), the PM_* anchors |
+| `monst_data.py` | monst.c | `PM_NAMES` + `SUBSET_PM` + `MONS` (moved verbatim) |
+| `monst.py` | -- | the public API: the accessors + `_validate()`; re-exports everything else |
+
+The chain is one-way -- `*_data` -> `*_defs` -> (nothing), and the API
+module imports both -- so every C-like integer constant stays a plain
+inferred `int` with no annotation anywhere.
+
+## Result
+
+| | before | after |
+|---|---|---|
+| mypy errors | 1366 | 283 |
+| `has-type` (cannot determine type) | 1083 | 0 |
+| `attr-defined` (dynamic `ObjType` members) | 283 | 283 |
+
+The remaining 283 were the *other* systematic problem, untouched by
+this split: `ObjType` built with the functional `IntEnum("ObjType",
+{...})` API, which hides its 480 members from mypy.  They are gone
+too -- see "ObjType is a literal enum" at the top of this file.
+
+## Files changed
+
+| file | change |
+|---|---|
+| `core/objects_defs.py` | **new** -- the declarations moved out of objects.py (verbatim) |
+| `core/objects.py` | now the API module: re-exports objects_defs, assembles `ObjType` / `BASES`, keeps `_validate()` + `object_type()`; the late `noqa: E402` import is gone (no cycle to work around) |
+| `core/objects_data.py` | imports from `.objects_defs` instead of `.objects`; docstring |
+| `core/monst_defs.py` | **new** -- the declarations moved out of monst.py (verbatim) |
+| `core/monst.py` | now the API module: re-exports monst_defs (including the PM_* anchors, which stay outside `__all__`), keeps the accessors + `_validate()` |
+| `core/monst_data.py` | imports from `.monst_defs` instead of `.monst`; docstring |
+| `mypy.ini` | **new** -- the project baseline (see below) |
+| `requirements-dev.txt` | `mypy>=2.0` |
+| `README.md` | the "Type check" section + the three-way table split |
+| `CHANGES.md` | this file |
+
+No other files changed.  Every name reachable as `core.objects.X` /
+`core.monst.X` before is still reachable (both `__all__`s are
+unchanged), so no importer was touched.
+
+## The new mypy.ini
+
+Deliberately mypy's defaults plus the file set, nothing else: `mypy`
+with no arguments now checks `core, ui, tests, main.py, conftest.py`
+(the same set the counting helper used), `cache_dir` is the existing
+`.mypy_cache`, and `warn_unused_configs` / `show_error_codes` /
+`pretty = False` keep the output stable for counting.  No suppression
+of any error code -- the count is the point.  The strict flags
+(`check_untyped_defs` first: most C-port builders are varargs-shaped on
+purpose) are listed at the bottom of the file, commented out, to be
+switched on one at a time as the count reaches zero.
+
+## Suggested commit sequence (house style: one commit per task)
+
+1. `objects: split the declarations (objects_defs.py) out of objects.py
+   so the table no longer imports the module that assembles it`
+   (core/objects_defs.py new, core/objects.py, core/objects_data.py)
+2. `monst: same split -- monst_defs.py` (core/monst_defs.py new,
+   core/monst.py, core/monst_data.py)
+3. `mypy: add the project mypy.ini baseline + the README section`
+   (mypy.ini new, requirements-dev.txt, README.md, CHANGES.md)
+
+---
+
 # Changes: stairs system (the multi-level dungeon)
 
 Pending git push.  Summary of the working-tree state as of this

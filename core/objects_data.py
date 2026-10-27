@@ -5,23 +5,26 @@ objects.py, kept verbatim:
 
 - `_OBJTYPE_NAMES` -- the ObjType member names, in C order (index
                       0 is the real strange object, indices 1..17
-                      the generic class placeholders); core.objects
-                      turns them into the ObjType IntEnum
+                      the generic class placeholders).  The enum
+                      itself is objects_enum.py; the two are the same
+                      C table expanded twice (names here, enum there)
+                      and core.objects._validate() asserts they agree
 - `OBJECTS`        -- the object table (C: struct object objects[]);
                       the rows are written in exactly the order of
                       include/objects.h so the index of every row
                       equals its ObjType value
 
-The rows are built with the `Object` dataclass, the builder
-functions and the constants that core.objects defines, so this
-module imports them from there; core.objects in turn imports the
-two tables back from here -- late in the module, once those
-definitions are available.  Import core.objects, the public API;
-don't import this module directly.
+The rows are built with the `Object` dataclass, the builder functions
+and the constants that core.objects_defs defines, so this module
+imports them from there -- and only from there.  That one-way import
+is what keeps the constant types inferable (see the objects_defs
+docstring): objects_data -> objects_defs, and core.objects imports
+both.  Import core.objects, the public API; don't import this module
+directly.
 """
 from __future__ import annotations
 
-from .objects import (
+from .objects_defs import (
     ARM_SHIRT, ARM_SUIT,
     CLR_BLACK, CLR_BLUE, CLR_BRIGHT_BLUE, CLR_BRIGHT_CYAN,
     CLR_BRIGHT_GREEN, CLR_BRIGHT_MAGENTA, CLR_BROWN, CLR_CYAN,

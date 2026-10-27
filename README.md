@@ -64,3 +64,35 @@ The tests are deterministic: the core takes an injected
 `random.Random` (or any object with `randint`/`choice`), and `tests`
 includes a `SeqRng` helper for exact roll-by-roll control.
 
+## Type check
+
+```
+pip install -r requirements-dev.txt
+mypy              # run from the repo root; reads mypy.ini
+```
+
+`mypy.ini` pins what a bare `mypy` checks (`core`, `ui`, `tests`,
+`main.py`, `conftest.py`) and stays at mypy's defaults on purpose: the
+port is typed only as far as the C transcription allows, so the strict
+flags are switched on one at a time as the error count reaches zero
+(the list is at the bottom of the file).
+
+The C tables -- `core/objects*.py` and `core/monst*.py` -- are split
+by role: the declarations (`*_defs.py`: the enums, the constants, the
+row types and the row-macro builders), the table data (`*_data.py`)
+and the public API (`objects.py` / `monst.py`, which adds the derived
+indices and accessors).  That one-way chain (`*_data` -> `*_defs`,
+api -> both) is what keeps the C-style integer constants plain and
+annotation-free: with the declarations and the table in one module the
+two import each other, and a type checker cannot determine the type of
+a constant read from a module it is still analysing.
+
+The one member of that family with a module of its own is
+`core/objects_enum.py`: the 480-member `ObjType` enum (C:
+OBJECTS_ENUM).  It is a literal class body -- one member per line, C
+order, `auto()` values -- because that is the only form a type checker
+can read the members from.  Built with the functional API from a name
+table the members exist only at run time, so `ObjType.DAGGER` would be
+an error at every one of its ~280 uses, and no annotation on the use
+sites can help.  The count now stands at zero.
+

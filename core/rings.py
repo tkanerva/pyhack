@@ -78,7 +78,7 @@ Simplifications (documented, not bugs):
 """
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from .events import DiscoveryEvent, Event, MessageEvent
 from .o_init import typename
@@ -114,8 +114,10 @@ _ABILITY_WORD = {
     "cha": ("charismatic", "repulsive"),
 }
 
-# C: the do_wear.c RIN_* -> adjust_attrib(A_*, spe) cases.
-_ABILITY_RING = {
+# C: the do_wear.c RIN_* -> adjust_attrib(A_*, spe) cases.  Keyed by
+# otyp (a plain int: Item.otyp is one, and the ObjType members are
+# IntEnum values).
+_ABILITY_RING: Dict[int, str] = {
     O.RIN_GAIN_STRENGTH: "str",
     O.RIN_GAIN_CONSTITUTION: "con",
     O.RIN_ADORNMENT: "cha",

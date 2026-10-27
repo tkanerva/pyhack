@@ -8,7 +8,7 @@ depends on the global RNG.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from . import o_init
 from .events import (DamageEvent, DeathEvent, DiscoveryEvent, Event,
@@ -260,10 +260,12 @@ def tick_actor(world: World, actor_id: str, rng) -> List[Event]:
 
 # C: the ability a ring's adjust_attrib(A_*, spe) changes.  Only the
 # three do_wear.c cases exist; dexterity / wisdom / intelligence have no
-# ring in the C table.
-_ABILITY_RING = {O.RIN_GAIN_STRENGTH: "str",
-                 O.RIN_GAIN_CONSTITUTION: "con",
-                 O.RIN_ADORNMENT: "cha"}
+# ring in the C table.  Keyed by otyp: Item.otyp is a plain int (like
+# every otyp in the table-driven code), and the ObjType members below
+# are IntEnum values, so they key the dict as their numbering.
+_ABILITY_RING: Dict[int, str] = {O.RIN_GAIN_STRENGTH: "str",
+                                  O.RIN_GAIN_CONSTITUTION: "con",
+                                  O.RIN_ADORNMENT: "cha"}
 
 # C: the base-ability field on the Monster (you.h uchain[]), per the
 # ``which`` key.

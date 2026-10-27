@@ -16,15 +16,15 @@ monst.py, kept verbatim:
                  for the implemented subset, None elsewhere
 
 The rows are built with the `_mon` builder, the `Attack` / `PerMonst`
-dataclasses and the constants that core.monst defines, so this module
-imports them from there; core.monst in turn imports the three tables
-back from here -- late in the module, once those definitions are
-available.  Import core.monst, the public API; don't import this
-module directly.
+dataclasses and the constants that core.monst_defs defines, so this
+module imports them from there -- and only from there.  That one-way
+import is what keeps the constant types inferable (see the monst_defs
+docstring): monst_data -> monst_defs, and core.monst imports both.
+Import core.monst, the public API; don't import this module directly.
 """
 from __future__ import annotations
 
-from .monst import (
+from .monst_defs import (
     _mon,
     Attack,
     NO_ATK,
