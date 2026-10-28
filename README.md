@@ -12,20 +12,20 @@ the design rationale and the old-file → new-file mapping.
 
 ```
 core/            pure simulation (no I/O)
-  types.py         World, Monster, Trap, Item, Map, all enums
+  types.py         World, Monster, Trap, Item, Map, Stairway, all enums
   events.py        Event dataclasses (the "side effects out")
   commands.py      MoveCommand / WaitCommand / ZapCommand / ...
-  rules.py         dice, resistances, apply_damage, status tickers
-  traps.py         trap effect registry + trigger logic
-  zap.py           wand beams
-  potions.py       quaffing
-  scrolls.py       the read.c subset (five seffect_* + STUBs)
-  spells.py        spell beams / fireball
-  worn.py          armor slots (owornmask) + the computed effective AC
-  pickup.py        pick up the topmost item on your tile
-  stairs.py        the stairs system: '>' / '<', the level transition
   step.py          step(world, cmd, rng) -> [Event]   <- the heart
-  worldgen.py      deterministic demo-cave construction
+  rules.py         dice, resistances, apply_damage, status tickers,
+                   process_events (the event-apply choke point)
+  worldgen.py      the 3-level demo dungeon (lazy level generation)
+  traps.py  zap.py  potions.py  scrolls.py  spells.py  hunger.py
+  worn.py  rings.py  pickup.py  stairs.py  occupation.py
+  uhitm.py  mhitu.py  weapon.py  vision.py  energy.py  props.py
+  objects*.py  monst*.py  mondata*.py  o_init.py  items.py
+               the C tables (declarations / data / API split)
+  isaac64.py  rnd.py  hacklib*.py
+               the RNG core + the hacklib helpers
 ui/              console rendering + key input (the only I/O)
 main.py          ~40-line game loop gluing core to ui
 tests/           pytest suite
@@ -38,20 +38,24 @@ python main.py
 ```
 
 WASD / arrow keys to move, bump a monster to attack it, `g` to pick
-up, `w<letter>` to wear and `t<letter>` to take off, `r<letter>` to
-read a scroll (letters are the inventory letters on the screen), `q`
-to quit.  `>` goes down the stairs, `<` climbs back up: the dungeon
-has 3 levels, level 2+ generates on first visit and stays intact when
-you come back, and reaching the bottom level wins.  The `AC` on the
-status line is the computed effective AC: the hero starts at base 10
-wearing chain mail (effective 5) -- go get the floor armour.  `Pw` is
-spell power: casting a level-N book costs 5*N Pw, and it regens
-slowly.  The floor items wear their NetHack glyphs (the defsym.h
-object-class table) -- `?` scrolls, `)` weapons, `[` armour, `+`
-spell books, `/` wands, `>` / `<` the stairs.  The floor also carries
-the demo scrolls (enchant weapon /
-enchant armor, remove curse, teleportation, blank paper); the cursed
-floor cloak only comes off after a remove curse scroll.
+up, then `w` / `t` / `r` / `z` / `c` / `e` + an inventory letter to
+wear, take off, read a scroll, zap a wand, cast a book or eat a food
+(letters are the inventory letters on the screen; beam actions ask
+for a direction), `q` to quit.  `>` goes down the stairs, `<` climbs
+back up: the dungeon has 3 levels, level 2+ generates on first visit
+and stays intact when you come back, and reaching the bottom level
+wins.  The status line shows the computed effective `AC` (base 10
+minus the worn gear -- go get the floor armour), the spell `Pw` (a
+level-N book costs 5*N Pw, slow regen) and the hunger gauge: it
+drains 1/turn, fainting / starving / choking are live, and a big
+food is a multi-turn meal a nearby monster interrupts (eating the
+same item again resumes it).  The floor items wear their NetHack
+glyphs (the defsym.h object-class table) -- `?` scrolls, `)` weapons,
+`[` armour, `+` spell books, `/` wands, `>` / `<` the stairs.  The
+floor kit: the demo scrolls (enchant weapon/armor, remove curse,
+teleportation, blank paper), the wands (striking, cold) and the books
+(magic missile, cone of cold, healing); the cursed floor cloak only
+comes off after a remove curse scroll.
 
 ## Test
 
@@ -68,14 +72,15 @@ includes a `SeqRng` helper for exact roll-by-roll control.
 
 ```
 pip install -r requirements-dev.txt
-mypy              # run from the repo root; reads mypy.ini
+mypy              # run from the repo root
 ```
 
-`mypy.ini` pins what a bare `mypy` checks (`core`, `ui`, `tests`,
-`main.py`, `conftest.py`) and stays at mypy's defaults on purpose: the
-port is typed only as far as the C transcription allows, so the strict
-flags are switched on one at a time as the error count reaches zero
-(the list is at the bottom of the file).
+The config is in `pyproject.toml` under `[tool.mypy]`: it pins what a
+bare `mypy` checks (`core`, `ui`, `tests`, `main.py`, `conftest.py`)
+and disables the two error codes the C-style tables structurally
+produce (`has-type`, `attr-defined`); everything else is reported,
+and the strict flags are switched on one at a time as the error count
+reaches zero.
 
 The C tables -- `core/objects*.py` and `core/monst*.py` -- are split
 by role: the declarations (`*_defs.py`: the enums, the constants, the
@@ -91,8 +96,7 @@ The one member of that family with a module of its own is
 `core/objects_enum.py`: the 480-member `ObjType` enum (C:
 OBJECTS_ENUM).  It is a literal class body -- one member per line, C
 order, `auto()` values -- because that is the only form a type checker
-can read the members from.  Built with the functional API from a name
-table the members exist only at run time, so `ObjType.DAGGER` would be
-an error at every one of its ~280 uses, and no annotation on the use
-sites can help.  The count now stands at zero.
+can read the members from (the functional `IntEnum` API keeps the
+members run-time-only, so `ObjType.DAGGER` would be an error at every
+use site, and no annotation at the use sites can help).
 

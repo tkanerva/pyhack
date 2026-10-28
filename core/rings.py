@@ -53,9 +53,10 @@ type is learned):
 - RIN_INVISIBILITY / RIN_SEE_INVISIBLE -- the invisibility /
   see-invisible + mimic system;
 - RIN_WARNING / RIN_SEARCHING -- the monster-warning / search system;
-- RIN_HUNGER / RIN_SLOW_DIGESTION -- the hunger system (u.uhunger,
-  eat.c gethungry) is not ported; the property is conveyed by the worn
-  gear but nothing consumes it yet;
+- RIN_HUNGER / RIN_SLOW_DIGESTION -- the active hunger-drain
+  reduction is deferred (the hunger system itself is in core.hunger);
+  the property is conveyed by the worn gear but nothing consumes it
+  yet;
 - RIN_POLYMORPH / RIN_POLYMORPH_CONTROL / RIN_AGGRAVATE_MONSTER /
   RIN_CONFLICT -- the polymorph / monster-aggravation systems;
 - RIN_PROTECTION_FROM_SHAPE_CHAN -- the chameleon (restartcham) system;

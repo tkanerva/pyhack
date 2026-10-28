@@ -112,7 +112,7 @@ from .rules import process_events
 from .types import Monster, World
 from .weapon import bimanual, greatest_erosion, is_weptool
 
-O = ObjType
+O = ObjType  # noqa: E741  (the C-style O shorthand for the ObjType table)
 
 # you.h
 AC_MAX = 99  # abs(u.uac) <= 99; likewise for monster AC
@@ -1075,8 +1075,10 @@ def welded(item) -> bool:
 
 def stop_donning(world: World, mon: Monster) -> List[Event]:
     """STUB (C: stop_donning): abort a multi-turn don/doff.  Needs the
-    occupation / nomul machinery (PLAN-ARMOR.md phase 5)."""
-    raise NotImplementedError("stop_donning: the occupation system is not ported yet")
+    oc_delay don/doff occupation on top of core.occupation (the
+    occupation machinery itself is in; PLAN-ARMOR.md phase 5)."""
+    raise NotImplementedError(
+        "stop_donning: the multi-turn don/doff occupation is not ported yet")
 
 
 def inaccessible_equipment(mon: Monster) -> bool:

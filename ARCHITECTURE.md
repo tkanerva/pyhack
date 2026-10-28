@@ -12,16 +12,24 @@ turn. The core has **no I/O, no global state, and no broadcast bus**:
         v                                      v
    step(world, cmd, rng)  ---------------->  [Event, Event, ...]
         |
-        +-- movement / bump-attack     (step.py)
-        +-- traps                      (traps.py: TRAP_EFFECTS registry)
-        +-- zaps                       (zap.py)
-        +-- potions                    (potions.py)
-        +-- scrolls                    (scrolls.py: the read.c subset)
-        +-- spells                     (spells.py)
-        +-- wear / take off            (worn.py: slots + AC computation)
-        +-- pickup                     (pickup.py: the pickobj subset)
-        +-- rules                      (rules.py: dice, resist,
-                                        apply_damage, tick_actor)
+        +-- per-turn upkeep        (rules.tick_actor, energy.py,
+        |                          rings.tick_rings, hunger.py)
+        +-- movement / bump-attack (step.py; the C-port melee via
+        |                          uhitm.py / mhitu.py)
+        +-- traps                  (traps.py: TRAP_EFFECTS registry)
+        +-- zaps                   (zap.py)
+        +-- potions                (potions.py)
+        +-- scrolls                (scrolls.py: the read.c subset)
+        +-- spells                 (spells.py)
+        +-- eat                    (hunger.py; a multi-turn meal is the
+        |                          C occupation, ticked by occupation.py)
+        +-- wear / take off        (worn.py: slots + the computed AC)
+        +-- rings                  (rings.py: on/off + discovery)
+        +-- pickup                 (pickup.py: the pickobj subset)
+        +-- stairs                 (stairs.py: the do.c / dungeon.c subset)
+        +-- vision                 (vision.py: the vision.c port)
+        +-- rules                  (rules.py: dice, resist, apply_damage,
+                                        process_events)
 ```
 
 Events are frozen dataclasses. The UI renders `MessageEvent`s; tests
@@ -55,7 +63,7 @@ bus — and a recorded `(Command, [Event])` sequence *is* a replay.
 | `zap.py`      | `core/zap.py` |
 | `potion.py`   | `core/potions.py` |
 | `spell.py`    | `core/spells.py` |
-| `priest.py`, `pray.py` | **not ported yet** (see below) |
+| `priest.py`, `pray.py` | the broken sketches were dropped, never ported; the C originals (`src/priest.c`, `src/pray.c`) are still unported (see "Suggested next steps") |
 
 ## Behaviour decisions
 
@@ -63,9 +71,10 @@ bus — and a recorded `(Command, [Event])` sequence *is* a replay.
 `20 - AC` hit formula; all damage dice (1d6 pit, 1d12 spiked pit,
 1d6 fire, arrow 1d6 / dart 1d4 with `max(5, 20-AC)` hit chance,
 boulder 4..20); monster stats (Goblin 8/AC7/dmg2, Orc 15/AC5/dmg4,
-Bat 4/AC3/dmg1); hero 25 HP / AC5; 40x20 map with 15 interior walls;
-10 traps of the same four types; 9 monsters; `random` seed 42; the
-emoji log strings.
+Bat 4/AC3/dmg1); hero 25 HP, effective AC 5 (base 10 in the starting
+chain mail — the defence is now computed, see below); 40x20 level-1
+map with 15 interior walls; 10 traps of the same four types; 9
+monsters; `random` seed 42; the emoji log strings.
 
 **Fixed (latent bugs in the old code):**
 - Trap damage applied twice (see above) — regression test:
@@ -82,39 +91,20 @@ emoji log strings.
 - The broken blessed/cursed potion inversion (flipped on every quaff)
   is dropped.
 
-**Added (NetHack-faithful, small):**
-- The defence system (PLAN-ARMOR.md, Phases 1-3): worn state is the C
-  mechanism -- `Item.owornmask` (prop.h bitmask) + an inventory scan
-  (`worn.which_armor` / `setworn`); `Monster.ac` is the BASE body AC
-  and the effective AC is the computed `worn.uac()` (C `find_ac`:
-  base - the seven slots' ARM_BONUS - the spe of worn rings of
-  protection - 2 for a worn amulet of guarding, clamped to +/-99).
-  `mattacku`'s differential reads `AC_VALUE(uac)` (the roll happens
-  only for negative AC) and `hitmu`'s damage reduction reads the same
-  computed AC.  The hero (base AC 10) starts wearing chain mail --
-  effective AC 5, the old demo's defence; a cloak, gloves and a ring
-  of protection ride carried, and six floor armours (one cursed)
-  can be picked up (`g`), worn (`w<letter>`) and taken off
-  (`t<letter>`).  Phase 3 adds the mhitu.c defence details: `mhitu.magic_negation`
-  (the max worn a_can plus the worn amulet-of-guarding Protection
-  increment, capped at 3) and `mhitu.u_slip_free` (a greased / oilskin
-  cloak-suit-shirt -- or the helmet against brain drain -- sheds hug /
-  wrap attacks; cursed gear fails 1/3; the grease wears off 1/2 and
-  `Item.greased` is cleared) -- both implemented and tested, with no
-  live call site yet (they come live with the monster-zap / hug ports).
-  Phase 4 adds erosion (PLAN-ARMOR.md): `Item.oeroded` / `oeroded2` /
-  `oerodeproof`, the obj.h `ERODE_*` / `EF_*` / `ER_*` constants and
-  the material predicates in `worn.py`, the hero-facing
-  `worn.erode_obj` (grease protection, blessed 1/4 resistance,
-  destruction at MAX_ERODE clears the slot), the 5-way picks
-  `worn.erode_armor` / `worn.burnarmor`, and the filled
-  `disintegrate_arm` / `destroy_arm` (the destroy-armor scroll; no
-  call site yet -- the scroll port).  Erosion bites: the fire trap
-  burns worn gear and the acid passive attack corrodes the attacker's
-  (future) gear; `ARM_BONUS` and `uac` read the counters on every
-  query, so no cache invalidation.
+**Added (NetHack-faithful; the architectural choices — the session
+details live in the PLAN-*.md files and the module docstrings):**
+
+- Defence / armour (PLAN-ARMOR.md, Phases 1-4): the worn state is the
+  C mechanism — `Item.owornmask` (the prop.h bitmask) + an inventory
+  scan (`worn.which_armor` / `setworn`), no per-slot fields;
+  `Monster.ac` is the BASE body AC and the effective AC is the
+  computed `worn.uac()` (C `find_ac`), never cached; `mattacku`'s
+  differential reads `AC_VALUE(uac)` (the roll only for negative AC).
+  Phase 4 (erosion) is counters (`oeroded` / `oeroded2`) that
+  `ARM_BONUS` / `uac` read on every query — no cache invalidation;
+  the live call sites are the fire trap and the acid passive attack.
 - Bump-to-attack: walking into a monster attacks it (the old demo had
-  no hero attack at all, so the game was a death-watching exercise).  
+  no hero attack at all, so the game was a death-watching exercise).
   Hero melee uses the same hit formula with 1d2 damage.
 - A monster adjacent to the hero attacks instead of moving.
 - Sleep / stuck / confusion / poison now tick down each turn
@@ -123,111 +113,71 @@ emoji log strings.
 - Wands discharge (consume a charge) even when they hit a wall; beams
   stop at the first monster (NetHack behaviour; the old spell.py beam
   hit everything in range).
-- The demo now plays the committed C-port combat in both directions:
-  the demo monsters carry their PerMonst types (goblin / hill orc /
-  bat; monster->hero hits come from the mhitu attack tables) and the
-  hero starts wielding a short sword (the uhitm melee-weapon subset on
-  weapon.py's hitval / dmgval; backstab and the weapon special effects
-  are deferred).
-- The worn-gear side effects (stealth boots, cloaks of protection,
-  dragon-scale resistances, ...) are STUBs in `worn.py` pending the
-  intrinsic/extrinsic property system (PLAN-ARMOR.md decision 7 and
-  Phase 4/5); the AC effect of gear is already live via the computed
-  `uac`.
+- The demo plays the committed C-port combat in both directions: the
+  demo monsters carry their PerMonst types (goblin / hill orc / bat;
+  the monster->hero hits come from the mhitu attack tables) and the
+  hero starts wielding a short sword (the uhitm subset on
+  weapon.py's hitval / dmgval; backstab and the weapon special
+  effects are deferred).
+- Property system, the query half (core/props.py): C's `u.uprops[]`
+  split two ways — the intrinsic state is a set on the monster; the
+  extrinsic contribution of the worn gear is derived on every query
+  from the `owornmask` scan (the computed-never-cached style).  The
+  per-type `<Type>_on()` / `<Type>_off()` side effects and the
+  UP_BLOCKED / UP_TEMP / UP_ARTIFACT halves stay STUBs (the props.py
+  docstring).
 - Scroll reading (core/scrolls.py, the read.c port): `ReadCommand`
-  (C: 'R'/'r') + `read_scroll()`, the first five effects of C's
-  `seffects()` switch -- blank paper (not consumed, C: doread skips
-  useup), enchant weapon (chwepon: the +1 / blessed-rnd(3 - spe/3) /
-  spe>=9-0-or-1 amount, the soft +/-5 evaporate limit, the positive-
-  enchant uncurse, the high-spe vibration clue), enchant armor
-  (some_armor's cloak/suit/shirt -> helmet/gloves/boots/shield 3/4
-  swap, the elven vibration/evaporate warning, the (4-s)/2 base power
-  + elven / nonmagical / blessed bonuses, the BUC transfer), remove
-  curse (a cursed scroll only disintegrates; otherwise worn items --
-  carried items for a blessed scroll -- are uncursed silently, as
-  C's uncurse() does), teleportation (on the floor-tile set,
-  rules.teleport_to_floor -- the demo's single level collapses C's
-  cursed level-teleport and the blessed getpos destination).  The
-  demo floor gains five scrolls (FLOOR_SCROLLS, fixed positions, no
-  rng draws) and the console `r<letter>` key.  The remaining seventeen
-  C seffect_* handlers are STUBs (raise NotImplementedError when read;
-  the demo never carries them).
-- The elven test of the enchant-armor effects is by table name
-("elven ..."): the ported Object row carries no C OC_ELVEN flag;
-the test is exact over the demo's elven subset.  Note the C 5.0
-elven rows (elven mithril coat, elven leather helm) are NOT
-oc_magic, so they take BOTH the elven and the nonmagical power
-bonus.
-- Rings (PLAN-RING.md, `core/rings.py`): the worn state is the C
-  mechanism (`Item.owornmask`, `core.worn`), and `core.worn._type_on` /
-  `_type_off` dispatch the W_RING slots to `core.rings.ring_on` /
-  `ring_off` (the do_wear.c `Ring_on` / `Ring_off_or_gone` switch).  The
-  ring effects split two ways, both on the event model: (a) the
-  *discovery* is a new `core.events.DiscoveryEvent` (C learnring's
-  makeknown / observe_object) -- `ring_on` / `ring_off` are pure
-  **producers** that emit the intent, and the mutation of
-  `Item.dknown` / `Item.known` + the per-game `oc_name_known` /
-  `oc_encountered` (a `World.obj_tables` `o_init.ObjTables`, its own
-  deterministic rng stream) happens only in the core choke point
-  `core.rules.apply_discovery`, reached via `process_events` (which
-  `dowear` / `dotakeoff` now run their results through).  (b) the
-  ability a gain-ring changes is **computed, never cached** --
-  `core.rules.current_ability` returns the base plus the spe of the
-  worn ability ring (the `uac` style), and `core.uhitm`'s to-hit `abon`
-  reads it, so a worn strength / dexterity ring feeds to-hit; the AC of
-  a worn RIN_PROTECTION ring is likewise free (computed by `uac`).  The
-  per-turn effects (`core.rings.tick_rings`, called from `step` for hero
-  and monsters) implement RIN_REGENERATION (silent heal 1) and
-  RIN_TELEPORTATION (1/85 chance); the rest are STUBs -- levitation,
-  stealth, invisibility, see-invisible, warning, searching, hunger (no
-  hunger system), polymorph, and the accuracy / damage melee bonuses
-  (the full uhitm port) -- but their DISCOVERY still works and their
-  passive property is still conveyed via `core.props`.
-- The stairs system (PLAN-STAIRS.md, `core/stairs.py`): the dungeon is
-  now multi-level (3 levels in the demo).  Stairs are TERRAIN
-  (`TerrainType.STAIRS` + `Tile.stair_dir` STAIR_UP/STAIR_DOWN, C:
-  `levl[x][y].typ == STAIRS` + the `ladder` mask) plus per-level
-  STAIRWAY RECORDS (`World.stairs`, C: `gs.stairs`), rebuilt on every
-  level entry (`rebuild_stairs` scans the map -- the demo equivalent
-  of the `stairway_add` calls after `stairway_free_all`).  One
-  command: `StairsCommand(up)` (C: '>' -> `dodown`, '<' -> `doup`,
-  collapsed) -> `step()` -> `go_stairs()`, which does the C stair
-  lookup + the verbatim refusal lines ("You can't go up/down here.")
-  and the stuck refusal, then `goto_level()` (C: `do.c goto_level`,
-  demo subset): park the old level in `World.levels` (the getlev()
-  equivalent -- levels stay in memory, coming back up restores
-  everything), first visit -> `worldgen.generate_level` (C: `mklev()`,
-  the same rng stream, draw order: map -> down stair -> up stair ->
-  traps -> monsters, stair tiles reserved) else take the parked map
-  back, place the hero on the destination's matching staircase (C:
-  `u_on_dnstairs` / `u_on_upstairs`), the 50/50 arrival collision (C:
-  `u_collide_m`; an immovable monster is dropped, the demo has no
-  limbo), the vision reset/recalc, and the events (`LevelChangeEvent`
-  + "You descend/climb up the stairs." + the first-visit level line).
-  Reaching `World.max_lev` wins (`GameOverEvent`).  Level membership
-  on `Monster` / `Trap` / `Item` (`lev`) is filtered in exactly four
-  places: `World.monster_at`, `World.items_at`, `check_traps`, and
-  `step`'s monster loop (monsters on other levels are frozen).  The
-  old `TrapType.STAIRS_DOWN/UP` placeholders are gone (C has no
-  TT_STAIRS).  The level-1 down stairs sit at fixed `(20, 2)`
-  (reserved via keep_floor, zero rng draws -- the seed-42 layout and
-  draw sequence are untouched); the hero keeps the seeded `(20, 10)`
-  instead of starting on the stairs (C `newgame` deviation, house
-  rule).  Deferred (PLAN-STAIRS.md §5): digging, trap-door / portal
-  level destinations, fall damage, bones, regions, monster migration,
-  level save/restore, first-sight stair messages, ladders, branch
-  levels, treasure on levels 2..N.
+  (C: 'R'/'r') + `read_scroll()` implement the first five C
+  `seffects()` — blank paper, enchant weapon, enchant armor, remove
+  curse, teleportation; the remaining seventeen handlers are STUBs
+  (each with its C provenance in the module docstring).  The
+  teleport collapses C's cursed level-teleport and the blessed
+  getpos destination to the random floor-tile set.
+- Rings (PLAN-RING.md, core/rings.py): donning / doffing a ring is a
+  *producer* — `ring_on` / `ring_off` emit the `DiscoveryEvent` + the
+  attribute messages, and the identity mutation (`Item.dknown` /
+  `Item.known`, the per-game `oc_name_known` / `oc_encountered`) is
+  applied only in the core choke point `rules.apply_discovery` via
+  `process_events` (the DamageEvent / StatusEvent pattern).  The
+  ability an ability-ring changes is computed, never cached
+  (`rules.current_ability`, the `uac` style), so it feeds to-hit for
+  free; the per-turn effects are `rings.tick_rings`; the remaining
+  ring effects are STUBs (the rings.py docstring).
+- The stairs system (PLAN-STAIRS.md, core/stairs.py): stairs are
+  TERRAIN (`TerrainType.STAIRS` + `Tile.stair_dir`, C: the `ladder`
+  mask) plus per-level STAIRWAY RECORDS (`World.stairs`), not traps.
+  `World.map` is the CURRENT level; visited levels are parked in
+  `World.levels` (memory is the save file — coming back up restores
+  everything).  Entity level-membership (`Monster.lev` / `Trap.lev` /
+  `Item.lev`) is filtered in exactly four places (`World.monster_at`,
+  `World.items_at`, `check_traps`, `step`'s monster loop) — a missed
+  filter is a cross-level ghost.  Levels 2..N generate lazily in the
+  C mklev draw order; the transition mirrors C `goto_level`'s order;
+  reaching `World.max_lev` wins.  The deferred list is
+  PLAN-STAIRS.md §5.
+- The hunger system (PLAN-HUNGER.md, core/hunger.py): the C 5.0
+  0..2000 gauge + seven-state machine as data on `Monster`
+  (`uhunger` / `uhs` / `fainted`); the per-turn ticker runs in the
+  hero phase of `step` while the hero is fainted too (that is how a
+  faint deepens into starvation); a big food is the C occupation
+  (core/occupation.py) — the meal consumes the following turns, a
+  nearby monster interrupts it, and eating the same item again
+  resumes it.
 
 **Intentional simplifications (documented, not bugs):**
-- Monster AI is still a random walk — no awareness/line-of-sight yet.
+- Monster AI: a monster that can see the hero (the ported vision,
+  core/vision.py) chases with a greedy single step; the full
+  `mmove()` (doors, fleeing, remembered positions, M2_WANDER, waking
+  sleepers by sound) is future work.  A monster that cannot see the
+  hero random-walks (C: wander).
 - Web/pit "stuck" lasts 10 turns (NetHack: escape checks).
 - Spell study/learning mechanics dropped; books have charges only.
 - Spell damage is a flat 2d6 (the old `d6 * nd` referenced a stat that
   never existed).
-- `priest.py` / `pray.py` are currently broken sketches (undefined
-  attributes like `player.blindfolded`, a module-global `player`);
-  they should be ported *from the C originals* as core systems —
-  functions over `World` returning events — rather than refactored.
+- `src/priest.c` / `src/pray.c` are unported (the old Python sketches
+  were dropped, never ported); they land as core systems — functions
+  over `World` returning events — from the C originals (see
+  "Suggested next steps").
 
 ## Testing
 
@@ -242,19 +192,19 @@ bonus.
 
 ## Suggested next steps
 
-1. Wire `ZapCommand` / `QuaffCommand` / `CastCommand` into the console
-   UI (the systems exist and are tested; the hero just needs starting
-   inventory in `worldgen` and a few keys in `read_command`).
-2. Port `priest.py` / `pray.py` as systems (start from
-   `NetHack/NetHack/src/priest.c` and `pray.c`).
+1. Wire `QuaffCommand` into the console UI (zap / cast / eat are
+   already wired; `q` is the quit key in this demo, so the quaff key
+   is to choose).
+2. Port `src/priest.c` / `src/pray.c` as systems (start from the
+   local clone: `NetHack/src/priest.c` and `NetHack/src/pray.c`).
 3. Fill in the scroll STUBs in `core/scrolls.py` as their machinery
-   lands (the C provenance of each is in the module docstring; the
-   destroy-armor pair `worn.disintegrate_arm` / `destroy_arm` is
-   already real and tested, awaiting its `SCR_DESTROY_ARMOR` call
-   site).  Next candidates on existing machinery: SCR_DESTROY_ARMOR
-   (the scroll effect wrapper around the Phase-4 fill), SCR_LIGHT
-   (a `lit` flag on Tile), SCR_CONFUSE_MONSTER (rules.apply_confusion
-   over nearby monsters).
-4. Monster awareness/LOS for chases.
+   lands (the C provenance of each is in the module docstring).  Next
+   candidates on existing machinery: SCR_DESTROY_ARMOR (the wrapper
+   around the already-real `worn.disintegrate_arm` / `destroy_arm`),
+   SCR_LIGHT (a `lit` flag on Tile), SCR_CONFUSE_MONSTER
+   (rules.apply_confusion over nearby monsters).
+4. Full monster AI (`mmove()`) on the ported vision: doors, fleeing,
+   remembered positions, M2_WANDER (the greedy single-step chase is
+   in).
 5. If the system/entity matrix grows, evolve into a lightweight ECS —
    the events-out design stays the same.

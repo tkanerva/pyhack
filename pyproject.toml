@@ -1,0 +1,3 @@
+[tool.mypy]
+files = ["core", "ui", "tests", "main.py", "conftest.py"]
+disable_error_code = ["has-type", "attr-defined"]
