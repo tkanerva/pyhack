@@ -322,7 +322,7 @@ def test_mattacku_undead_at_midnight_deals_double_damage():
     z = _typed(PM_WRAITH, pos=(7, 4), hp=10)
     w.actors[z.id] = z
     w.midnight = True
-    ev = mattacku(w, z.id, SeqRng(1, 4, 4), midnight=True)  # hit 1; 4; +4
+    ev = mattacku(w, z.id, SeqRng(1, 4, 4))   # hit 1; die 4; +die 4
     amts = [e.amount for e in ev if isinstance(e, DamageEvent)
             and e.target == "player"]
     assert amts == [8]

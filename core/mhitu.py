@@ -302,7 +302,7 @@ def mtrapped_in_pit(mon: Monster) -> bool:
 # ------------------------------------------------------------
 
 def hitmu(world: World, mdat: PerMonst, mon: Monster, hero: Monster,
-          mattk: Attack, rng, midnight: bool = False) -> Tuple[List[Event], int]:
+          mattk: Attack, rng) -> Tuple[List[Event], int]:
     """The monster's attack landed on the hero (C: hitmu).
 
     Returns ``(events, damage)``: the ``DamageEvent`` / ``MessageEvent``
@@ -313,8 +313,10 @@ def hitmu(world: World, mdat: PerMonst, mon: Monster, hero: Monster,
     events: List[Event] = []
 
     # base damage d(damn, damd); undead at midnight deal it twice
+    # (C: midnight(), here World.midnight -- game state, read from the
+    # world like any other, not a parameter)
     dmg = _dice(rng, mattk.damn, mattk.damd)
-    if midnight and is_undead(mdat):
+    if world.midnight and is_undead(mdat):
         dmg += _dice(rng, mattk.damn, mattk.damd)
 
     # negative armor class reduces damage instead of fully protecting
@@ -444,7 +446,7 @@ def passiveum(world: World, mdat: PerMonst, hero: Monster, mon: Monster,
 # The main entry point (C: mattacku)
 # ------------------------------------------------------------
 
-def mattacku(world: World, mon_id: str, rng, midnight: bool = False) -> List[Event]:
+def mattacku(world: World, mon_id: str, rng) -> List[Event]:
     """The monster attacks the hero (C: mattacku).
 
     Runs the monster's full attack sequence against the hero and returns
@@ -506,8 +508,7 @@ def mattacku(world: World, mon_id: str, rng, midnight: bool = False) -> List[Eve
         j = _rnd(rng, 20 + i)
         if tmp > j:
             prev[i] = M_ATTK_HIT
-            hit_events, dmg = hitmu(world, mdat, mon, hero, mattk, rng,
-                                    midnight)
+            hit_events, dmg = hitmu(world, mdat, mon, hero, mattk, rng)
             events += hit_events
             hero_hp -= dmg
         else:
