@@ -9,8 +9,9 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from core.commands import (CastCommand, Command, EatCommand, MoveCommand,
-                           PickupCommand, ReadCommand, StairsCommand,
-                           TakeOffCommand, WaitCommand, WearCommand, ZapCommand)
+                           PickupCommand, QuaffCommand, ReadCommand,
+                           StairsCommand, TakeOffCommand, WaitCommand,
+                           WearCommand, ZapCommand)
 from core.hunger import HU_STAT
 from core.items import wielded_of
 from core.objects import DEF_OC_SYMS, ObjClass, class_glyph
@@ -58,10 +59,12 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     `t<letter>` to take off, `r<letter>` to read a scroll, `z<letter>`
     to zap a wand (+ the direction prompt), `c<letter>` to cast a
     spell (the direction prompt only for the beam spells -- the
-    self spells cast at once), `e<letter>` to eat a food (the letters
-    are the inventory letters shown in the screen's inventory line),
-    `>` to go down the stairs / `<` to climb up (C: the '>' / '<'
-    commands), `q` to quit; anything else is a wait.
+    self spells cast at once), `e<letter>` to eat a food, `q<letter>`
+    to quaff a potion (C: the lowercase 'q'; capital `Q` quits -- the
+    demo's old case-insensitive quit is now the capital only) (the
+    letters are the inventory letters shown in the screen's inventory
+    line), `>` to go down the stairs / `<` to climb up (C: the '>' / '<'
+    commands); anything else is a wait.
     """
     if world.occupation is not None:
         # C: while an occupation runs the bottom line shows the
@@ -69,9 +72,11 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
         # consumes the turn) -- any key is a wait
         input(f"You are {world.occupation.text}... (any key waits): ")
         return WaitCommand()
-    key = input(prompt).strip().lower()
-    if key == "q":
+    raw = input(prompt).strip()
+    # C: 'Q' (capital) quits; lowercase 'q' is the quaff command
+    if raw == "Q":
         return None
+    key = raw.lower()
     if key == "g":
         return PickupCommand()
     # the stair commands (C: '>' -> dodown, '<' -> doup); input().lower()
@@ -106,6 +111,12 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
                 return WaitCommand()
             if key[0] == "e":
                 return EatCommand(item_id)
+            if key[0] == "q":
+                item = world.items[item_id]
+                if (item.otype == ObjectType.POTION
+                        and item.potion_type is not None):
+                    return QuaffCommand(item_id)
+                return WaitCommand()
             return WaitCommand()
     if key in ARROWS:
         dx, dy = ARROWS[key]
@@ -145,7 +156,8 @@ def render(world: World, log: List[str]) -> str:
                           (ObjClass.ARMOR, "Armour"),
                           (ObjClass.SPBOOK, "Spell Book"),
                           (ObjClass.WAND, "Wand"),
-                          (ObjClass.FOOD, "Food"))))
+                          (ObjClass.FOOD, "Food"),
+                          (ObjClass.POTION, "Potion"))))
     lines.append("")
 
     hero_pos = world.hero.pos

@@ -24,11 +24,13 @@ def main() -> None:
     log: List[str] = []
 
     print("🎮 PyHack — functional core, events out")
-    print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | Q to quit")
+    print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | q<letter> quaff | Q to quit")
     print("   > go down the stairs | < climb back up: the dungeon has 3")
     print("   levels; level 2+ generates on first visit and stays intact when")
     print("   you come back.  Reaching the bottom level wins!")
     print("   r<letter> read a scroll | z<letter> zap a wand | c<letter> cast a spell")
+    print("   The floor carries a healing potion: pick it up (g) and")
+    print("   drink it with q<letter>.  Capital Q still quits.")
     print("   e<letter> eat a food (the demo floor carries an apple, an orange,")
     print("   a food ration and a melon -- pick them up with g first).  The big")
     print("   foods are a multi-turn meal (a food ration: 5 turns, first bite")

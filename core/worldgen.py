@@ -9,9 +9,9 @@ from .experience import init_experience
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType, W_ARM
 from .stairs import rebuild_stairs
-from .types import (Item, Map, Monster, ObjectType, Pos, ScrollType,
-                    SpellType, STAIR_DOWN, STAIR_UP, Tile, TerrainType, Trap,
-                    TrapType, WandType, World)
+from .types import (Item, Map, Monster, ObjectType, Pos, PotionType,
+                    ScrollType, SpellType, STAIR_DOWN, STAIR_UP, Tile,
+                    TerrainType, Trap, TrapType, WandType, World)
 from .vision import vision_init, vision_recalc, vision_reset
 from .weapon import P_SKILLED, Skill, Skills
 
@@ -86,6 +86,13 @@ FLOOR_FOODS: List[Tuple[Pos, str, ObjType]] = [
     ((21, 9), "melon", ObjType.MELON),
 ]
 
+# Demo floor potion at a FIXED position (reserved via generate_map):
+# the quaff-port demo kit -- one healing potion (POT_HEALING), zero
+# rng draws; charges=1 so quaff() can consume it.
+FLOOR_POTIONS: List[Tuple[Pos, str, ObjType, PotionType]] = [
+    ((25, 9), "healing potion", ObjType.POT_HEALING, PotionType.HEALING),
+]
+
 
 def generate_map(rng, width: int = 40, height: int = 20,
                  wall_count: int = 15,
@@ -125,6 +132,7 @@ def new_world(rng, width: int = 40, height: int = 20,
                      + [p for p, _, _, _, _ in FLOOR_WANDS]
                      + [p for p, _, _, _, _ in FLOOR_BOOKS]
                      + [p for p, _, _ in FLOOR_FOODS]
+                     + [p for p, _, _, _ in FLOOR_POTIONS]
                      + [LEVEL1_DN_STAIRS])
     # the level-1 down stairs: fixed position, zero rng draws; level 1
     # gets NO up stairs (C: dlevel == 1 -> no upstairs)
@@ -230,6 +238,14 @@ def new_world(rng, width: int = 40, height: int = 20,
     for i, (pos, name, otyp) in enumerate(FLOOR_FOODS):
         it = Item(id=f"food_{i}", otype=ObjectType.FOOD, name=name,
                   otyp=otyp.value, oclass=ObjClass.FOOD.value, pos=pos)
+        world.items[it.id] = it
+
+    # the demo floor potion (fixed position, see FLOOR_POTIONS above):
+    # fine identity (ObjLike) + effect tag for quaff dispatch
+    for i, (pos, name, otyp, ptype) in enumerate(FLOOR_POTIONS):
+        it = Item(id=f"potion_{i}", otype=ObjectType.POTION, name=name,
+                  otyp=otyp.value, oclass=ObjClass.POTION.value, pos=pos,
+                  potion_type=ptype, charges=1)
         world.items[it.id] = it
 
     floor = [p for p in m.floor_tiles() if p != HERO_POS]

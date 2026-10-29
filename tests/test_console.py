@@ -7,11 +7,12 @@ hero's spell power (Pw) both have to show up on the rendered screen.
 import random
 from typing import List
 
+from core.commands import QuaffCommand, WaitCommand
 from core.objects import ObjClass
-from core.types import Item, ObjectType, World
+from core.types import Item, ObjectType, PotionType, World
 from core.worldgen import new_world
 from conftest import make_hero, make_world
-from ui import render
+from ui import read_command, render
 
 # The floor glyphs of render(), by item class -- the defsym.h
 # OBJCLASS table's characters (core.objects.DEF_OC_SYMS), pinned here
@@ -23,6 +24,7 @@ GLYPHS = {
     ObjectType.BOOK: "+",     # SPBOOK_SYM
     ObjectType.WAND: "/",     # WAND_SYM
     ObjectType.FOOD: "%",     # FOOD_SYM
+    ObjectType.POTION: "!",   # POTION_SYM
 }
 
 
@@ -53,9 +55,9 @@ def test_render_shows_every_floor_item_with_its_glyph():
             assert rows[y][x] == GLYPHS[it.otype], (it.name, it.pos)
 
 
-def test_render_shows_all_six_floor_item_classes():
-    """The demo cave carries all six floor item classes and every one
-    is visible on the seed-42 screen."""
+def test_render_shows_all_seven_floor_item_classes():
+    """The demo cave carries all seven floor item classes and every
+    one is visible on the seed-42 screen."""
     w = new_world(random.Random(42))
     shown = {it.otype for it in w.items.values()
              if it.pos is not None and it.container is None
@@ -81,3 +83,28 @@ def test_render_status_line_shows_power_points():
     """The status line carries the hero's spell power, Pw uen/uenmax."""
     w = make_world(hero=make_hero(uen=7, uenmax=8))
     assert "⚡ Pw: 7/8" in render(w, [])
+
+
+def test_read_command_quaff_key(monkeypatch):
+    """C's key pair: lowercase q<letter> quaffs a carried potion,
+    capital Q quits, a lone q (like a lone z/c) is a wait, and
+    q<letter> on a non-potion is a wait."""
+    w = make_world()
+    pot = Item(id="p_0", otype=ObjectType.POTION, name="healing potion",
+               oclass=ObjClass.POTION.value, potion_type=PotionType.HEALING,
+               charges=1)
+    w.items[pot.id] = pot
+    w.hero.inventory.append(pot)
+    scroll = Item(id="s_0", otype=ObjectType.SCROLL, name="blank paper",
+                  oclass=ObjClass.SCROLL.value)
+    w.items[scroll.id] = scroll
+    w.hero.inventory.append(scroll)
+
+    def press(key: str):
+        monkeypatch.setattr("builtins.input", lambda prompt: key)
+        return read_command(w)
+
+    assert press("qa") == QuaffCommand("p_0")
+    assert isinstance(press("qb"), WaitCommand)  # a scroll is no potion
+    assert isinstance(press("q"), WaitCommand)   # lone q: a wait
+    assert press("Q") is None                    # capital Q quits
