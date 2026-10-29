@@ -11,13 +11,16 @@ import random
 from typing import List
 
 from core import GameOverEvent, MessageEvent, step
+from core.calendar import midnight
 from core.worldgen import new_world
 from ui import read_command, render
 
 
 def main() -> None:
     rng = random.Random(42)  # same seed as the old demo
-    world = new_world(rng)
+    # the wall clock enters the game exactly here (C: midnight());
+    # World.midnight stays fixed for the whole game (deterministic step)
+    world = new_world(rng, midnight=midnight())
     log: List[str] = []
 
     print("🎮 PyHack — functional core, events out")

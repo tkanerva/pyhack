@@ -155,7 +155,9 @@ def _melee_combat(world: World, attacker_id: str, defender_id: str, rng) -> List
     if (not attacker.is_hero and defender.is_hero
             and attacker.mdata is not None):
         # monster hits hero (port of src/mhitu.c): producer + processor
-        return process_events(world, mattacku(world, attacker_id, rng), rng)
+        return process_events(
+            world, mattacku(world, attacker_id, rng, world.midnight),
+            rng)
     if attacker.is_hero and defender.mdata is not None:
         # hero hits monster (port of src/uhitm.c): producer + processor
         return process_events(world, uhitm(world, defender_id, rng), rng)

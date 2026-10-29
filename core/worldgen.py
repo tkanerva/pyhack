@@ -116,7 +116,7 @@ def _hero_skills() -> Skills:
 
 
 def new_world(rng, width: int = 40, height: int = 20,
-              levels: int = 3) -> World:
+              levels: int = 3, midnight: bool = False) -> World:
     m = generate_map(rng, width, height,
                      keep_floor=[HERO_POS]
                      + [p for p, _, _, _ in FLOOR_ARMOR]
@@ -132,6 +132,9 @@ def new_world(rng, width: int = 40, height: int = 20,
         typ=TerrainType.STAIRS, stair_dir=STAIR_DOWN)
     world = World(map=m)
     world.max_lev = levels
+    # the midnight state (C: midnight()) for mattacku's undead double
+    # damage; the caller (main.py) samples the wall clock once per game
+    world.midnight = midnight
 
     # Wizard role fixed attributes (INT 15, WIS 12 from role.c) feeding spell and energy formulas.
     hero = Monster(

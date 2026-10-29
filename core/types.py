@@ -676,6 +676,12 @@ class World:
     # hero is not mid-task.  Advanced by core.occupation
     # (run_occupation) at the top of the hero's turn in step().
     occupation: Optional["Occupation"] = None
+    # the wall-clock midnight state for the whole game (C: midnight(),
+    # read per use; here sampled ONCE at world creation -- main.py
+    # passes core.calendar.midnight() into new_world -- so step() stays
+    # deterministic).  Consumed by core.step -> mattacku: an undead
+    # (M2_UNDEAD) deals its base damage twice at midnight (C: hitmu).
+    midnight: bool = False
 
     @property
     def hero(self) -> Monster:

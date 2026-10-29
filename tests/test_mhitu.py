@@ -14,7 +14,8 @@ from core.mhitu import (adtyp_to_damage, could_seduce, explmu, getmattk,
                         hitmu, mattacku, magic_negation, missmu, u_slip_free)
 from core.monst import (AD_ACID, AD_DISE, AD_DRIN, AD_DRST, AD_FIRE, AD_PHYS,
                         AD_SEDU, AD_SLEE, AD_WRAP, MONS, PM_CENTIPEDE,
-                        PM_GOBLIN, PM_WOOD_NYMPH, PM_YELLOW_LIGHT, PM_ZRUTY,
+                        PM_GOBLIN, PM_WOOD_NYMPH, PM_WRAITH,
+                        PM_YELLOW_LIGHT, PM_ZRUTY,
                         Attack, AT_BITE, AT_CLAW, AT_ENGL, AT_EXPL, AT_HUGS,
                         AT_TENT, AD_BLND)
 from core.objects import (OBJECTS, ObjClass, ObjType, W_AMUL, W_ARM, W_ARMC,
@@ -311,6 +312,29 @@ def test_mattacku_geared_hero_uses_effective_ac():
     miss = mattacku(w, g.id, SeqRng(16))      # roll 16 -> miss
     assert any(isinstance(e, MessageEvent) and "misses you" in e.text
                and "just" not in e.text for e in miss)
+
+
+def test_mattacku_undead_at_midnight_deals_double_damage():
+    """The wraith is the subset's undead (M2_UNDEAD): C's hitmu rolls
+    the base damage a second time at midnight (C: calendar.c#midnight,
+    now World.midnight, sampled once at new_world)."""
+    w = make_world()
+    z = _typed(PM_WRAITH, pos=(7, 4), hp=10)
+    w.actors[z.id] = z
+    w.midnight = True
+    ev = mattacku(w, z.id, SeqRng(1, 4, 4), midnight=True)  # hit 1; 4; +4
+    amts = [e.amount for e in ev if isinstance(e, DamageEvent)
+            and e.target == "player"]
+    assert amts == [8]
+
+    w2 = make_world()
+    z2 = _typed(PM_WRAITH, pos=(7, 4), hp=10)
+    w2.actors[z2.id] = z2
+    w2.midnight = False
+    ev2 = mattacku(w2, z2.id, SeqRng(1, 4))   # hit 1; die 4
+    amts2 = [e.amount for e in ev2 if isinstance(e, DamageEvent)
+             and e.target == "player"]
+    assert amts2 == [4]
 
 
 def test_mattacku_negative_ac_rolls_ac_value_first():
