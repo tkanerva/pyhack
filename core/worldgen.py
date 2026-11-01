@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .energy import init_energy
+from .experience import init_experience
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType, W_ARM
 from .stairs import rebuild_stairs
@@ -142,6 +143,10 @@ def new_world(rng, width: int = 40, height: int = 20,
 
     # C: u_init.c newpw() adds ONE rng draw (level-0 rnd(3) = 6..8 Pw). Layout draws are untouched.
     init_energy(world, rng)
+    # the experience bookkeeping (PLAN-EXPERIENCE.md): the uhpinc[0] init
+    # record -- draw-free, no new draw (the m_lev pin below keeps spawn
+    # draw-free too)
+    init_experience(world)
 
     # Hero starts with wielded short sword (fine identity ObjLike-compatible for core.weapon).
     sword = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
@@ -254,19 +259,24 @@ def new_world(rng, width: int = 40, height: int = 20,
         idx += 1
         return p
 
+    # m_lev is PINNED to mdata.mlevel (PLAN-EXPERIENCE.md decision 2): the
+    # C adj_lev roll is dropped so spawn stays draw-free (goblin / bat are
+    # level 0; the orc pins 2 -- its 10 XP is C's maximum, not its average)
     for i in range(4):
         world.actors[f"goblin_{i}"] = Monster(
             id=f"goblin_{i}", name="Goblin", pos=next_pos(),
-            hp=8, max_hp=8, ac=goblin.ac, damage=2, mdata=goblin)
+            hp=8, max_hp=8, ac=goblin.ac, damage=2, mdata=goblin,
+            m_lev=goblin.mlevel)
     for i in range(2):
         world.actors[f"orc_{i}"] = Monster(
             id=f"orc_{i}", name="Orc", pos=next_pos(),
-            hp=15, max_hp=15, ac=orc.ac, damage=4, mdata=orc)
+            hp=15, max_hp=15, ac=orc.ac, damage=4, mdata=orc,
+            m_lev=orc.mlevel)
     for i in range(3):
         world.actors[f"bat_{i}"] = Monster(
             id=f"bat_{i}", name="Bat", pos=next_pos(),
             hp=4, max_hp=4, ac=bat.ac, damage=1, is_flying=True,
-            mdata=bat)
+            mdata=bat, m_lev=bat.mlevel)
 
     # Vision system: init/reset/recalc (no rng draws; seeded layout unchanged).
     vision_init(world)
@@ -342,18 +352,21 @@ def generate_level(world: World, lev: int, rng) -> Map:
         idx += 1
         return p
 
+    # m_lev pinned to mdata.mlevel (PLAN-EXPERIENCE.md decision 2), as on
+    # level 1
     for i in range(4):
         world.actors[f"goblin_{lev}_{i}"] = Monster(
             id=f"goblin_{lev}_{i}", name="Goblin", pos=next_pos(),
             hp=8, max_hp=8, ac=goblin.ac, damage=2, mdata=goblin,
-            lev=lev)
+            m_lev=goblin.mlevel, lev=lev)
     for i in range(2):
         world.actors[f"orc_{lev}_{i}"] = Monster(
             id=f"orc_{lev}_{i}", name="Orc", pos=next_pos(),
-            hp=15, max_hp=15, ac=orc.ac, damage=4, mdata=orc, lev=lev)
+            hp=15, max_hp=15, ac=orc.ac, damage=4, mdata=orc,
+            m_lev=orc.mlevel, lev=lev)
     for i in range(3):
         world.actors[f"bat_{lev}_{i}"] = Monster(
             id=f"bat_{lev}_{i}", name="Bat", pos=next_pos(),
             hp=4, max_hp=4, ac=bat.ac, damage=1, is_flying=True,
-            mdata=bat, lev=lev)
+            mdata=bat, m_lev=bat.mlevel, lev=lev)
     return m

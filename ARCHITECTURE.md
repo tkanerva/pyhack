@@ -163,6 +163,23 @@ details live in the PLAN-*.md files and the module docstrings):**
   (core/occupation.py) — the meal consumes the following turns, a
   nearby monster interrupts it, and eating the same item again
   resumes it.
+- The experience system (PLAN-EXPERIENCE.md, core/experience.py): the
+  exper.c port as pure functions over World.  The 5.0 structure:
+  `struct permonst` has no `mexp` column, so the kill XP is COMPUTED
+  from the monster's instance level (`m_lev`, pinned to
+  `mdata.mlevel` at spawn — the zero-draw house rule), effective AC,
+  speed and attack table.  The grant sits in the death choke point
+  (`rules.apply_damage`, hero-caused kills only — C: the mon.c kill
+  wrapper; 5.0's mondead does not grant XP); the zap damage sources
+  are normalized to the caster id so wand / spell kills flow through
+  the same gate.  Level-ups give the draw-free `newhp` (base 2 + the
+  C CON table) + the `energy.newpw` Pw (its ONE draw is the only draw
+  of the whole XP path, at the first level-up), under the AD&D
+  at-most-one-level rule; `losexp` (the drain path) is ready for the
+  mhitu AD_DRLI port.  `ueninc[]` is the per-level Pw INCREMENT (C
+  newpw records it, losexp subtracts it) — not the regen period, which
+  tick_energy computes from the level (C `regen_pw`).  The deferred
+  list is PLAN-EXPERIENCE.md §5.
 
 **Intentional simplifications (documented, not bugs):**
 - Monster AI: a monster that can see the hero (the ported vision,

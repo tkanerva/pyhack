@@ -536,6 +536,11 @@ class Monster:
     # None for the flat-stat demo monsters (they use the simple melee
     # path); set for monsters that go through the C-port systems
     # (mhitu, ...)
+    m_lev: int = 0             # the monster INSTANCE level (C: mtmp->m_lev):
+    # pinned to mdata.mlevel at spawn (PLAN-EXPERIENCE.md decision 2; the
+    # C adj_lev roll lands with the makemon port); the kill-XP formula's
+    # 1 + m_lev^2 and the per-m_lev bonuses read it.  0 for the hero and
+    # the flat-stat monsters.
     sleeping: int = 0          # turns of sleep remaining
     stuck: int = 0             # turns of stuck remaining (web / pit)
     poisoned: int = 0          # turns of poison remaining
@@ -562,7 +567,14 @@ class Monster:
     # core.weapon): the hero wields a starting weapon, and its fixed
     # abilities feed the to-hit / damage bonuses
     wielded: Optional[str] = None    # id of the wielded item (C: uwep)
-    ulevel: int = 1                  # hero level (fixed in the demo)
+    ulevel: int = 1                  # hero level (C: u.ulevel; the XP
+    # system levels it up / losexp() drains it)
+    uexp: int = 0                    # XP toward the next level (C: u.uexp)
+    urexp: int = 0                   # XP for the score (C: u.urexp; the
+    # 4*exper + rexp half of more_experienced; no score system yet)
+    ulevelmax: int = 1               # highest level ever reached (C:
+    # u.ulevelmax; the "back" half of the welcome message)
+    ulevelpeak: int = 1              # highest level (C: u.ulevelpeak)
     ustr: int = 12                   # strength (fixed; no STR18)
     ucon: int = 12                   # constitution (C: A_CON base)
     udex: int = 12                   # dexterity (neutral: no bonus swing)
@@ -581,11 +593,21 @@ class Monster:
     # bonus is stored here.
     # spell power (C: you.h uen / uenmax / uenpeak / ueninc[MAXULEV]):
     # the demo default is 0/0/0 (the test heroes never cast); the demo
-    # hero's Pw is set by energy.init_energy (C: u_init.c)
+    # hero's Pw is set by energy.init_energy (C: u_init.c).  ueninc[]
+    # is the per-level Pw INCREMENT (C: newpw() records
+    # ueninc[old_level] on a gain, losexp() subtracts
+    # ueninc[new_level]); ueninc[0] is the init record (as with
+    # uhpinc[0]).  The regen period is NOT this array -- it is
+    # computed from the level (C: regen_pw; core.energy.tick_energy)
     uen: int = 0
     uenmax: int = 0
     uenpeak: int = 0
     ueninc: List[int] = field(default_factory=lambda: [0] * MAXULEV)
+    # the per-level HP increment (C: u.uhpinc[MAXULEV]); newhp() records
+    # uhpinc[old_level] on a level-up and losexp() subtracts
+    # uhpinc[new_level]; uhpinc[0] is the init record (PLAN-EXPERIENCE.md
+    # risk 4)
+    uhpinc: List[int] = field(default_factory=lambda: [0] * MAXULEV)
     skills: Optional["Skills"] = None  # per-hero weapon-skill state
     # intrinsic properties (C: the u.uprops[] inherent / temp half,
     # mprops for monsters): the Prop set held without gear (species, spells,

@@ -44,9 +44,11 @@ wear, take off, read a scroll, zap a wand, cast a book or eat a food
 for a direction), `q` to quit.  `>` goes down the stairs, `<` climbs
 back up: the dungeon has 3 levels, level 2+ generates on first visit
 and stays intact when you come back, and reaching the bottom level
-wins.  The status line shows the computed effective `AC` (base 10
-minus the worn gear -- go get the floor armour), the spell `Pw` (a
-level-N book costs 5*N Pw, slow regen) and the hunger gauge: it
+wins.  Kills grant experience: the level and XP are on the status
+line, and a level-up gives +2 HP plus a spell-power bump.  The status
+line shows the computed effective `AC` (base 10 minus the worn gear --
+go get the floor armour), the spell `Pw` (a level-N book costs 5*N Pw,
+slow regen) and the hunger gauge: it
 drains 1/turn, fainting / starving / choking are live, and a big
 food is a multi-turn meal a nearby monster interrupts (eating the
 same item again resumes it).  The floor items wear their NetHack

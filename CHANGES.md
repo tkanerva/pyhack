@@ -5,6 +5,59 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## Experience & leveling (core/experience.py, the exper.c port)
+
+**Why:** the hero had no experience system -- kills dealt damage and
+that was it.  The 5.0 system is structural in one way: `struct
+permonst` has no `mexp` column, so the kill XP is COMPUTED from the
+monster's instance level / effective AC / speed / attack table (C
+`experience()`, exper.c), not read from a table.
+
+**The choices (PLAN-EXPERIENCE.md decisions 1-12):**
+
+1. One new module `core/experience.py` -- pure functions over World +
+   an injected rng; the hero-facing plines come out as MessageEvents.
+   The XP gain itself is silent, as in C.
+2. The grant sits in the DEATH choke point: `rules.apply_damage`
+   grants the kill XP when a non-hero monster dies with
+   `source == world.hero.id` (C: the mon.c kill wrapper -- 5.0's
+   mondead does NOT grant XP).  The zap damage sources are normalized
+   to the caster id (the `"zap:xxx"` strings retired), so wand and
+   spell kills flow through the same gate; `DeathEvent.by` for a zap
+   kill is `"player"` like for melee.
+3. The six hero fields land on `Monster` (`uexp` / `urexp` /
+   `ulevelmax` / `ulevelpeak` / `uhpinc` / `m_lev`); the monster
+   instance level is PINNED to `mdata.mlevel` at spawn (zero draws --
+   the seed-42 layout / draw-sequence tests stay untouched; the C
+   `adj_lev` roll lands with the makemon port).
+4. `newhp` is the draw-free demo form (base 2 + the C CON table, the
+   hpadv rnd lands with role selection); the level-up Pw reuses
+   `energy.newpw` -- its ONE draw (at the first, L1 -> L2, level-up)
+   is the only draw of the whole XP path.
+5. **The `ueninc[]` fix (the subtle C/pyhack discrepancy this round
+   turned on):** the array is the per-level Pw INCREMENT (C you.h:
+   "increases to uenmax for each level gain") -- C's newpw() records
+   it ("remember increment; future level drain could take it away
+   again"), losexp() subtracts it.  The committed energy.py had
+   repurposed it as the regen-PERIOD table, which collided with the
+   port (a level-2 drain would have subtracted the period, ~36, from
+   uenmax).  Now: init_energy records the starting Pw in the init
+   slot (ueninc[0] -- C's u_init runs newpw at level 0, as uhpinc[0]),
+   pluslvl records the old level's slot, and tick_energy computes the
+   period from the level directly (C `regen_pw`:
+   `(MAXULEV + 8 - u.ulevel) * (wizard ? 3 : 4) / 6`; the demo uses
+   the base period) -- the SAME values as before, no behaviour
+   change.
+6. `losexp` lands this round (the HP / Pw / XP reduction, the
+   level-1 + drainer death through the same death bookkeeping as
+   apply_damage, the divine-anger reset, the `#levelchange` override,
+   the "Goodbye level N." / "Welcome back" messages); its live call
+   site lands with the mhitu AD_DRLI port (synthetic-drain unit tests
+   for now).
+
+Files: core/{types,experience,rules,zap,worldgen,energy}.py,
+ui/console.py, tests/test_experience.py (34 tests).
+
 ## ObjType is a literal enum (core/objects_enum.py)
 
 **Why:** the typing baseline left 283 mypy errors, all one systematic

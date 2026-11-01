@@ -12,9 +12,18 @@ rng draw, 6..8 Pw -- and regenerates 1 Pw every (MAXULEV + 8 -
 ulevel) turns (the C regen period), up to uenmax.  Casting
 (core.spells.cast_spell) checks the cost against uen BEFORE the
 failure roll and drains it after a successful cast (C check order);
-this module owns the arithmetic only.  The per-level regen periods
-are the `ueninc[]` bookkeeping array on the Monster (core.types),
-sized MAXULEV like in C.
+this module owns the arithmetic only.
+
+``ueninc[]`` is the per-level Pw INCREMENT (C you.h: "increases to
+uenmax for each level gain"), not the regen period: C's newpw()
+records it ("remember increment; future level drain could take it
+away again"), losexp() subtracts it.  init_energy records the
+starting Pw in the init slot (ueninc[0], as C's u_init runs at level
+0); experience.pluslvl records each level-up's gain at the OLD level;
+experience.losexp reads the new level's slot.  The regen period is
+computed from the level directly, as in C's regen_pw
+(`(MAXULEV + 8 - u.ulevel) * (wizard ? 3 : 4) / 6`; the demo uses the
+base period).
 """
 from __future__ import annotations
 
@@ -54,17 +63,17 @@ def newpw(ulevel: int, rng) -> int:
 
 
 def init_energy(world: World, rng) -> None:
-    """C: u_init.c -- `u.uen = u.uenmax = u.uenpeak = newpw();` plus
-    the per-level regen periods (the `ueninc[]` bookkeeping: level
-    `l` regens one Pw every MAXULEV + 8 - l turns).
+    """C: u_init.c -- `u.uen = u.uenmax = u.uenpeak = newpw();`, with
+    the newpw increment record: C's newpw() writes `u.ueninc[u.ulevel]
+    = en` (the u_init call runs at level 0, so the init slot is
+    ueninc[0], as with uhpinc[0]).
 
     Adds exactly ONE rng draw (the newpw rnd(3)).
     """
     hero = world.hero
     pw = newpw(hero.ulevel, rng)
     hero.uen = hero.uenmax = hero.uenpeak = pw
-    for lvl in range(1, MAXULEV + 1):
-        hero.ueninc[lvl - 1] = MAXULEV + 8 - lvl
+    hero.ueninc[0] = pw
 
 
 def drain_energy(world: World, actor_id: str, amount: int) -> None:
@@ -78,12 +87,17 @@ def tick_energy(world: World, turn: int, rng) -> List[Event]:
     """C: regen_pw() -- the hero regains 1 Pw every (MAXULEV + 8 -
     ulevel) turns, up to uenmax.  Silent (C emits no message on
     regen) and draw-free; `turn` is the number of the turn being
-    played (step passes world.turn + 1)."""
+    played (step passes world.turn + 1).
+
+    The period is computed from the level, as in C's regen_pw -- NOT
+    read from ueninc[], which is the per-level Pw increment (the C
+    newpw / losexp bookkeeping; see the module docstring).
+    """
     hero = world.hero
     if not hero.alive or hero.uen >= hero.uenmax:
         return []
     if 1 <= hero.ulevel <= MAXULEV:
-        period = hero.ueninc[hero.ulevel - 1]
+        period = MAXULEV + 8 - hero.ulevel
     else:
         period = MAXULEV + 7
     if period > 0 and turn % period == 0:

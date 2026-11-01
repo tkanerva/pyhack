@@ -114,14 +114,17 @@ def _zap_damage(world: World, target: Monster, spec: ZapSpec, rng,
     if resists(target, dmg_type):
         return [MessageEvent(f"{target.name} is unaffected.")]
     dmg = roll(rng, 6, spec.power) + spec.damage_bonus
-    return apply_damage(world, target.id, dmg, dmg_type, source)
+    # source = the caster id (PLAN-EXPERIENCE.md decision 4): a zap kill
+    # flows through the same XP gate as a melee kill (C: every hero-caused
+    # kill grants XP); the rng is threaded for the level-up draw
+    return apply_damage(world, target.id, dmg, dmg_type, source, rng=rng)
 
 
 def _zap_fire(world: World, caster: Monster, target: Monster, spec: ZapSpec,
               rng) -> List[Event]:
     """C: zhitm ZT_FIRE (WAN_FIRE)."""
     return _zap_damage(world, target, spec, rng, DamageType.FIRE,
-                       "zap:fire")
+                       caster.id)  # the caster id (decision 4)
 
 
 def _zap_cold(world: World, caster: Monster, target: Monster, spec: ZapSpec,
@@ -129,14 +132,14 @@ def _zap_cold(world: World, caster: Monster, target: Monster, spec: ZapSpec,
     """C: zhitm ZT_COLD (WAN_COLD + SPE_CONE_OF_COLD -- one effect,
     C 3.x's "a cold stream")."""
     return _zap_damage(world, target, spec, rng, DamageType.COLD,
-                       "zap:cold")
+                       caster.id)  # the caster id (decision 4)
 
 
 def _zap_lightning(world: World, caster: Monster, target: Monster,
                    spec: ZapSpec, rng) -> List[Event]:
     """C: zhitm ZT_LIGHTNING (WAN_LIGHTNING + the lightning spell)."""
     return _zap_damage(world, target, spec, rng, DamageType.LIGHTNING,
-                       "zap:lightning")
+                       caster.id)  # the caster id (decision 4)
 
 
 def _zap_magic(world: World, caster: Monster, target: Monster, spec: ZapSpec,
@@ -145,7 +148,7 @@ def _zap_magic(world: World, caster: Monster, target: Monster, spec: ZapSpec,
     the demo's undead-resist table stands in for C's magic
     resistance)."""
     return _zap_damage(world, target, spec, rng, DamageType.MAGIC_MISSILE,
-                       "zap:magic")
+                       caster.id)  # the caster id (decision 4)
 
 
 def _zap_striking(world: World, caster: Monster, target: Monster,
@@ -158,7 +161,7 @@ def _zap_striking(world: World, caster: Monster, target: Monster,
         return [MessageEvent(f"{target.name} is unaffected.")]
     dmg = roll(rng, 12, 2) + spec.damage_bonus
     return apply_damage(world, target.id, dmg, DamageType.MAGIC_MISSILE,
-                        "zap:striking")
+                        caster.id, rng=rng)  # the caster id (decision 4)
 
 
 def _zap_sleep(world: World, caster: Monster, target: Monster, spec: ZapSpec,
@@ -176,7 +179,7 @@ def _zap_death(world: World, caster: Monster, target: Monster, spec: ZapSpec,
     nonliving / demon / magic-resist unaffected set is the demo's
     resists(DEATH) table (undead / demon / golem)."""
     return _zap_damage(world, target, spec, rng, DamageType.DEATH,
-                       "zap:death")
+                       caster.id)  # the caster id (decision 4)
 
 
 def _zap_polymorph(world: World, caster: Monster, target: Monster,
@@ -216,7 +219,7 @@ def _zap_undead_turning(world: World, caster: Monster, target: Monster,
     dmg = roll(rng, 8, 1) + spec.damage_bonus
     events: List[Event] = [MessageEvent(f"{target.name} is turned and flees!")]
     events += apply_damage(world, target.id, dmg, DamageType.MELEE,
-                           "zap:undead_turning")
+                           caster.id, rng=rng)  # the caster id (decision 4)
     return events
 
 

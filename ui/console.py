@@ -200,8 +200,11 @@ def render(world: World, log: List[str]) -> str:
     # the running occupation text (C: the go.occtxt bottom line)
     occ = (" | 🍽️ " + world.occupation.text
            if world.occupation is not None else "")
-    # the effective AC is the computed core.worn.uac (base - worn gear)
-    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}{hu}{occ}")
+    # the effective AC is the computed core.worn.uac (base - worn gear);
+    # the experience level + XP (C: the botl u.uexp / the level in the
+    # hero name field -- the demo shows both, always on, like the rest of
+    # the status line; PLAN-EXPERIENCE.md decision 8)
+    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⭐ Lvl: {hero.ulevel} | 📈 XP: {hero.uexp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}{hu}{occ}")
     lines.append(_inventory_line(world))
     lines.append("")
     lines.append("📜 Log:")

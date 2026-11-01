@@ -6,15 +6,29 @@ anything with randint/choice) so tests can be fully deterministic.
 There is no `import random` anywhere in the core -- the world never
 depends on the global RNG.
 """
+
 from __future__ import annotations
 
 from typing import Dict, List
 
 from . import o_init
-from .events import (DamageEvent, DeathEvent, DiscoveryEvent, Event,
-                     MessageEvent, StatusEvent)
-from .hacklib import (is_asleep, is_blind, is_confused, is_fainted,
-                      is_hallucinating, is_poisoned, is_stuck)
+from .events import (
+    DamageEvent,
+    DeathEvent,
+    DiscoveryEvent,
+    Event,
+    MessageEvent,
+    StatusEvent,
+)
+from .hacklib import (
+    is_asleep,
+    is_blind,
+    is_confused,
+    is_fainted,
+    is_hallucinating,
+    is_poisoned,
+    is_stuck,
+)
 from .objects import FIRST_OBJECT, O, W_RING
 from .types import DamageType, Direction, HungerState, Monster, Pos, World
 
@@ -28,6 +42,7 @@ def manhattan(a: Pos, b: Pos) -> int:
 # ------------------------------------------------------------
 # Dice
 # ------------------------------------------------------------
+
 
 def roll(rng, die: int, times: int = 1) -> int:
     """Roll `times` dice of `die` sides (1..die) and sum them."""
@@ -54,11 +69,16 @@ def melee_attack(rng, attacker: Monster, defender: Monster) -> int:
 # these across per-class resists() methods in three files)
 # ------------------------------------------------------------
 
+
 def resists(monster: Monster, dmg_type: DamageType) -> bool:
     if monster.is_undead:
-        return dmg_type in (DamageType.COLD, DamageType.LIGHTNING,
-                            DamageType.MAGIC_MISSILE, DamageType.POISON,
-                            DamageType.DEATH)
+        return dmg_type in (
+            DamageType.COLD,
+            DamageType.LIGHTNING,
+            DamageType.MAGIC_MISSILE,
+            DamageType.POISON,
+            DamageType.DEATH,
+        )
     if monster.is_demon:
         return dmg_type in (DamageType.FIRE, DamageType.DEATH, DamageType.SLEEP)
     if monster.is_golem:
@@ -76,27 +96,49 @@ def can_polymorph(monster: Monster) -> bool:
 # State mutation choke points
 # ------------------------------------------------------------
 
-def apply_damage(world: World, target_id: str, amount: int,
-                 dmg_type: DamageType, source: str,
-                 message: bool = True) -> List[Event]:
+
+def apply_damage(
+    world: World,
+    target_id: str,
+    amount: int,
+    dmg_type: DamageType,
+    source: str,
+    message: bool = True,
+    rng=None,
+) -> List[Event]:
     """The ONLY way an actor loses hit points.
 
     Returns events.  Callers may pass message=False and emit their own
     flavour text (e.g. "A pit hits you for 3 damage!") -- the mutation
     still happens here and only here.
+
+    ``rng`` (the kill-XP hook, PLAN-EXPERIENCE.md decision 3): when a
+    NON-HERO monster dies to the hero (``source == world.hero.id``) the
+    kill XP is granted here (C: the ``mkill`` kill path, mon.c).  The
+    only draw that can result is the level-up Pw on the FIRST (L1 -> L2)
+    level-up, so the hero-kill call sites (``process_events``, the melee
+    path, the zaps, the fireball) thread their rng in; the non-hero
+    sources (traps, poison, starvation) pass None -- the hook is inert
+    for them.
     """
     target = world.actors[target_id]
     if not target.alive or amount <= 0:
         return []
     if resists(target, dmg_type):
         if message:
-            text = ("You resist the damage!" if target.is_hero
-                    else f"{target.name} resists {dmg_type.name.lower()}!")
+            text = (
+                "You resist the damage!"
+                if target.is_hero
+                else f"{target.name} resists {dmg_type.name.lower()}!"
+            )
             return [MessageEvent(text)]
         return []
     target.hp = max(0, target.hp - amount)
-    events: List[Event] = [DamageEvent(target=target_id, amount=amount,
-                                       damage_type=dmg_type, source=source)]
+    events: List[Event] = [
+        DamageEvent(
+            target=target_id, amount=amount, damage_type=dmg_type, source=source
+        )
+    ]
     if message:
         if target.is_hero:
             events.append(MessageEvent(f"⚠️ You take {amount} damage!"))
@@ -105,13 +147,27 @@ def apply_damage(world: World, target_id: str, amount: int,
     if target.hp <= 0:
         target.alive = False
         events.append(DeathEvent(target=target_id, by=source))
-        events.append(MessageEvent("💀 You are dead!" if target.is_hero
-                                   else f"☠️ {target.name} dies!"))
+        events.append(
+            MessageEvent(
+                "💀 You are dead!" if target.is_hero else f"☠️ {target.name} dies!"
+            )
+        )
+        # the kill-XP hook (C: the mkill kill path, mon.c): a hero-caused
+        # kill of a non-hero monster grants XP (melee, wand and spell
+        # alike -- the source is the caster id, PLAN-EXPERIENCE.md
+        # decision 4).  The import is local on purpose: experience
+        # imports worn, which imports this module, so a top-level import
+        # would cycle.
+        if not target.is_hero and source == world.hero.id:
+            from .experience import grant_kill_xp
+
+            events += grant_kill_xp(world, target, rng)
     return events
 
 
-def heal(world: World, target_id: str, amount: int,
-         message: bool = True) -> List[Event]:
+def heal(
+    world: World, target_id: str, amount: int, message: bool = True
+) -> List[Event]:
     """The ONLY way an actor regains hit points (the mirror of
     apply_damage).  ``message=False`` heals silently -- the per-turn
     RIN_REGENERATION tick (core.rings.tick_rings) uses it, matching C's
@@ -120,14 +176,20 @@ def heal(world: World, target_id: str, amount: int,
     healed = min(amount, target.max_hp - target.hp)
     if healed <= 0:
         if message:
-            text = "You feel healthy." if target.is_hero \
+            text = (
+                "You feel healthy."
+                if target.is_hero
                 else f"{target.name} is already healthy."
+            )
             return [MessageEvent(text)]
         return []
     target.hp += healed
     if message:
-        text = "You feel better." if target.is_hero \
+        text = (
+            "You feel better."
+            if target.is_hero
             else f"{target.name} recovers {healed} HP."
+        )
         return [MessageEvent(text)]
     return []
 
@@ -136,25 +198,38 @@ def heal(world: World, target_id: str, amount: int,
 # Statuses
 # ------------------------------------------------------------
 
-def put_to_sleep(world: World, target_id: str, duration: int,
-                 message: bool = True) -> List[Event]:
+
+def put_to_sleep(
+    world: World, target_id: str, duration: int, message: bool = True
+) -> List[Event]:
     t = world.actors[target_id]
     t.sleeping = max(t.sleeping, duration)
     events: List[Event] = [StatusEvent(target_id, "sleep", duration)]
     if message:
-        events.append(MessageEvent("🛌 You feel very sleepy!" if t.is_hero
-                                   else f"😴 {t.name} falls asleep!"))
+        events.append(
+            MessageEvent(
+                "🛌 You feel very sleepy!"
+                if t.is_hero
+                else f"😴 {t.name} falls asleep!"
+            )
+        )
     return events
 
 
-def apply_stuck(world: World, target_id: str, duration: int,
-                message: bool = True) -> List[Event]:
+def apply_stuck(
+    world: World, target_id: str, duration: int, message: bool = True
+) -> List[Event]:
     t = world.actors[target_id]
     t.stuck = max(t.stuck, duration)
     events: List[Event] = [StatusEvent(target_id, "stuck", duration)]
     if message:
-        events.append(MessageEvent("🕸️ You are stuck in a web!" if t.is_hero
-                                   else f"🕸️ {t.name} is stuck in a web!"))
+        events.append(
+            MessageEvent(
+                "🕸️ You are stuck in a web!"
+                if t.is_hero
+                else f"🕸️ {t.name} is stuck in a web!"
+            )
+        )
     return events
 
 
@@ -162,8 +237,13 @@ def apply_poison(world: World, target_id: str, duration: int) -> List[Event]:
     t = world.actors[target_id]
     t.poisoned = max(t.poisoned, duration)
     events: List[Event] = [StatusEvent(target_id, "poison", duration)]
-    events.append(MessageEvent("☣️ You have been poisoned!" if t.is_hero
-                               else f"☣️ {t.name} has been poisoned!"))
+    events.append(
+        MessageEvent(
+            "☣️ You have been poisoned!"
+            if t.is_hero
+            else f"☣️ {t.name} has been poisoned!"
+        )
+    )
     return events
 
 
@@ -171,8 +251,11 @@ def apply_confusion(world: World, target_id: str, duration: int) -> List[Event]:
     t = world.actors[target_id]
     t.confused = max(t.confused, duration)
     events: List[Event] = [StatusEvent(target_id, "confusion", duration)]
-    events.append(MessageEvent("You feel very confused." if t.is_hero
-                               else f"{t.name} feels very confused."))
+    events.append(
+        MessageEvent(
+            "You feel very confused." if t.is_hero else f"{t.name} feels very confused."
+        )
+    )
     return events
 
 
@@ -180,8 +263,9 @@ def apply_blind(world: World, target_id: str, duration: int) -> List[Event]:
     t = world.actors[target_id]
     t.blind = max(t.blind, duration)
     events: List[Event] = [StatusEvent(target_id, "blind", duration)]
-    events.append(MessageEvent("👁️ You are blinded!" if t.is_hero
-                               else f"👁️ {t.name} is blinded!"))
+    events.append(
+        MessageEvent("👁️ You are blinded!" if t.is_hero else f"👁️ {t.name} is blinded!")
+    )
     return events
 
 
@@ -189,8 +273,13 @@ def apply_hallucination(world: World, target_id: str, duration: int) -> List[Eve
     t = world.actors[target_id]
     t.hallucinating = max(t.hallucinating, duration)
     events: List[Event] = [StatusEvent(target_id, "hallucination", duration)]
-    events.append(MessageEvent("🌀 You feel hallucinations!" if t.is_hero
-                               else f"🌀 {t.name} is hallucinating!"))
+    events.append(
+        MessageEvent(
+            "🌀 You feel hallucinations!"
+            if t.is_hero
+            else f"🌀 {t.name} is hallucinating!"
+        )
+    )
     return events
 
 
@@ -205,8 +294,11 @@ def teleport_to_floor(world: World, target_id: str, rng) -> List[Event]:
         return [MessageEvent(text)]
     t.pos = rng.choice(options)
     events: List[Event] = [StatusEvent(target_id, "teleport", 0)]
-    events.append(MessageEvent("✨ You are teleported." if t.is_hero
-                               else f"✨ {t.name} is teleported."))
+    events.append(
+        MessageEvent(
+            "✨ You are teleported." if t.is_hero else f"✨ {t.name} is teleported."
+        )
+    )
     return events
 
 
@@ -247,10 +339,14 @@ def tick_actor(world: World, actor_id: str, rng) -> List[Event]:
         a.hallucinating -= 1
     if is_poisoned(a):
         a.poisoned -= 1
-        events += apply_damage(world, actor_id, 1, DamageType.POISON,
-                               "poison", message=False)
-        events.append(MessageEvent("☣️ You feel poisoned." if a.is_hero
-                                   else f"☣️ {a.name} is poisoned."))
+        events += apply_damage(
+            world, actor_id, 1, DamageType.POISON, "poison", message=False
+        )
+        events.append(
+            MessageEvent(
+                "☣️ You feel poisoned." if a.is_hero else f"☣️ {a.name} is poisoned."
+            )
+        )
     return events
 
 
@@ -263,14 +359,22 @@ def tick_actor(world: World, actor_id: str, rng) -> List[Event]:
 # ring in the C table.  Keyed by otyp: Item.otyp is a plain int (like
 # every otyp in the table-driven code), and the ObjType members below
 # are IntEnum values, so they key the dict as their numbering.
-_ABILITY_RING: Dict[int, str] = {O.RIN_GAIN_STRENGTH: "str",
-                                  O.RIN_GAIN_CONSTITUTION: "con",
-                                  O.RIN_ADORNMENT: "cha"}
+_ABILITY_RING: Dict[int, str] = {
+    O.RIN_GAIN_STRENGTH: "str",
+    O.RIN_GAIN_CONSTITUTION: "con",
+    O.RIN_ADORNMENT: "cha",
+}
 
 # C: the base-ability field on the Monster (you.h uchain[]), per the
 # ``which`` key.
-_ABILITY_BASE = {"str": "ustr", "con": "ucon", "dex": "udex",
-                 "wis": "uwis", "int": "uint", "cha": "ucha"}
+_ABILITY_BASE = {
+    "str": "ustr",
+    "con": "ucon",
+    "dex": "udex",
+    "wis": "uwis",
+    "int": "uint",
+    "cha": "ucha",
+}
 
 
 def current_ability(mon: Monster, which: str) -> int:
@@ -294,8 +398,9 @@ def current_ability(mon: Monster, which: str) -> int:
     return value
 
 
-def find_target_in_line(world: World, start: Pos, direction: Direction,
-                        max_range: int = 7):
+def find_target_in_line(
+    world: World, start: Pos, direction: Direction, max_range: int = 7
+):
     """Walk a straight line from `start`.  Returns
     (first monster encountered, whether a wall was hit first)."""
     x, y = start
@@ -315,6 +420,7 @@ def find_target_in_line(world: World, start: Pos, direction: Direction,
 # ------------------------------------------------------------
 # Event processing (the pure-core side of the event-producing systems)
 # ------------------------------------------------------------
+
 
 def apply_discovery(world: World, e: DiscoveryEvent) -> List[Event]:
     """Apply a DiscoveryEvent (C: the makeknown() / observe_object() calls
@@ -382,8 +488,15 @@ def process_events(world: World, events: List[Event], rng) -> List[Event]:
     out: List[Event] = []
     for e in events:
         if isinstance(e, DamageEvent):
-            out += apply_damage(world, e.target, e.amount, e.damage_type,
-                                e.source, message=False)
+            out += apply_damage(
+                world,
+                e.target,
+                e.amount,
+                e.damage_type,
+                e.source,
+                message=False,
+                rng=rng,
+            )
         elif isinstance(e, StatusEvent):
             out += _apply_status_event(world, e, rng)
         elif isinstance(e, DiscoveryEvent):
