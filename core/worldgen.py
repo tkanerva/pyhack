@@ -1,11 +1,42 @@
-"""Deterministic world construction for the demo cave.
-Same layout as the old game.py (40x20 map, 15 walls, 10 traps, 9 monsters, hero at (20,10) with 25 hp) built by a pure function taking its own rng; all seeded draws are preserved."""
+"""Deterministic world construction and the level-generator switch.
+
+Two things live here:
+
+1. the **pinned demo cave** (``generator="demo"``): the same layout as
+   the old game.py (40x20 map, 15 walls, 10 traps, 9 monsters, hero at
+   (20,10) with 25 hp, the midnight flag, the experience init, the
+   quaff demo potion) built by a pure function taking its own rng; all
+   seeded draws are preserved, so every earlier session's tests keep
+   working;
+
+2. the **generator dispatch** (WAVE3.md): ``new_world(rng,
+   generator=...)`` and ``generate_level`` route to one of three level
+   builders --
+
+   ``"demo"``    the pinned cave above (the default: all the pinned
+                 expectations of the earlier waves are about it);
+   ``"mklev"``   the ported NetHack rooms + corridors + doors
+                 generator (core.mklev);
+   ``"cavern"``  the ported cellular-automaton cavern generator
+                 (core.mkmap).
+
+   The choice is stored on the World (``World.generator``) because
+   levels 2..N are built lazily in generate_level, the first time the
+   hero descends.
+
+The three paths share the hero, the starting kit and the demo floor
+kit; they differ in how the level -- and the monsters and traps on it
+-- is made.  Nothing in the demo path gained or lost an rng draw: the
+generated paths use their own draws inside their own builders.
+"""
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
 from .energy import init_energy
 from .experience import init_experience
+from .mklev import blank_map, fill_ordinary_room, mklev
+from .mkmap import mkmap
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType, W_ARM
 from .stairs import rebuild_stairs
@@ -14,6 +45,13 @@ from .types import (Item, Map, Monster, ObjectType, Pos, PotionType,
                     TerrainType, Trap, TrapType, WandType, World)
 from .vision import vision_init, vision_recalc, vision_reset
 from .weapon import P_SKILLED, Skill, Skills
+
+# The generator names new_world() / generate_level() accept (WAVE3.md
+# decision 1: behind a switch, so nobody's pinned layout moves).
+DEMO = "demo"
+MKLEV = "mklev"
+CAVERN = "cavern"
+GENERATORS = (DEMO, MKLEV, CAVERN)
 
 HERO_POS: Pos = (20, 10)
 HERO_HP = 25
@@ -62,7 +100,8 @@ FLOOR_WEAPONS: List[Tuple[Pos, str, ObjType]] = [
 FLOOR_WANDS: List[Tuple[Pos, str, ObjType, WandType, int]] = [
     ((19, 10), "wand of striking", ObjType.WAN_STRIKING,
      WandType.STRIKING, 3),
-    ((21, 10), "wand of cold", ObjType.WAN_COLD, WandType.COLD, 3),
+    ((21, 10), "wand of cold", ObjType.WAN_COLD,
+     WandType.COLD, 3),
 ]
 
 # Demo floor spellbooks at FIXED positions: magic missile, cone of cold, healing (5 pages each, mirroring core.objects SPELL rows).
@@ -88,9 +127,22 @@ FLOOR_FOODS: List[Tuple[Pos, str, ObjType]] = [
 
 # Demo floor potion at a FIXED position (reserved via generate_map):
 # the quaff-port demo kit -- one healing potion (POT_HEALING), zero
-# rng draws; charges=1 so quaff() can consume it.
+# rng draws; charges=1 so quaff() can consume it.  The demo cave's
+# floor-only demo item: the generated levels carry the 22-item kit of
+# demo_floor_items() without it (the oinit distribution will replace
+# all of it, PLAN-MKLEV.md).
 FLOOR_POTIONS: List[Tuple[Pos, str, ObjType, PotionType]] = [
     ((25, 9), "healing potion", ObjType.POT_HEALING, PotionType.HEALING),
+]
+
+# The demo's three monster kinds: (permonst index, name, hp, damage).
+# The generated levels pick from this table too (core.mklev's
+# fill_ordinary_room demo subset); the real makemon() distribution is
+# not ported (PLAN-MAKEMON.md).
+DEMO_MONSTER_KINDS: List[Tuple[int, str, int, int]] = [
+    (PM_GOBLIN, "Goblin", 8, 2),
+    (PM_HILL_ORC, "Orc", 15, 4),
+    (PM_BAT, "Bat", 4, 1),
 ]
 
 
@@ -122,8 +174,136 @@ def _hero_skills() -> Skills:
     return skills
 
 
-def new_world(rng, width: int = 40, height: int = 20,
-              levels: int = 3, midnight: bool = False) -> World:
+def demo_monster(kind: int, ident: str, pos: Pos, lev: int = 1) -> Monster:
+    """One of the three demo monsters, carrying its PerMonst type so
+    the committed mhitu/uhitm attack tables apply (the demo's monsters
+    run the C-port combat).
+
+    `kind` indexes DEMO_MONSTER_KINDS; the AC comes from the monster
+    table, the hp and damage are the demo's hand-tuned values.  m_lev
+    is PINNED to mdata.mlevel (the PLAN-EXPERIENCE.md decision 2, as on
+    the level-1 spawn): the C adj_lev roll lands with the makemon
+    port.  core.mklev._spawn_monster calls this for the generated
+    levels' fill (its local import keeps the cycle one-way).
+    """
+    pm, name, hp, damage = DEMO_MONSTER_KINDS[kind]
+    mdata = MONS[pm]
+    # all three kinds exist in the implemented monst subset (never None)
+    assert mdata is not None
+    return Monster(id=ident, name=name, pos=pos, hp=hp, max_hp=hp,
+                   ac=mdata.ac, damage=damage, mdata=mdata, lev=lev,
+                   m_lev=mdata.mlevel, is_flying=(pm == PM_BAT))
+
+
+def demo_floor_items() -> List[Item]:
+    """The demo floor kit -- armour, scrolls, weapons, wands, books
+    and food -- as a fresh list of Items at the FLOOR_* positions.
+
+    One place builds them so the pinned demo cave and the generated
+    levels carry the same kit (the generated paths move the positions;
+    see _scatter_floor_items).  The healing potion (FLOOR_POTIONS) is
+    not in this kit -- it is the demo cave's floor-only demo item;
+    the generated levels carry the 22 items (the oinit distribution
+    will replace them, PLAN-MKLEV.md).
+    """
+    items: List[Item] = []
+    for i, (pos, name, otyp, cursed) in enumerate(FLOOR_ARMOR):
+        items.append(Item(id=f"armor_{i}", otype=ObjectType.ARMOR,
+                          name=name, otyp=otyp.value,
+                          oclass=ObjClass.ARMOR.value, pos=pos,
+                          cursed=cursed))
+    for i, (pos, name, otyp, stype) in enumerate(FLOOR_SCROLLS):
+        items.append(Item(id=f"scroll_{i}", otype=ObjectType.SCROLL,
+                          name=name, otyp=otyp.value,
+                          oclass=ObjClass.SCROLL.value, pos=pos,
+                          scroll_type=stype))
+    for i, (pos, name, otyp) in enumerate(FLOOR_WEAPONS):
+        items.append(Item(id=f"weapon_{i}", otype=ObjectType.WEAPON,
+                          name=name, otyp=otyp.value,
+                          oclass=ObjClass.WEAPON.value, pos=pos))
+    for i, (pos, name, otyp, wtype, charges) in enumerate(FLOOR_WANDS):
+        items.append(Item(id=f"wand_{i}", otype=ObjectType.WAND,
+                          name=name, otyp=otyp.value,
+                          oclass=ObjClass.WAND.value, pos=pos,
+                          wand_type=wtype, charges=charges))
+    for i, (pos, name, otyp, btype, charges) in enumerate(FLOOR_BOOKS):
+        items.append(Item(id=f"book_{i}", otype=ObjectType.BOOK,
+                          name=name, otyp=otyp.value,
+                          oclass=ObjClass.SPBOOK.value, pos=pos,
+                          spell_type=btype, charges=charges))
+    for i, (pos, name, otyp) in enumerate(FLOOR_FOODS):
+        items.append(Item(id=f"food_{i}", otype=ObjectType.FOOD,
+                          name=name, otyp=otyp.value,
+                          oclass=ObjClass.FOOD.value, pos=pos))
+    return items
+
+
+def _make_hero(pos: Pos = HERO_POS) -> Monster:
+    """The demo hero: Wizard role attributes (INT 15, WIS 12 from
+    role.c) feeding the spell and energy formulas, base AC 10 (C:
+    mons[PM_HUMAN].ac -- the human row is not in the monst subset)."""
+    return Monster(
+        id="player", name="Hero", pos=pos,
+        hp=HERO_HP, max_hp=HERO_HP, ac=HERO_BASE_AC, damage=2, is_hero=True,
+        ulevel=1, ustr=12, udex=12, uwis=12, uint=15,
+        skills=_hero_skills())
+
+
+def _starting_kit(world: World) -> None:
+    """The carried starting kit: wielded short sword (fine identity,
+    ObjLike-compatible for core.weapon), chain mail WORN (effective AC
+    5), leather cloak / gloves and ring of protection (+1) carried.
+    No rng draws."""
+    hero = world.hero
+    sword = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
+                 otyp=ObjType.SHORT_SWORD.value,
+                 oclass=ObjClass.WEAPON.value, spe=0)
+    world.items[sword.id] = sword
+    sword.container = "player"
+    hero.inventory.append(sword)
+    hero.wielded = sword.id
+
+    mail = Item(id="mail_0", otype=ObjectType.ARMOR, name="chain mail",
+                otyp=ObjType.CHAIN_MAIL.value, oclass=ObjClass.ARMOR.value)
+    mail.container = "player"
+    mail.owornmask = W_ARM
+    hero.inventory.append(mail)
+    world.items[mail.id] = mail
+
+    cloak = Item(id="cloak_0", otype=ObjectType.ARMOR, name="leather cloak",
+                 otyp=ObjType.LEATHER_CLOAK.value,
+                 oclass=ObjClass.ARMOR.value)
+    cloak.container = "player"
+    hero.inventory.append(cloak)
+    world.items[cloak.id] = cloak
+
+    gloves = Item(id="gloves_0", otype=ObjectType.ARMOR,
+                  name="leather gloves",
+                  otyp=ObjType.LEATHER_GLOVES.value,
+                  oclass=ObjClass.ARMOR.value)
+    gloves.container = "player"
+    hero.inventory.append(gloves)
+    world.items[gloves.id] = gloves
+
+    ring = Item(id="ring_0", otype=ObjectType.RING,
+                name="ring of protection (+1)",
+                otyp=ObjType.RIN_PROTECTION.value,
+                oclass=ObjClass.RING.value, spe=1)
+    ring.container = "player"
+    hero.inventory.append(ring)
+    world.items[ring.id] = ring
+
+
+# ============================================================
+# The pinned demo cave
+# ============================================================
+
+def _new_world_demo(rng, width: int, height: int, levels: int,
+                    midnight: bool) -> World:
+    """The pinned demo cave (the old new_world body): byte for byte the
+    layout every earlier session's tests pin.  All seeded draws are in
+    the same order; the midnight flag (the calendar port) and the
+    experience init (PLAN-EXPERIENCE.md) add no draws."""
     m = generate_map(rng, width, height,
                      keep_floor=[HERO_POS]
                      + [p for p, _, _, _ in FLOOR_ARMOR]
@@ -144,100 +324,19 @@ def new_world(rng, width: int = 40, height: int = 20,
     # damage; the caller (main.py) samples the wall clock once per game
     world.midnight = midnight
 
-    # Wizard role fixed attributes (INT 15, WIS 12 from role.c) feeding spell and energy formulas.
-    hero = Monster(
-        id="player", name="Hero", pos=HERO_POS,
-        hp=HERO_HP, max_hp=HERO_HP, ac=HERO_BASE_AC, damage=2, is_hero=True,
-        ulevel=1, ustr=12, udex=12, uwis=12, uint=15,
-        skills=_hero_skills())
-    world.actors["player"] = hero
+    world.actors["player"] = _make_hero()
 
     # C: u_init.c newpw() adds ONE rng draw (level-0 rnd(3) = 6..8 Pw). Layout draws are untouched.
     init_energy(world, rng)
     # the experience bookkeeping (PLAN-EXPERIENCE.md): the uhpinc[0] init
-    # record -- draw-free, no new draw (the m_lev pin below keeps spawn
+    # record -- draw-free, no new draw (the m_lev pin keeps spawn
     # draw-free too)
     init_experience(world)
 
-    # Hero starts with wielded short sword (fine identity ObjLike-compatible for core.weapon).
-    sword = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
-                 otyp=ObjType.SHORT_SWORD.value,
-                 oclass=ObjClass.WEAPON.value, spe=0)
-    world.items[sword.id] = sword
-    sword.container = "player"
-    hero.inventory.append(sword)
-    hero.wielded = sword.id
+    _starting_kit(world)
 
-    # Starting kit: chain mail WORN (effective AC 5), leather cloak/gloves and ring of protection (+1) carried. No rng draws.
-    mail = Item(id="mail_0", otype=ObjectType.ARMOR, name="chain mail",
-                otyp=ObjType.CHAIN_MAIL.value, oclass=ObjClass.ARMOR.value)
-    mail.container = "player"
-    mail.owornmask = W_ARM
-    hero.inventory.append(mail)
-    world.items[mail.id] = mail
-
-    cloak = Item(id="cloak_0", otype=ObjectType.ARMOR, name="leather cloak",
-                 otyp=ObjType.LEATHER_CLOAK.value,
-                 oclass=ObjClass.ARMOR.value)
-    cloak.container = "player"
-    hero.inventory.append(cloak)
-    world.items[cloak.id] = cloak
-
-    gloves = Item(id="gloves_0", otype=ObjectType.ARMOR,
-                  name="leather gloves", otyp=ObjType.LEATHER_GLOVES.value,
-                  oclass=ObjClass.ARMOR.value)
-    gloves.container = "player"
-    hero.inventory.append(gloves)
-    world.items[gloves.id] = gloves
-
-    ring = Item(id="ring_0", otype=ObjectType.RING,
-                name="ring of protection (+1)",
-                otyp=ObjType.RIN_PROTECTION.value,
-                oclass=ObjClass.RING.value, spe=1)
-    ring.container = "player"
-    hero.inventory.append(ring)
-    world.items[ring.id] = ring
-
-    # the demo floor armour (fixed positions, see FLOOR_ARMOR above)
-    for i, (pos, name, otyp, cursed) in enumerate(FLOOR_ARMOR):
-        it = Item(id=f"armor_{i}", otype=ObjectType.ARMOR, name=name,
-                  otyp=otyp.value, oclass=ObjClass.ARMOR.value, pos=pos,
-                  cursed=cursed)
-        world.items[it.id] = it
-
-    # Floor scrolls: fine identity (ObjLike) + effect tag for read dispatch.
-    for i, (pos, name, otyp, stype) in enumerate(FLOOR_SCROLLS):
-        it = Item(id=f"scroll_{i}", otype=ObjectType.SCROLL, name=name,
-                  otyp=otyp.value, oclass=ObjClass.SCROLL.value, pos=pos,
-                  scroll_type=stype)
-        world.items[it.id] = it
-
-    # the demo floor weapons (fixed positions, see FLOOR_WEAPONS
-    # above): fine identity (ObjLike) for the weapon system
-    for i, (pos, name, otyp) in enumerate(FLOOR_WEAPONS):
-        it = Item(id=f"weapon_{i}", otype=ObjectType.WEAPON, name=name,
-                  otyp=otyp.value, oclass=ObjClass.WEAPON.value, pos=pos)
-        world.items[it.id] = it
-
-    # Floor wands: fine identity (ObjLike) + effect tag for wand dispatch + fixed charges.
-    for i, (pos, name, otyp, wtype, charges) in enumerate(FLOOR_WANDS):
-        it = Item(id=f"wand_{i}", otype=ObjectType.WAND, name=name,
-                  otyp=otyp.value, oclass=ObjClass.WAND.value, pos=pos,
-                  wand_type=wtype, charges=charges)
-        world.items[it.id] = it
-
-    # Floor spellbooks: fine identity (ObjLike) + effect tag for cast dispatch + fixed pages.
-    for i, (pos, name, otyp, btype, charges) in enumerate(FLOOR_BOOKS):
-        it = Item(id=f"book_{i}", otype=ObjectType.BOOK, name=name,
-                  otyp=otyp.value, oclass=ObjClass.SPBOOK.value, pos=pos,
-                  spell_type=btype, charges=charges)
-        world.items[it.id] = it
-
-    # the demo floor foods (fixed positions, see FLOOR_FOODS above):
-    # fine identity (ObjLike) for the hunger system
-    for i, (pos, name, otyp) in enumerate(FLOOR_FOODS):
-        it = Item(id=f"food_{i}", otype=ObjectType.FOOD, name=name,
-                  otyp=otyp.value, oclass=ObjClass.FOOD.value, pos=pos)
+    # the demo floor kit at its fixed positions (see FLOOR_* above)
+    for it in demo_floor_items():
         world.items[it.id] = it
 
     # the demo floor potion (fixed position, see FLOOR_POTIONS above):
@@ -259,15 +358,8 @@ def new_world(rng, width: int = 40, height: int = 20,
         world.traps[f"trap_{i}"] = Trap(
             id=f"trap_{i}", trap_type=rng.choice(kinds), pos=trap_tiles[i])
 
-    # Demo monsters carry PerMonst types for committed mhitu attack tables (AC from table; hp/names from old demo). No rng draws.
-    goblin = MONS[PM_GOBLIN]
-    orc = MONS[PM_HILL_ORC]
-    bat = MONS[PM_BAT]
-    # all three are demo monsters in the implemented subset (never None)
-    assert goblin is not None
-    assert orc is not None
-    assert bat is not None
-
+    # Demo monsters carry PerMonst types for committed mhitu attack
+    # tables (AC from table; hp/names from old demo). No rng draws.
     spawns = floor[:]
     rng.shuffle(spawns)
     idx = 0
@@ -278,24 +370,17 @@ def new_world(rng, width: int = 40, height: int = 20,
         idx += 1
         return p
 
-    # m_lev is PINNED to mdata.mlevel (PLAN-EXPERIENCE.md decision 2): the
-    # C adj_lev roll is dropped so spawn stays draw-free (goblin / bat are
-    # level 0; the orc pins 2 -- its 10 XP is C's maximum, not its average)
+    # m_lev is pinned to mdata.mlevel inside demo_monster (the
+    # PLAN-EXPERIENCE.md decision 2), as on the old inline spawn
     for i in range(4):
-        world.actors[f"goblin_{i}"] = Monster(
-            id=f"goblin_{i}", name="Goblin", pos=next_pos(),
-            hp=8, max_hp=8, ac=goblin.ac, damage=2, mdata=goblin,
-            m_lev=goblin.mlevel)
+        ident = f"goblin_{i}"
+        world.actors[ident] = demo_monster(0, ident, next_pos())
     for i in range(2):
-        world.actors[f"orc_{i}"] = Monster(
-            id=f"orc_{i}", name="Orc", pos=next_pos(),
-            hp=15, max_hp=15, ac=orc.ac, damage=4, mdata=orc,
-            m_lev=orc.mlevel)
+        ident = f"orc_{i}"
+        world.actors[ident] = demo_monster(1, ident, next_pos())
     for i in range(3):
-        world.actors[f"bat_{i}"] = Monster(
-            id=f"bat_{i}", name="Bat", pos=next_pos(),
-            hp=4, max_hp=4, ac=bat.ac, damage=1, is_flying=True,
-            mdata=bat, m_lev=bat.mlevel)
+        ident = f"bat_{i}"
+        world.actors[ident] = demo_monster(2, ident, next_pos())
 
     # Vision system: init/reset/recalc (no rng draws; seeded layout unchanged).
     vision_init(world)
@@ -307,10 +392,159 @@ def new_world(rng, width: int = 40, height: int = 20,
     return world
 
 
-def generate_level(world: World, lev: int, rng) -> Map:
-    """Generate level `lev` on first visit (C: mklev() in goto_level;
-    the demo keeps the result in world.levels afterwards, the getlev()
-    equivalent, PLAN-STAIRS.md decision 4).
+# ============================================================
+# The generated levels (mklev / cavern)
+# ============================================================
+
+def _scatter_floor_items(world: World, rng) -> None:
+    """Lay the demo floor kit out on free room squares.
+
+    The oinit() object distribution is still deferred (PLAN-STAIRS.md
+    §5), so a generated level carries the demo kit rather than NetHack's
+    per-depth mix -- but at generator-chosen positions, which is what
+    makes the layouts playable."""
+    from .mkroom import somexyspace  # local import: cycle
+
+    traps = [t for t in world.traps.values() if t.lev == world.lev]
+    taken = {it.pos for it in world.items.values() if it.pos is not None}
+    taken.add(world.hero.pos)
+    for item in demo_floor_items():
+        item.pos = None
+        for _ in range(50):
+            if not world.map.rooms:
+                break
+            room = world.map.rooms[rng.rn2(len(world.map.rooms))]
+            pos = somexyspace(world.map, traps, room, rng)
+            if pos is None or pos in taken:
+                continue
+            item.pos = pos
+            taken.add(pos)
+            break
+        world.items[item.id] = item
+
+
+def _cavern_stairs(map_: Map, rng, lev: int, max_lev: int) -> None:
+    """Staircases for a cavern level.
+
+    C places a generated level's stairways through put_lregion_here()
+    on a level definition's regions; a cavern has none, so this is the
+    demo shortcut: a random floor tile per staircase, down first (C
+    order), then up."""
+    floor = map_.floor_tiles()
+    if not floor:
+        return
+    rng.shuffle(floor)
+    used: List[Pos] = []
+    if lev < max_lev:
+        pos = floor[0]
+        map_.tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.STAIRS,
+                                          stair_dir=STAIR_DOWN)
+        used.append(pos)
+    if lev > 1:
+        for pos in floor:
+            if pos in used:
+                continue
+            map_.tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.STAIRS,
+                                              stair_dir=STAIR_UP)
+            break
+
+
+def _cavern_level(world: World, map_: Map, rng, lev: int) -> None:
+    """C: the cavern half of a generated level (PLAN-MKLEV.md
+    divergence 7): the cellular automaton (core.mkmap), then its
+    (irregular) rooms are filled through the same fill_ordinary_room()
+    the room generator uses -- C's caverns keep no room contents,
+    pyhack keeps the rooms, and the filler needs them.  The stairs are
+    the demo shortcut (_cavern_stairs): a cavern has no level-
+    definition regions for put_lregion_here()."""
+    mkmap(map_, rng, depth=lev)
+    for room in list(map_.rooms):
+        fill_ordinary_room(world, map_, rng, room, lev, lev)
+    _cavern_stairs(map_, rng, lev, world.max_lev)
+
+
+def _generated_level(world: World, map_: Map, rng, lev: int) -> None:
+    """One generated level in place on `map_` (C: the mklev() half of
+    goto_level): the rooms + corridors + doors level (core.mklev, the
+    C makelevel order) or the cavern (core.mkmap + the room fill + the
+    stair shortcut).  Monsters and traps come from fill_ordinary_room's
+    demo subset; floor items stay off a lazily generated level (as on
+    the demo's lazy levels -- the oinit distribution is deferred,
+    PLAN-STAIRS.md §5).  `map_` is a parameter (not world.map): a
+    lazy level is built while the hero still stands on the previous
+    one."""
+    if world.generator == MKLEV:
+        mklev(world, map_, rng, lev)
+    else:
+        _cavern_level(world, map_, rng, lev)
+
+
+def _new_world_generated(rng, generator: str, levels: int,
+                         midnight: bool) -> World:
+    """The mklev / cavern world (WAVE3.md): a generated level 1 (rooms
+    + corridors + doors, or the cavern -- with its stairs and the demo
+    fill), the hero ON the down staircase (the C newgame staircase
+    convention: the stairs are excluded from the fill, so no monster
+    shares the tile; the pinned demo keeps the (20,10) house rule
+    instead), the starting kit, the 22-item demo floor kit scattered
+    on room floor, vision and the stairway records.
+
+    The generated path uses its own rng draws (the generator's
+    sequence, WAVE3.md decision 6) -- the demo path's pinned draws are
+    untouched.
+    """
+    world = World(map=blank_map(40, 20))
+    world.max_lev = levels
+    world.midnight = midnight
+    world.generator = generator
+    _generated_level(world, world.map, rng, 1)
+    rebuild_stairs(world)
+    down = next((s for s in world.stairs if not s.up), None)
+    if down is not None:
+        hero_pos = down.pos
+    else:
+        # levels=1: no down staircase -- a room floor instead
+        from .mkroom import somexy  # local import: cycle
+        hero_pos = somexy(world.map, world.map.rooms[0], rng) or (20, 10)
+    world.actors["player"] = _make_hero(pos=hero_pos)
+    init_energy(world, rng)
+    init_experience(world)
+    _starting_kit(world)
+    _scatter_floor_items(world, rng)
+    vision_init(world)
+    vision_reset(world)
+    vision_recalc(world)
+    return world
+
+
+# ============================================================
+# The factory and the lazy-level seam
+# ============================================================
+
+def new_world(rng, width: int = 40, height: int = 20, levels: int = 3,
+              midnight: bool = False, generator: str = DEMO) -> World:
+    """The world factory behind the generator switch (WAVE3.md).
+
+    ``"demo"`` (the default) is the pinned cave, byte for byte the old
+    new_world; ``"mklev"`` and ``"cavern"`` run the ported generators
+    (width / height apply to the demo cave only -- the generated
+    levels are the demo's 40x20 grid).  The name is stored on
+    ``World.generator`` because levels 2..N generate lazily in
+    generate_level, long after this returns.
+    """
+    if generator not in GENERATORS:
+        raise ValueError("unknown generator %r (want one of %s)"
+                         % (generator, ", ".join(GENERATORS)))
+    if generator == DEMO:
+        world = _new_world_demo(rng, width, height, levels, midnight)
+    else:
+        world = _new_world_generated(rng, generator, levels, midnight)
+    world.generator = generator
+    return world
+
+
+def _generate_demo_level(world: World, lev: int, rng) -> Map:
+    """The demo's lazy level (the old generate_level body).
 
     Draw order is sacred (PLAN-STAIRS.md §2.6.2 / §7): the map (15
     wall pairs), the down-stair pick (if not the bottom level), the
@@ -354,13 +588,6 @@ def generate_level(world: World, lev: int, rng) -> Map:
 
     # 9 monsters, the level-1 composition (4 goblins / 2 orcs / 3
     # bats, the committed PerMonst types -- no rng draws for the data)
-    goblin = MONS[PM_GOBLIN]
-    orc = MONS[PM_HILL_ORC]
-    bat = MONS[PM_BAT]
-    assert goblin is not None
-    assert orc is not None
-    assert bat is not None
-
     spawns = floor[:]
     rng.shuffle(spawns)
     idx = 0
@@ -371,21 +598,32 @@ def generate_level(world: World, lev: int, rng) -> Map:
         idx += 1
         return p
 
-    # m_lev pinned to mdata.mlevel (PLAN-EXPERIENCE.md decision 2), as on
-    # level 1
+    # m_lev is pinned to mdata.mlevel inside demo_monster (the
+    # PLAN-EXPERIENCE.md decision 2), as on level 1
     for i in range(4):
-        world.actors[f"goblin_{lev}_{i}"] = Monster(
-            id=f"goblin_{lev}_{i}", name="Goblin", pos=next_pos(),
-            hp=8, max_hp=8, ac=goblin.ac, damage=2, mdata=goblin,
-            m_lev=goblin.mlevel, lev=lev)
+        ident = f"goblin_{lev}_{i}"
+        world.actors[ident] = demo_monster(0, ident, next_pos(), lev)
     for i in range(2):
-        world.actors[f"orc_{lev}_{i}"] = Monster(
-            id=f"orc_{lev}_{i}", name="Orc", pos=next_pos(),
-            hp=15, max_hp=15, ac=orc.ac, damage=4, mdata=orc,
-            m_lev=orc.mlevel, lev=lev)
+        ident = f"orc_{lev}_{i}"
+        world.actors[ident] = demo_monster(1, ident, next_pos(), lev)
     for i in range(3):
-        world.actors[f"bat_{lev}_{i}"] = Monster(
-            id=f"bat_{lev}_{i}", name="Bat", pos=next_pos(),
-            hp=4, max_hp=4, ac=bat.ac, damage=1, is_flying=True,
-            mdata=bat, m_lev=bat.mlevel, lev=lev)
+        ident = f"bat_{lev}_{i}"
+        world.actors[ident] = demo_monster(2, ident, next_pos(), lev)
+    return m
+
+
+def generate_level(world: World, lev: int, rng) -> Map:
+    """Generate level `lev` on first visit (C: mklev() in goto_level;
+    the result is kept in world.levels afterwards, the getlev()
+    equivalent, PLAN-STAIRS.md decision 4).
+
+    Dispatches on ``World.generator`` (WAVE3.md decision 1): "demo" is
+    the old draw-order-sacred demo level; "mklev" / "cavern" run the
+    ported generators in place on a fresh 40x20 map, the monsters and
+    traps parked on `lev` by the generator's own fill.
+    """
+    if world.generator == DEMO:
+        return _generate_demo_level(world, lev, rng)
+    m = blank_map(40, 20)
+    _generated_level(world, m, rng, lev)
     return m

@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-from .commands import (CastCommand, Command, EatCommand, MoveCommand,
-                       PickupCommand, QuaffCommand, ReadCommand,
+from .commands import (CastCommand, CloseCommand, Command, EatCommand,
+                       MoveCommand, PickupCommand, QuaffCommand, ReadCommand,
                        StairsCommand, TakeOffCommand, WearCommand, ZapCommand)
+from .doors import close_door, open_door
 from .energy import tick_energy
 from .events import Event, GameOverEvent, MessageEvent
 from .hacklib import distmin, is_asleep, is_fainted, is_stuck
@@ -28,7 +29,7 @@ from .uhitm import uhitm
 from .rules import (apply_damage, melee_attack, process_events, tick_actor)
 from .spells import cast_spell
 from .traps import check_traps
-from .types import DamageType, Monster, Pos, World
+from .types import DamageType, Monster, Pos, World, is_door
 from .vision import m_can_see_u, vision_recalc
 from .worn import dotakeoff, dowear
 from .zap import use_wand
@@ -93,6 +94,9 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
             events += pickup(world, "player", rng)
         elif isinstance(cmd, StairsCommand):
             events += go_stairs(world, cmd.up, rng)
+        elif isinstance(cmd, CloseCommand):
+            events += close_door(world, (world.hero.pos[0] + cmd.dx,
+                                         world.hero.pos[1] + cmd.dy), rng)
         # WaitCommand: a deliberate pass (no trap re-roll, unlike the old demo)
 
     # --- monster turns ---
@@ -131,8 +135,15 @@ def _do_move(world: World, actor_id: str, dx: int, dy: int, rng) -> List[Event]:
     actor = world.actors[actor_id]
     dest = (actor.pos[0] + dx, actor.pos[1] + dy)
     if not world.map.is_walkable(dest):
+        if actor.is_hero and world.map.in_bounds(dest) and is_door(
+                world.map.tile_at(dest).typ):
+            # C: domove() -- walking into a closed door opens it instead
+            # of moving (the doopen() case; a locked one still refuses)
+            return open_door(world, dest, rng)
         if actor.is_hero:
             return [MessageEvent("You can't go that way.")]
+        # STUB: C's mmove() lets a monster open doors; monsters path
+        # around them until the monmove.c port (see core.doors)
         return []
     target = world.monster_at(dest)
     if target is not None:

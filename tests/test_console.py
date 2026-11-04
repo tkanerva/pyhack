@@ -108,3 +108,50 @@ def test_read_command_quaff_key(monkeypatch):
     assert isinstance(press("qb"), WaitCommand)  # a scroll is no potion
     assert isinstance(press("q"), WaitCommand)   # lone q: a wait
     assert press("Q") is None                    # capital Q quits
+
+
+def test_render_shows_open_and_closed_doors():
+    """C: S_vcdoor '+' for a closed door, S_vodoor "'" for an open one."""
+    from core.types import DoorMask, TerrainType, Tile
+    w = make_world()
+    w.map.tiles[3][3] = Tile(typ=TerrainType.DOOR,
+                             door_mask=DoorMask.CLOSED)
+    w.map.tiles[3][4] = Tile(typ=TerrainType.DOOR,
+                             door_mask=DoorMask.ISOPEN)
+    rows = _map_rows(render(w, []), w.map.height)
+    assert rows[3][3] == "+"
+    assert rows[3][4] == "'"
+
+
+def test_render_shows_a_secret_door_as_a_wall():
+    """An undiscovered secret door is part of the wall."""
+    from core.types import DoorMask, TerrainType, Tile
+    w = make_world()
+    w.map.tiles[3][3] = Tile(typ=TerrainType.SDOOR,
+                             door_mask=DoorMask.LOCKED)
+    assert _map_rows(render(w, []), w.map.height)[3][3] == "#"
+
+
+def test_render_shows_corridors_as_hash_and_lit_floor_as_dot():
+    """C's map glyphs: corridors and walls share '#', a lit room floor
+    is '.', an unlit one stays blank (the demo cave is unlit)."""
+    from core.types import TerrainType, Tile
+    w = make_world()
+    w.map.tiles[3][3] = Tile(typ=TerrainType.CORR)
+    w.map.tiles[3][4] = Tile(typ=TerrainType.ROOM, lit=True)
+    rows = _map_rows(render(w, []), w.map.height)
+    assert rows[3][3] == "#"
+    assert rows[3][4] == "."
+    assert rows[4][4] == " "   # unlit floor
+
+
+def test_render_a_generated_level_is_all_glyphs():
+    """A mklev level renders: its rooms are lit ('.'), its corridors and
+    walls are '*'-less '#' and its doors are '+' or "'"."""
+    from core.rnd import Rng
+    from core.worldgen import MKLEV
+    w = new_world(Rng(b"console:mklev"), generator=MKLEV)
+    rows = _map_rows(render(w, []), w.map.height)
+    text = "".join(rows)
+    assert "." in text and "+" in text or "'" in text
+    assert len(rows) == w.map.height

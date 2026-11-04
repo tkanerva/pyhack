@@ -309,6 +309,29 @@ def is_door(typ: TerrainType) -> bool:
     return typ == TerrainType.DOOR
 
 
+def is_room(typ: TerrainType) -> bool:
+    """C: IS_ROOM -- ROOM, STAIRS, furniture ... (everything from ROOM
+    up; a DOOR or a CORR is *not* a room square)."""
+    return typ >= TerrainType.ROOM
+
+
+def space_pos(typ: TerrainType) -> bool:
+    """C: SPACE_POS -- a square a monster can be placed on (everything
+    strictly above DOOR: ROOM, CORR, ICE, ...)."""
+    return typ > TerrainType.DOOR
+
+
+def is_furniture(typ: TerrainType) -> bool:
+    """C: IS_FURNITURE -- STAIRS..ALTAR (fountain, throne, sink, grave,
+    altar)."""
+    return TerrainType.STAIRS <= typ <= TerrainType.ALTAR
+
+
+def is_throne(typ: TerrainType) -> bool:
+    """C: IS_THRONE."""
+    return typ == TerrainType.THRONE
+
+
 def is_sdoor(typ: TerrainType) -> bool:
     """C: IS_SDOOR.  A secret door is part of the wall (IS_OBSTRUCTED),
     so it is never a position you can stand on."""
@@ -338,15 +361,157 @@ STAIR_UP = 1    # C: LA_UP
 STAIR_DOWN = 2  # C: LA_DOWN
 
 
+# ============================================================
+# Rooms (C: include/mkroom.h)
+# ============================================================
+#
+# A level keeps its room records next to its tiles (Map.rooms, C:
+# svr.rooms[]), because the rooms are part of the level: they are
+# parked with the Map in World.levels when the hero leaves
+# (PLAN-STAIRS.md decision 3).  Tile.roomno is the back-pointer (C:
+# the 6-bit rm.roomno bitfield), and the three magic values below are
+# the C NO_ROOM / SHARED / ROOMOFFSET exactly as mkroom.h spells them.
+
+NO_ROOM = 0     # C: NO_ROOM -- no room owns this square
+SHARED = 1      # C: SHARED -- a boundary square two rooms share
+ROOMOFFSET = 3  # roomno - ROOMOFFSET == the Map.rooms[] index
+
+MAXNROFROOMS = 40  # C: global.h
+MAX_SUBROOMS = 24  # C: global.h
+
+
+class RoomType(IntEnum):
+    """Room types (C: mkroom.h roomtype_types, values kept exactly).
+
+    SHOPBASE is the first shop type; the individual shop types
+    (ARMORSHOP .. CANDLESHOP) only matter to the shop work (shk.c /
+    shknam.c), which is not ported -- the demo generator never makes
+    one (core.mkroom.do_mkroom is a STUB there).
+    """
+    OROOM = 0       # ordinary room
+    THEMEROOM = 1   # like OROOM, but never converted to a special room
+    COURT = 2       # contains a throne
+    SWAMP = 3       # contains pools
+    VAULT = 4       # detached room, usually reached by teleport
+    BEEHIVE = 5     # killer bees and royal jelly
+    MORGUE = 6      # corpses, undead, graves
+    BARRACKS = 7    # soldiers and their gear
+    ZOO = 8         # floor covered with treasure and monsters
+    DELPHI = 9      # the Oracle and peripherals
+    TEMPLE = 10     # a shrine (altar attended by a priest[ess])
+    LEPREHALL = 11  # leprechaun hall
+    COCKNEST = 12   # cockatrice nest
+    ANTHOLE = 13    # ants
+    SHOPBASE = 14   # everything from here up is a shop
+    ARMORSHOP = 15
+    SCROLLSHOP = 16
+    POTIONSHOP = 17
+    WEAPONSHOP = 18
+    FOODSHOP = 19
+    RINGSHOP = 20
+    WANDSHOP = 21
+    TOOLSHOP = 22
+    BOOKSHOP = 23
+    FODDERSHOP = 24
+    CANDLESHOP = 25
+
+
+# C: mkroom.h -- the two special arguments of search_special().
+ANY_TYPE = -1
+ANY_SHOP = -2
+
+
+@dataclass(eq=False)
+class Room:
+    """One room record (C: struct mkroom, mkroom.h).
+
+    Identity comparison only (``eq=False``): a room is a mutable piece
+    of level state and Map.room_of() / Map.rooms.index() must find
+    *this* room, not the first one with the same geometry.
+
+    Geometry is inclusive: the room's *floor* runs lx..hx by ly..hy;
+    the wall ring sits one square outside it (C: do_room_or_subroom).
+
+    Deviations from the C struct, documented not accidental:
+
+    - ``doors`` is a list of positions instead of C's
+      ``doorct``/``fdoor`` slice of one level-wide ``svd.doors[]``
+      array.  C shifts that array on every insertion to keep each
+      room's slice contiguous; a per-room list is the same
+      information without the shifting.  ``doorct`` and ``fdoor``
+      remain available as read-only readings of it.
+    - ``sbrooms`` holds *indices* into ``Map.subrooms`` instead of
+      pointers (the pyhack rule: no object graphs inside the World).
+    - ``needfill`` (mkroom.h: a sp_lev special-level flag) is not
+      carried: the demo generator fills every OROOM.
+    """
+    lx: int
+    ly: int
+    hx: int
+    hy: int
+    rtype: RoomType = RoomType.OROOM
+    # C: orig_rtype -- rtype is zeroed once some room types have been
+    # entered; the original value is kept here (mklev's
+    # level_finalize_topology copies it).
+    orig_rtype: RoomType = RoomType.OROOM
+    rlit: bool = False
+    needjoining: bool = True
+    irregular: bool = False
+    roomnoidx: int = 0
+    doors: List[Pos] = field(default_factory=list)
+    sbrooms: List[int] = field(default_factory=list)
+
+    # --- C-compatible readings of the door bookkeeping ---
+    @property
+    def doorct(self) -> int:
+        """C: sroom->doorct."""
+        return len(self.doors)
+
+    @property
+    def nsubrooms(self) -> int:
+        """C: sroom->nsubrooms."""
+        return len(self.sbrooms)
+
+    def contains(self, pos: Pos) -> bool:
+        """The room's floor rectangle, boundary walls excluded (C: the
+        lowx..hix / lowy..hiy test; irregular rooms need Map-side
+        roomno lookups instead, see core.mkroom.inside_room)."""
+        x, y = pos
+        return self.lx <= x <= self.hx and self.ly <= y <= self.hy
+
+
+@dataclass
+class LevelFlags:
+    """The level-wide flags of C's ``svl.level.flags`` (struct level_flags,
+    decl.h), reduced to the ones the ported generators and systems set.
+    """
+    nfountains: int = 0
+    nsinks: int = 0
+    has_shop: bool = False
+    has_vault: bool = False
+    has_zoo: bool = False
+    has_court: bool = False
+    has_morgue: bool = False
+    graveyard: bool = False
+    has_beehive: bool = False
+    has_barracks: bool = False
+    has_temple: bool = False
+    has_swamp: bool = False
+    noteleport: bool = False
+    is_maze_lev: bool = False
+    is_cavernous_lev: bool = False
+    arboreal: bool = False
+    corrmaze: bool = False
+
+
 @dataclass
 class Tile:
     """One level location (C: struct rm, reduced).
 
-    STUB: the remaining rm fields (glyph, seenv, lit, waslit, roomno,
-    edge, candig) are not ported yet -- they come with the display
-    (glyph/seenv), lighting (lit/waslit) and room-aware (roomno/edge)
-    work.  door_mask is only meaningful for DOOR/SDOOR tiles;
-    stair_dir only for STAIRS tiles.
+    STUB: the remaining rm fields (glyph, seenv, waslit, icedpool,
+    altarmask, diggable) are not ported yet -- they come with the
+    display (glyph/seenv), ice and altar work.  door_mask is only
+    meaningful for DOOR/SDOOR tiles; stair_dir only for STAIRS tiles.
     """
     typ: TerrainType = TerrainType.ROOM
     door_mask: DoorMask = DoorMask(0)
@@ -354,6 +519,22 @@ class Tile:
     # LA_UP / LA_DOWN); 0 for every other terrain -- worldgen is the
     # only writer (PLAN-STAIRS.md decision 1)
     stair_dir: int = 0
+    # the room this square belongs to (C: rm.h levl[x][y].roomno, a
+    # 6-bit field): NO_ROOM (0) outside rooms, SHARED (1) on a boundary
+    # square two rooms both claim, otherwise <room index> + ROOMOFFSET.
+    # core.mklev.topologize / core.mkmap.flood_fill_rm are the writers.
+    roomno: int = NO_ROOM
+    # a boundary square of a room (C: levl[x][y].edge): the wall/door
+    # ring flood_fill_rm and topologize mark, so an irregular room's
+    # *inside* can be told from its edge.
+    edge: bool = False
+    # is the square lit (C: levl[x][y].lit)?  Set by the room generator
+    # (do_room_or_subroom / topologize) and read by the display.
+    lit: bool = False
+    # wall/door orientation (C: rm.h levl[x][y].horizontal): True for
+    # an east-west wall or a door in one.  Only meaningful for
+    # HWALL/VWALL/DOOR/SDOOR; the door code reads it.
+    horizontal: bool = False
 
     def is_door_open(self) -> bool:
         """A door is passable unless closed/locked/trapped (C: the
@@ -387,6 +568,18 @@ class Map:
         # it to trigger the lazy setup for a bare World (tests) that
         # skipped new_world().
         self.vision_initialized: bool = False
+        # --- rooms (C: svr.rooms[] / gs.subrooms[] / svd.doors[]) ---
+        # The room records belong to the level, so they are parked and
+        # taken back with the Map on a level change.  An empty list is a
+        # level nobody has cut into rooms (the demo generator, the bare
+        # test maps).
+        self.rooms: List[Room] = []
+        self.subrooms: List[Room] = []
+        # C: svd.doors[] + gd.doorindex -- every door the generator made,
+        # in creation order (rooms carry their own subset, see Room.doors).
+        self.doors: List[Pos] = []
+        # C: svl.level.flags (decl.h)
+        self.flags = LevelFlags()
 
     @property
     def width(self) -> int:
@@ -427,6 +620,23 @@ class Map:
             for x in range(self.width)
             if self.is_walkable((x, y))
         ]
+
+    # --- rooms -------------------------------------------------
+
+    def room_at(self, pos: Pos) -> Optional[Room]:
+        """The room whose floor `pos` is, if any (C: the
+        levl[x][y].roomno lookup; SHARED boundary squares belong to no
+        single room)."""
+        roomno = self.tile_at(pos).roomno
+        idx = roomno - ROOMOFFSET
+        if roomno < ROOMOFFSET or not 0 <= idx < len(self.rooms):
+            return None
+        return self.rooms[idx]
+
+    def room_of(self, room: Room) -> int:
+        """The Tile.roomno value of `room`'s inside squares (C: the
+        (sroom - svr.rooms) + ROOMOFFSET idiom)."""
+        return self.rooms.index(room) + ROOMOFFSET
 
 
 @dataclass(frozen=True)
@@ -651,6 +861,11 @@ class World:
     # level (C: num_dunlevs) -- reaching it wins (decision 4.8)
     lev: int = 1
     max_lev: int = 1
+    # the midnight state (C: midnight(), calendar.c): main.py samples
+    # the wall clock once per game and keeps it fixed for the whole
+    # game (the deterministic rule); mattacku's undead double damage
+    # reads it (C: hitmu)
+    midnight: bool = False
     # the CURRENT level's stairways (C: gs.stairs); rebuilt on every
     # level entry by core.stairs.rebuild_stairs
     stairs: "list[Stairway]" = field(default_factory=list)
@@ -676,12 +891,12 @@ class World:
     # hero is not mid-task.  Advanced by core.occupation
     # (run_occupation) at the top of the hero's turn in step().
     occupation: Optional["Occupation"] = None
-    # the wall-clock midnight state for the whole game (C: midnight(),
-    # read per use; here sampled ONCE at world creation -- main.py
-    # passes core.calendar.midnight() into new_world -- so step() stays
-    # deterministic).  Consumed by core.step -> mattacku: an undead
-    # (M2_UNDEAD) deals its base damage twice at midnight (C: hitmu).
-    midnight: bool = False
+    # which level generator new_world()/worldgen.generate_level use
+    # ("demo" = the pinned 40x20 cave every earlier session was built
+    # on, "mklev" = the ported rooms+corridors+doors generator of
+    # core.mklev -- see PLAN-MKLEV.md).  It lives in the World because
+    # levels 2..N generate lazily, long after new_world() returned.
+    generator: str = "demo"
 
     @property
     def hero(self) -> Monster:

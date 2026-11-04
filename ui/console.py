@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from core.commands import (CastCommand, Command, EatCommand, MoveCommand,
-                           PickupCommand, QuaffCommand, ReadCommand,
-                           StairsCommand, TakeOffCommand, WaitCommand,
-                           WearCommand, ZapCommand)
+from core.commands import (CastCommand, CloseCommand, Command, EatCommand,
+                           MoveCommand, PickupCommand, QuaffCommand,
+                           ReadCommand, StairsCommand, TakeOffCommand,
+                           WaitCommand, WearCommand, ZapCommand)
 from core.hunger import HU_STAT
 from core.items import wielded_of
 from core.objects import DEF_OC_SYMS, ObjClass, class_glyph
@@ -61,7 +61,9 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     spell (the direction prompt only for the beam spells -- the
     self spells cast at once), `e<letter>` to eat a food, `q<letter>`
     to quaff a potion (C: the lowercase 'q'; capital `Q` quits -- the
-    demo's old case-insensitive quit is now the capital only) (the
+    demo's old case-insensitive quit is now the capital only),
+    `x<n/s/e/w>` to close the door one step away (C: doclose -- 'c'
+    already casts, so close moved to 'x'; a lone `x` is a wait) (the
     letters are the inventory letters shown in the screen's inventory
     line), `>` to go down the stairs / `<` to climb up (C: the '>' / '<'
     commands); anything else is a wait.
@@ -85,6 +87,13 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
         return StairsCommand(up=False)
     if key == "<":
         return StairsCommand(up=True)
+    # the close command (C: doclose, one step in a direction): 'x' +
+    # an axis letter ('c' already casts, so close moved to 'x'); a
+    # lone 'x' is a wait, like a lone 'q'
+    if key.startswith("x") and len(key) == 2 and key[1] in "nsew":
+        dx, dy = {"n": (0, -1), "s": (0, 1),
+                  "e": (1, 0), "w": (-1, 0)}[key[1]]
+        return CloseCommand(dx, dy)
     if len(key) == 2 and key[1].isalpha():
         item_id = _item_by_letter(world, key[1])
         if item_id is not None:
@@ -145,7 +154,7 @@ def render(world: World, log: List[str]) -> str:
     lines: List[str] = []
     lines.append(f"🗺️  Level {world.lev} of {world.max_lev}")
     # the stair glyphs are C's defsym.h S_downstair '>' / S_upstair '<'
-    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall | > = Stairs down | < = Stairs up")
+    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall/Corridor | ' = Door open | + = Door closed | . = Lit floor | > = Stairs down | < = Stairs up")
     # the floor-glyph legend: the glyphs come from the same defsym.h
     # table the map uses (def_oc_syms, core.objects); the labels are
     # the classes the demo floor carries
@@ -196,10 +205,25 @@ def render(world: World, log: List[str]) -> str:
                 # on a stair keeps its glyph -- the renderer stays total)
                 tile = world.map.tile_at(pos)
                 row.append(">" if tile.stair_dir == STAIR_DOWN else "<")
-            elif world.map.is_wall(pos):
-                row.append("#")
             else:
-                row.append(" ")
+                tile = world.map.tile_at(pos)
+                if tile.typ == TerrainType.DOOR:
+                    # C: S_vcdoor '+' for a closed door, S_vodoor "'"
+                    # for an open one
+                    row.append("'" if tile.is_door_open() else "+")
+                elif tile.typ == TerrainType.SDOOR:
+                    # an undiscovered secret door is part of the wall
+                    row.append("#")
+                elif tile.typ == TerrainType.CORR \
+                        or world.map.is_wall(pos):
+                    # C: corridors and walls share '#'
+                    row.append("#")
+                elif tile.lit:
+                    # a lit room floor (C: S_room '.'); the demo cave
+                    # is unlit, so the pinned render is unchanged
+                    row.append(".")
+                else:
+                    row.append(" ")
         lines.append("".join(row))
 
     hero = world.hero

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import os
 import random
+import sys
 from typing import List
 
 from core import GameOverEvent, MessageEvent, step
 from core.calendar import midnight
-from core.worldgen import new_world
+from core.worldgen import CAVERN, DEMO, MKLEV, new_world
 from ui import read_command, render
 
 
@@ -20,11 +21,17 @@ def main() -> None:
     rng = random.Random(42)  # same seed as the old demo
     # the wall clock enters the game exactly here (C: midnight());
     # World.midnight stays fixed for the whole game (deterministic step)
-    world = new_world(rng, midnight=midnight())
+    # the level generator (WAVE3.md): --mklev / --cavern, the default
+    # is the pinned demo cave
+    generator = MKLEV if "--mklev" in sys.argv else (
+        CAVERN if "--cavern" in sys.argv else DEMO)
+    world = new_world(rng, midnight=midnight(), generator=generator)
     log: List[str] = []
 
     print("🎮 PyHack — functional core, events out")
-    print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | q<letter> quaff | Q to quit")
+    print("   (start with --mklev or --cavern for a generated level: rooms")
+    print("   and corridors with doors, or a cavern)")
+    print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | q<letter> quaff | x<n/s/e/w> close door | Q to quit")
     print("   > go down the stairs | < climb back up: the dungeon has 3")
     print("   levels; level 2+ generates on first visit and stays intact when")
     print("   you come back.  Reaching the bottom level wins!")

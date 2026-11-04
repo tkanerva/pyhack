@@ -80,6 +80,17 @@ class StairsCommand:
     up: bool
 
 
+@dataclass(frozen=True)
+class CloseCommand:
+    """Close the door one step in the given direction (C: 'c' ->
+    doclose, src/lock.c).  There is no OpenCommand: walking into a
+    closed door opens it (C: the domove() case), so 'o' would be
+    redundant.  The demo front-end binds this to 'x' because 'c'
+    already casts a spell."""
+    dx: int
+    dy: int
+
+
 Command = Union[MoveCommand, WaitCommand, ZapCommand, QuaffCommand,
                 CastCommand, ReadCommand, EatCommand, WearCommand,
-                TakeOffCommand, PickupCommand, StairsCommand]
+                TakeOffCommand, PickupCommand, StairsCommand, CloseCommand]

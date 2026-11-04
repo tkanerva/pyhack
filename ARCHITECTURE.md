@@ -27,6 +27,7 @@ turn. The core has **no I/O, no global state, and no broadcast bus**:
         +-- rings                  (rings.py: on/off + discovery)
         +-- pickup                 (pickup.py: the pickobj subset)
         +-- stairs                 (stairs.py: the do.c / dungeon.c subset)
+        +-- doors                  (doors.py: the lock.c doopen / doclose subset)
         +-- vision                 (vision.py: the vision.c port)
         +-- rules                  (rules.py: dice, resist, apply_damage,
                                         process_events)
@@ -180,6 +181,24 @@ details live in the PLAN-*.md files and the module docstrings):**
   newpw records it, losexp subtracts it) — not the regen period, which
   tick_energy computes from the level (C `regen_pw`).  The deferred
   list is PLAN-EXPERIENCE.md §5.
+- The level generators (WAVE3.md / PLAN-MKLEV.md, core/mklev.py,
+  core/mkroom.py, core/mkmap.py, core/doors.py): `new_world(rng,
+  generator="demo"|"mklev"|"cavern")` behind a switch that defaults to
+  the pinned cave (no rng draw gained or lost on the demo path);
+  "mklev" is the ported rooms + corridors + doors generator (C
+  mklev.c / mkroom.c / sp_lev.c / rect.c), "cavern" the cellular
+  automaton (C mkmap.c).  Rooms are level state -- `Map.rooms` /
+  `subrooms` / `doors` / `flags`, the identity-compared `Room`,
+  `Tile.roomno` / `edge` / `lit` / `horizontal` with the C NO_ROOM /
+  SHARED / ROOMOFFSET -- parked with the map in `World.levels`.  No
+  ambient level globals: the Map is a parameter, the transient arrays
+  are arguments (what lets a lazy level be generated while the hero
+  stands on the previous one -- the niche carve used to take
+  world.map and hit the parked level; map_ is threaded through).  Doors
+  are terrain + a system (`core/doors.py`, C lock.c): walking into a
+  closed door opens it (C domove), `x<direction>` closes one
+  (CloseCommand).  Draw order is preserved through the STUBs; the
+  documented divergences are PLAN-MKLEV.md §3.
 
 **Intentional simplifications (documented, not bugs):**
 - Monster AI: a monster that can see the hero (the ported vision,

@@ -5,6 +5,62 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## Wave 3: the level generators (mklev / mkroom / mkmap) + doors
+
+**Why:** the level was a 40x20 rectangle with 15 random walls, 10
+traps and 9 monsters; nothing was a *room*, so nothing could be a
+room-shaped feature (a shop, a temple, a vault, a niche) and the map
+did not look like NetHack.  This wave lands the generator, the
+biggest "looks like NetHack" change available.
+
+**The choices (WAVE3.md is the write-up, PLAN-MKLEV.md the session
+spec with the full table):**
+
+1. **Behind a switch, so nobody's pinned layout moves.**
+   `new_world(rng, generator=…)` takes `"demo"` (the default -- the
+   pinned cave every earlier wave's tests assert), `"mklev"` (rooms +
+   corridors + doors) or `"cavern"` (the cellular automaton).  The
+   name is stored in `World.generator` because levels 2..N are built
+   lazily in `goto_level`, and `generate_level` dispatches on it.  The
+   demo path is byte-for-byte the old one: `test_same_seed_same_game`
+   and the "new_world makes no new rng draws" test still pass
+   unchanged.
+2. **Rooms are level state, not World state.**  `Map.rooms` /
+   `subrooms` / `doors` / `flags` are parked with the map in
+   `World.levels`, so coming back up restores the room records
+   exactly.  `Room` is identity-compared (`eq=False`): `Map.room_of()`
+   must find *that* room.
+3. **No ambient level globals.**  C's generators read `svr.rooms[]`,
+   `gs.smeq[]`, `gd.doorindex`, `svd.doors[]`; here the Map is a
+   parameter and the transient arrays are arguments -- exactly what
+   lets a level be generated while the hero still stands on the
+   previous one.  (This caught one: the niche half of mklev took
+   `world.map` and carved the PARKED level on a lazy descent -- fixed
+   by threading `map_` through make_niches / makeniche / makevtele,
+   pinned by test_lazy_generation_does_not_touch_the_previous_level.)
+4. **`Tile` gains the four `rm.h` fields the work needs** (`roomno`,
+   `edge`, `lit`, `horizontal`) with the C `NO_ROOM` / `SHARED` /
+   `ROOMOFFSET` values, plus `RoomType` and `LevelFlags`.
+5. **Doors are terrain plus a system.**  `TerrainType.DOOR` +
+   `Tile.door_mask` or `SDOOR` (part of the wall).  `core/doors.py` is
+   the interaction half (`lock.c` `doopen` / `doclose`): walking into
+   a closed door opens it (C: `domove`, so there is no `OpenCommand`)
+   and `CloseCommand` + a direction closes one (`x<n/s/e/w>` in the
+   console, because `c` casts).
+6. **Draw order preserved through the STUBs.**  Where a branch is
+   unported the roll is still taken, so the later port changes no
+   sequence.  Seven documented divergences from C, in PLAN-MKLEV.md
+   §3.
+
+Files: core/{mklev,mkroom,mkmap,doors,types,worldgen,step,commands,
+__init__}.py, ui/console.py, main.py (`--mklev` / `--cavern`).
+
+Tests: tests/{test_mklev,test_mkroom,test_mkmap,
+test_worldgen_generators}.py + four console-glyph cases.  The
+structural ones are the point: every room reachable (8-way, like the
+hero), every room entered through a door, one stair per direction with
+the C rules, determinism, and the demo path unchanged.
+
 ## Experience & leveling (core/experience.py, the exper.c port)
 
 **Why:** the hero had no experience system -- kills dealt damage and
