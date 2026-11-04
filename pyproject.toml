@@ -1,3 +1,2 @@
-[tool.mypy]
-files = ["core", "ui", "tests", "main.py", "conftest.py"]
-disable_error_code = ["has-type", "attr-defined"]
+# The mypy config lives in mypy.ini (the file set + the honest-flags
+# policy); this file carries no tool sections.
