@@ -934,3 +934,27 @@ PM_SERGEANT = 278
 PM_NURSE = 279
 PM_LIEUTENANT = 280
 PM_CAPTAIN = 281
+
+# The rest of the anchors the makemon port reads (C: enum monnums).
+# Each one is a name in PM_NAMES at that index -- that is the invariant
+# monst._validate() and tests/test_monst.py check.
+PM_WUMPUS = 84
+PM_LONG_WORM = 114
+PM_BLACK_LIGHT = 119
+PM_STALKER = 153
+PM_GRAY_OOZE = 206
+PM_NAZGUL = 231
+PM_STRAW_GOLEM = 249
+PM_PAPER_GOLEM = 250
+PM_ROPE_GOLEM = 251
+PM_GOLD_GOLEM = 252
+PM_LEATHER_GOLEM = 253
+PM_WOOD_GOLEM = 254
+PM_CLAY_GOLEM = 256
+PM_GLASS_GOLEM = 258
+PM_IRON_GOLEM = 259
+PM_HUMAN = 260
+PM_HIGH_CLERIC = 276
+PM_WIZARD_OF_YENDOR = 285
+PM_ERINYS = 292
+PM_GIANT_EEL = 319

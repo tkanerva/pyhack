@@ -35,6 +35,19 @@ from .types import DamageType, Direction, HungerState, Monster, Pos, World
 ORTHOGONAL: List[Pos] = [(0, 1), (0, -1), (1, 0), (-1, 0)]
 
 
+def level_difficulty(world: World) -> int:
+    """The current level's difficulty (C: dungeon.c#level_difficulty).
+
+    Every depth-sensitive rule reads depth through this helper
+    (rndmonst_adj, mkclass, mkgold, the object genesis), so the day the
+    dungeon grows a real topology -- branches, the Amulet's adjustment,
+    the build-up on the way back up (PLAN-SPLEV.md) -- one edit moves
+    them all.  pyhack's dungeon is linear today, so it is the level
+    number.
+    """
+    return world.lev
+
+
 def manhattan(a: Pos, b: Pos) -> int:
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 

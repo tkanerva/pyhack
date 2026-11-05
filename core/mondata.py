@@ -33,9 +33,9 @@ Dropped / deferred (documented, not bugs):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Optional
 
-from .monst import (
+from .monst import (  # noqa: F401 -- the header's constant set, kept
     PerMonst, Attack, DmgType, MONS, PM_NAMES, NUMMONS, SPECIAL_PM,
     G_KNOWN, G_GENOD, G_EXTINCT, G_GONE, MV_KNOWS_EGG,
     S_ANT, S_BLOB, S_COCKATRICE, S_DOG, S_EYE, S_FELINE, S_GREMLIN,
@@ -75,6 +75,7 @@ from .monst import (
     M3_WANTSARTI, M3_WANTSALL, M3_WAITFORU, M3_CLOSE, M3_COVETOUS,
     M3_WAITMASK, M3_INFRAVISION, M3_INFRAVISIBLE, M3_DISPLACES,
     MZ_SMALL, MZ_LARGE, MS_SILENT, MS_BUZZ, MS_BURBLE,
+    G_UNIQ, G_NOGEN, G_FREQ, PM_HIGH_CLERIC,
     monsndx, monclass, monname, is_golem, is_dragon,
 )
 
@@ -83,7 +84,7 @@ from .monst import (
 # table itself lives in mondata_data.py (extracted for readability);
 # the constants are resolved from PM_NAMES at import time so a
 # renumbering would break loudly.
-from .mondata_data import (  # noqa: E402
+from .mondata_data import (  # noqa: E402,F401 -- the PM_ anchor set
     PM_AIR_ELEMENTAL, PM_BABY_GOLD_DRAGON, PM_BABY_LONG_WORM,
     PM_BABY_PURPLE_WORM, PM_BLACK_LIGHT, PM_BLACK_PUDDING,
     PM_BLACK_UNICORN, PM_CHICKATRICE, PM_CYCLOPS, PM_DEATH, PM_DWARF,
@@ -123,10 +124,20 @@ def mons(pm: int) -> Optional[PerMonst]:
 
 @dataclass
 class MonVitals:
-    """One type's population state (C: struct mvitals)."""
+    """One type's population state (C: struct mvitals, hack.h).
+
+    ``born`` / ``died`` are the 5.0 columns (propagate() bumps `born`,
+    mondead() bumps `died`, and the pair drives extinction); the
+    3.6-era pair ``mvcount`` / ``mvlastseen`` (living population and
+    last move the type was seen) is kept alongside them for the sv*
+    contract the port wrote before the 5.0 diff -- the makemon port
+    uses born / died, nothing reads mvcount yet.
+    """
     mvflags: int = 0
     mvcount: int = 0
     mvlastseen: int = 0
+    born: int = 0
+    died: int = 0
 
 
 class MonState:
@@ -169,6 +180,40 @@ class MonState:
     # C: svflags_free
     def svflags_free(self, pm: int, flags: int) -> None:
         self.svflags(pm, flags, False)
+
+    # C: propagate (makemon.c 957-982)
+    def propagate(self, mndx: int, tally: bool, ghostly: bool,
+                  limit: int) -> bool:
+        """Record one birth of type `mndx`; return whether another may
+        still be created (C: makemon.c#propagate).
+
+        The species is made extinct once `limit` of them have been
+        born (mbirth_limit: MAXMONNO, or 9 for a Nazgul / 3 for an
+        Erinys), at which point rndmonst() stops picking it.  A unique
+        monster is extinct the moment it is created, except for the
+        high priest (whose four slots are real).  `ghostly` is C's
+        "a ghost of a dead adventurer": such a birth only counts when
+        the creation is going to succeed anyway.
+
+        The C wizard-mode debugpline is not ported (no wizard mode).
+        """
+        gone = (self.mvitals[mndx].mvflags & G_GONE) != 0
+        result = self.mvitals[mndx].born < limit and not gone
+        row = MONS[mndx]
+        uniq = row is not None and (row.geno & G_UNIQ) != 0
+        nogen = row is not None and (row.geno & G_NOGEN) != 0
+
+        # C: if it's unique, don't ever make it again
+        if uniq and mndx != PM_HIGH_CLERIC:
+            self.mvitals[mndx].mvflags |= G_EXTINCT
+
+        if self.mvitals[mndx].born < 255 and tally:
+            if not ghostly or result:
+                self.mvitals[mndx].born += 1
+        if self.mvitals[mndx].born >= limit and not nogen \
+                and not (self.mvitals[mndx].mvflags & G_EXTINCT):
+            self.mvitals[mndx].mvflags |= G_EXTINCT
+        return result
 
 
 # ------------------------------------------------------------

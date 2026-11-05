@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from .o_init import ObjTables
 from .mondata import MonState
-from .monst_defs import A_NONE
+from .monst_defs import A_NEUTRAL
 from .rnd import Rng
 
 if TYPE_CHECKING:  # annotation only -- no runtime import cycle
@@ -80,6 +80,10 @@ class ObjectType(Enum):
     GEM = auto()
     BOULDER = auto()
     BOOK = auto()
+    # a pile of gold (added with the object genesis: mkobj.mkgold makes
+    # them by the hundred, and a coin pile is the one class the demo kit
+    # never had)
+    COIN = auto()
 
 
 class WandType(Enum):
@@ -220,6 +224,70 @@ class Direction(Enum):
 
 
 # ============================================================
+# The makemon() / goodpos() flag space (C: include/hack.h)
+# ============================================================
+#
+# C keeps the MM_* flags that steer makemon() and the GP_* flags that
+# steer goodpos() in ONE `mmflags_nht` bit space (hack.h) -- makemon
+# simply passes a few of its own bits straight through.  The space is
+# part of the model here too: core.makemon and core.place both read it,
+# and neither owns it.  The C names are kept as module aliases so a call
+# site reads like the C it came from.
+
+class MmFlags(IntFlag):
+    """Monster-creation / placement flags (C: the MM_* and GP_* bits)."""
+    NO_MINVENT = 0x00000001       # suppress minvent when creating
+    NOWAIT = 0x00000002           # don't set STRAT_WAITMASK flags
+    NOCOUNTBIRTH = 0x00000004     # don't incr the born count (revival)
+    IGNOREWATER = 0x00000008      # ignore water when positioning
+    ADJACENTOK = 0x00000010       # an adjacent square is good enough
+    ANGRY = 0x00000020            # created angry
+    NONAME = 0x00000040           # not christened
+    EGD = 0x00000080              # add egd structure
+    EPRI = 0x00000100             # add epri structure
+    ESHK = 0x00000200             # add eshk structure
+    EMIN = 0x00000400             # add emin structure
+    EDOG = 0x00000800             # add edog structure
+    ASLEEP = 0x00001000           # generated asleep
+    NOGRP = 0x00002000            # suppress monster groups
+    NOTAIL = 0x00004000           # a long worm gets no tail
+    MALE = 0x00008000             # male variation
+    FEMALE = 0x00010000           # female variation
+    NOMSG = 0x00020000            # no appear message
+    NOEXCLAM = 0x00040000         # sedate "appears." message
+    IGNORELAVA = 0x00080000       # ignore lava when positioning
+    MINVIS = 0x00100000           # invisible (wizard mode)
+    ALLOW_XY = 0x00200000         # GP_: enexto() may answer <x,y> itself
+    ALLOW_U = 0x00400000          # GP_: don't reject the hero's square
+    CHECKSCARY = 0x00800000       # GP_: check onscary()
+    AVOID_MONPOS = 0x01000000     # GP_: never share a square with a monster
+
+
+NO_MM_FLAGS = MmFlags(0)
+
+MM_NOWAIT = MmFlags.NOWAIT
+MM_NOCOUNTBIRTH = MmFlags.NOCOUNTBIRTH
+MM_IGNOREWATER = MmFlags.IGNOREWATER
+MM_ADJACENTOK = MmFlags.ADJACENTOK
+MM_ANGRY = MmFlags.ANGRY
+MM_ASLEEP = MmFlags.ASLEEP
+MM_NOGRP = MmFlags.NOGRP
+MM_NOTAIL = MmFlags.NOTAIL
+MM_MALE = MmFlags.MALE
+MM_FEMALE = MmFlags.FEMALE
+MM_NOMSG = MmFlags.NOMSG
+MM_IGNORELAVA = MmFlags.IGNORELAVA
+
+NO_MINVENT = MmFlags.NO_MINVENT
+
+# the goodpos() half (C: the GP_* bits)
+GP_ALLOW_XY = MmFlags.ALLOW_XY
+GP_ALLOW_U = MmFlags.ALLOW_U
+GP_CHECKSCARY = MmFlags.CHECKSCARY
+GP_AVOID_MONPOS = MmFlags.AVOID_MONPOS
+
+
+# ============================================================
 # Map (C: levl[][] of struct rm, rm.h)
 # ============================================================
 #
@@ -354,6 +422,12 @@ def accessible(typ: TerrainType) -> bool:
 def is_pool(typ: TerrainType) -> bool:
     """C: IS_POOL."""
     return TerrainType.POOL <= typ <= TerrainType.DRAWBRIDGE_UP
+
+
+def is_lava(typ: TerrainType) -> bool:
+    """C: IS_LAVA -- a lava pool (LAVAPOOL is *not* a pool: C's IS_POOL
+    stops at DRAWBRIDGE_UP, which is why the two are separate tests)."""
+    return typ in (TerrainType.LAVAPOOL, TerrainType.LAVAWALL)
 
 
 # C: rm.h -- the levl[x][y].ladder mask of a STAIRS tile: which way
@@ -983,9 +1057,11 @@ class World:
     # pattern.
     mon_state: "MonState" = field(default_factory=lambda: MonState())
     # the hero's alignment (C: u.ualign.type).  There is no alignment
-    # system yet, so this is the constant A_NONE the demo uses
-    # (PLAN-MAKEMON.md divergence 1); peace_minded() reads it.
-    hero_align: int = A_NONE
+    # system yet, so this is the constant the demo uses -- A_NEUTRAL,
+    # so a neutral monster gets C's co-aligned peace chance and any
+    # aligned monster is hostile (PLAN-MAKEMON.md divergence 1);
+    # peace_minded() reads it.
+    hero_align: int = A_NEUTRAL
     # the id allocator (C: next_ident(), mkobj.c): one counter for
     # monsters, objects and traps.  The hand-formatted demo ids
     # ("goblin_2_1", "armor_0") are NOT produced through it -- they are
@@ -1006,8 +1082,16 @@ class World:
         """First living actor on THIS level standing on `pos`, if any.
         The lev filter keeps other levels' actors out (decision 3: a
         missed filter is a cross-level ghost monster)."""
+        return self.monster_at_lev(self.lev, pos)
+
+    def monster_at_lev(self, lev: int, pos: Pos) -> Optional[Monster]:
+        """First living actor on level `lev` standing on `pos` (C:
+        MON_AT).  The one place the level-membership filter lives;
+        monster_at() is the current-level form.  The level generators
+        need the parameterised form: they place monsters on a level
+        the hero is not standing on (core.place.goodpos)."""
         for m in self.actors.values():
-            if m.alive and m.lev == self.lev and m.pos == pos:
+            if m.alive and m.lev == lev and m.pos == pos:
                 return m
         return None
 
