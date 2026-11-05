@@ -817,14 +817,28 @@ NO_ATK = Attack(AtkType.NONE, DmgType.PHYS, 0, 0)
 
 
 def _nam(name: str) -> tuple[str | None, str | None, str]:
+    """C: NAM() -- one name for all three genders."""
     return (None, None, name)
+
+
+def _nams(male: str, female: str,
+          neutral: str) -> tuple[str | None, str | None, str]:
+    """C: NAMS() -- the male / female / neutral names of one type
+    (C stores three columns; monname() picks one by gender)."""
+    return (male, female, neutral)
 
 
 def _mon(pmidx, mlet, name, lvl, mov, ac, mr, aln, geno,
          a1, a2, a3, a4, a5, a6, wt, nut, snd, siz, res, conv,
          f1, f2, f3, diff, col) -> PerMonst:
+    """C: the MON() macro -- one mons[] row.
+
+    ``name`` is either a plain string (C: NAM()) or a ``_nams(...)``
+    tuple (C: NAMS()), so a gendered type keeps its three columns.
+    """
+    pmnames = _nam(name) if isinstance(name, str) else name
     return PerMonst(
-        _nam(name), pmidx, mlet, lvl, mov, ac, mr, aln, geno,
+        pmnames, pmidx, mlet, lvl, mov, ac, mr, aln, geno,
         (a1, a2, a3, a4, a5, a6), wt, nut, snd, siz, res, conv,
         f1, f2, f3, diff, col,
     )
@@ -879,3 +893,44 @@ PM_STONE_GOLEM = 257
 PM_GHOST = 287
 PM_MAIL_DAEMON = 314
 PM_LONG_WORM_TAIL = 330
+
+# The depth 1..8 band the makemon port fills in (PLAN-MAKEMON.md phase
+# A, the "a depth band at a time is safe" route: the rows are assigned
+# by C index, so adding one renumbers nothing).
+PM_GIANT_ANT = 0
+PM_KILLER_BEE = 1
+PM_SOLDIER_ANT = 2
+PM_FIRE_ANT = 3
+PM_GIANT_BEETLE = 4
+PM_QUEEN_BEE = 5
+PM_ACID_BLOB = 6
+PM_QUIVERING_BLOB = 7
+PM_GELATINOUS_CUBE = 8
+PM_GAS_SPORE = 27
+PM_FLOATING_EYE = 28
+PM_HOBBIT = 43
+PM_DWARF = 44
+PM_BUGBEAR = 45
+PM_BLUE_JELLY = 56
+PM_SPOTTED_JELLY = 57
+PM_OCHRE_JELLY = 58
+PM_KOBOLD_LEADER = 61
+PM_KOBOLD_SHAMAN = 62
+PM_ORC = 72
+PM_MORDOR_ORC = 74
+PM_URUK_HAI = 75
+PM_ORC_SHAMAN = 76
+PM_ORC_CAPTAIN = 77
+PM_ROCK_PIERCER = 78
+PM_ROTHE = 81
+PM_RABID_RAT = 90
+PM_ROCK_MOLE = 92
+PM_WOODCHUCK = 93
+PM_SCORPION = 97
+PM_PONY = 100
+PM_WHITE_UNICORN = 101
+PM_SOLDIER = 277
+PM_SERGEANT = 278
+PM_NURSE = 279
+PM_LIEUTENANT = 280
+PM_CAPTAIN = 281

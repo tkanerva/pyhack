@@ -9,8 +9,47 @@ import core.monst as M
 def test_table_shape():
     assert len(MONS) == NUMMONS == 383
     assert len(PM_NAMES) == NUMMONS
-    assert len(SUBSET_PM) == 40
-    assert sum(1 for m in MONS if m is not None) == 40
+    # the core subset + the depth 1..8 band the makemon port filled in
+    assert len(SUBSET_PM) == 76
+    assert sum(1 for m in MONS if m is not None) == 76
+    # the sparse table is exactly the subset
+    assert {i for i, m in enumerate(MONS) if m is not None} == set(SUBSET_PM)
+
+
+def test_the_band_rows_are_the_c_ones():
+    """Spot rows of the depth 1..8 band, value by value against
+    include/monsters.h (PLAN-MAKEMON.md phase A's exit check: a
+    transcription bug cannot hide behind "76 rows exist")."""
+    ant = MONS[M.PM_GIANT_ANT]
+    assert (ant.mlevel, ant.mmove, ant.ac, ant.mr, ant.maligntyp) == \
+        (2, 18, 3, 0, 0)
+    assert ant.geno == (M.G_GENO | M.G_SGROUP | 3)
+    assert ant.mattk[0] == Attack(M.AT_BITE, M.AD_PHYS, 1, 4)
+    assert (ant.cwt, ant.cnutrit, ant.msound, ant.msize) == \
+        (10, 10, M.MS_SILENT, M.MZ_TINY)
+    assert ant.difficulty == 4 and ant.mcolor == 3     # CLR_BROWN
+
+    bee = MONS[M.PM_QUEEN_BEE]
+    assert bee.geno == (M.G_GENO | M.G_NOGEN)          # only by request
+    assert bee.mattk[0] == Attack(M.AT_STNG, M.AD_DRST, 1, 8)
+    assert bee.mflags2 & M.M2_FEMALE
+
+    cube = MONS[M.PM_GELATINOUS_CUBE]
+    assert cube.mattk[0] == Attack(M.AT_TUCH, M.AD_PLYS, 2, 4)
+    assert cube.mattk[1] == Attack(M.AT_NONE, M.AD_PLYS, 1, 4)
+    assert cube.mflags1 & M.M1_OMNIVORE
+
+    leader = MONS[M.PM_KOBOLD_LEADER]
+    # C: NAMS() -- the gendered names live in the row
+    assert leader.pmnames == ("kobold lord", "kobold lady",
+                              "kobold leader")
+    assert monname(leader, M.FEMALE) == "kobold lady"
+
+    soldier = MONS[M.PM_SOLDIER]
+    assert monclass(soldier) == M.S_HUMAN
+    assert soldier.mflags2 & M.M2_MERC
+    assert (soldier.difficulty, soldier.mcolor) == (8, 7)
+    assert MONS[M.PM_CAPTAIN].mattk[0] == Attack(M.AT_WEAP, M.AD_PHYS, 4, 4)
 
 
 def test_pm_names_anchors():
