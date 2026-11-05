@@ -270,7 +270,9 @@ details live in the PLAN-*.md files and the module docstrings):**
   drives a generated level -- `main.py`'s `make_rng(generator)` is the
   one place that decision is made, and
   `test_the_demo_entry_point_builds_and_steps_every_generator` runs it
-  for all three generators.
+  for all three generators.  `tests/test_main.py` runs `main()`
+  itself, with the keyboard scripted and only the console faked: the
+  shell's loop had no test until the `--mklev` rng fix.
 
 ## Suggested next steps
 

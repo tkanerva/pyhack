@@ -40,14 +40,20 @@ descent) is covered by the same check.
    built their rng the right way (`Rng`); the untested part was
    `main.py`'s choice.  `test_the_demo_entry_point_builds_and_steps_
    every_generator` now runs `main.make_rng` -> `new_world` -> a few
-   turns of `step` for all three generators, and two tests pin the
-   refusal (plus the message) on both entrances.
+   turns of `step` for all three generators, two tests pin the refusal
+   (plus the message) on both entrances, and the new `tests/
+   test_main.py` runs `main()` itself -- scripted keys, the console the
+   only thing faked -- for `python main.py`, `--mklev` and `--cavern`,
+   so the shell's loop (worldgen -> step -> events -> render) has a
+   test from now on.
 
 Files: main.py (`make_rng`, `SEED`), core/worldgen.py
 (`require_c_rng`, `C_RNG_DRAWS`), tests/test_worldgen_generators.py,
-README.md (the `--mklev` / `--cavern` invocations).
+tests/test_main.py (new), README.md (the `--mklev` / `--cavern`
+invocations).
 
-Tests: 1143 green (three new cases), mypy clean, flake8 clean.
+Tests: 1147 green (seven new cases), mypy clean over 88 files, flake8
+clean on every file touched.
 
 ## Wave 4a/4b: the monster and object genesis (makemon / mkobj)
 
