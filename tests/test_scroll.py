@@ -16,7 +16,7 @@ from core.types import Item, ObjectType, ScrollType
 from core.worn import which_armor
 from conftest import SeqRng, make_world
 
-O = ObjType
+O = ObjType  # noqa: E741 -- the house alias for the object table
 
 # the demo's elven suit / helm (C 5.0's elven armor subset)
 ELVEN_SUIT = O.ELVEN_MITHRIL_COAT
@@ -27,7 +27,7 @@ def make_scroll(scroll_type, id="scr_0", blessed=False, cursed=False):
     it = Item(id=id, otype=ObjectType.SCROLL,
               name=scroll_type.name.lower().replace("_", " "),
               charges=1, blessed=blessed, cursed=cursed,
-              scroll_type=scroll_type, container="player")
+              scroll_type=scroll_type, carrier="player")
     return it
 
 
@@ -90,7 +90,7 @@ def test_floor_scroll_rejected():
     """A scroll lying on the floor (not carried) is not readable."""
     w = make_world()
     scr = make_scroll(ScrollType.BLANK_PAPER)
-    scr.container = None
+    scr.carrier = None
     scr.pos = (3, 3)
     w.items[scr.id] = scr
     ev = read_scroll(w, "player", scr.id, SeqRng())
@@ -102,7 +102,7 @@ def test_untyped_scroll_rejected():
     """A scroll item without an effect tag has nothing to read."""
     w = make_world()
     scr = Item(id="scr_0", otype=ObjectType.SCROLL, name="scroll",
-               charges=1, container="player")
+               charges=1, carrier="player")
     add_scroll(w, scr)
     ev = read(w, scr, SeqRng())
     assert texts(ev) == ["You have nothing to read."]
@@ -252,7 +252,7 @@ def test_enchant_armor_blessed():
     w, a = _armor_world(O.CHAIN_MAIL)
     scr = add_scroll(w, make_scroll(ScrollType.ENCHANT_ARMOR,
                                     blessed=True))
-    ev = read(w, scr, SeqRng(4, 1))
+    read(w, scr, SeqRng(4, 1))
     assert a.spe == 4
     assert a.blessed
     assert not a.cursed

@@ -52,7 +52,7 @@ def _item(otyp: ObjType, owornmask: int = 0) -> Item:
 
 def _add(w, mon, item) -> Item:
     """Carry ``item`` in ``mon``'s inventory (and the world registry)."""
-    item.container = mon.id
+    item.carrier = mon.id
     mon.inventory.append(item)
     w.items[item.id] = item
     return item

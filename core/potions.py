@@ -19,7 +19,7 @@ HEALING_POWER = 12
 
 def _find_potion(world: World, monster_id: str, item_id: str) -> Optional[Item]:
     item = world.items.get(item_id)
-    if item is None or item.otype != ObjectType.POTION or item.container != monster_id:
+    if item is None or item.otype != ObjectType.POTION or item.carrier != monster_id:
         return None
     return item
 

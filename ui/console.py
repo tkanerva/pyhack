@@ -179,7 +179,7 @@ def render(world: World, log: List[str]) -> str:
     # defsym.h OBJCLASS table -- core.objects.class_glyph)
     floor_items: Dict[Pos, Item] = {}
     for item in world.items.values():
-        if item.pos is not None and item.container is None:
+        if item.pos is not None and item.carrier is None:
             floor_items[item.pos] = item
 
     for y in range(world.map.height):

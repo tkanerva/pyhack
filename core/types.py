@@ -11,6 +11,8 @@ from enum import Enum, IntEnum, IntFlag, auto
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from .o_init import ObjTables
+from .mondata import MonState
+from .monst_defs import A_NONE
 from .rnd import Rng
 
 if TYPE_CHECKING:  # annotation only -- no runtime import cycle
@@ -666,6 +668,23 @@ class Stairway:
 
 @dataclass
 class Item:
+    """One object (C: struct obj, reduced).
+
+    Three *mutually exclusive* where-states, by construction (C:
+    obj->where; see PLAN-MKOBJ.md decisions 2-3):
+
+    - on the floor: ``pos`` is set, ``carrier`` is None and no
+      container lists it;
+    - carried: ``carrier`` is the carrier's id and ``pos`` is None
+      (C: OBJ_INVENT / OBJ_MINVENT);
+    - contained: the parent's ``contents`` holds this id, and both
+      ``pos`` and ``carrier`` are None (C: OBJ_CONTAINED).
+
+    The field is named ``carrier``, not ``container``, because that is
+    what it means -- the *containment* relation is ``Item.contents`` on
+    the parent (the reader is core.mkobj.add_to_container, the only
+    writer besides delete_contents).
+    """
     id: str
     otype: ObjectType
     name: str
@@ -673,7 +692,7 @@ class Item:
     blessed: bool = False
     cursed: bool = False
     pos: Optional[Pos] = None          # where it lies on the floor, if anywhere
-    container: Optional[str] = None    # id of the monster carrying it, if any
+    carrier: Optional[str] = None      # id of the monster carrying it, if any
     # the dungeon level the item is on (see Monster.lev); a carried
     # item keeps its carrier's level
     lev: int = 1
@@ -712,6 +731,44 @@ class Item:
     # 0 for a full piece; on an interrupted meal the remainder stays
     # here so the item can be resumed with a reduced duration
     oeaten: int = 0
+    # --- the struct obj fields the object genesis needs (PLAN-MKOBJ.md
+    # §2; written by core.mkobj, read by weight() / the display) ---
+    # how many of this type are in the stack (C: obj->quan).  A gold
+    # pile, ten arrows and three daggers are each ONE Item.
+    quan: int = 1
+    # the monster type of a corpse / statue / egg / figurine / tin
+    # (C: obj->corpsenm); NON_PM (-1) = not a monster-bearing object.
+    # core.types does not import the PM table, so the C NON_PM value is
+    # spelled out here (monst_defs.NON_PM is the same number).
+    corpsenm: int = -1
+    # the ids of the objects inside a container (C: obj->cobj, a list
+    # of ids -- the pyhack rule: no object graphs inside the World).
+    # core.mkobj.add_to_container / delete_contents are the only
+    # writers.
+    contents: List[str] = field(default_factory=list)
+    # the item's weight in 1/100 lb (C: obj->owt), written by
+    # core.mkobj.weight; 0 means "not computed yet" for the hand-built
+    # demo kit (nothing reads it as a real weight yet).
+    owt: int = 0
+    # erosion counters (C: obj->oeroded / oeroded2): how many times the
+    # item was damaged by fire / by acid or corrosion.  ARM_BONUS /
+    # core.worn.uac read them on every query, never cache
+    # (PLAN-ARMOR.md phase 4); core.worn.erode_obj is the writer, and
+    # core.mkobj.mkobj_erosions seeds them at generation time.
+    oeroded: int = 0
+    oeroded2: int = 0
+    # a container's state (C: obj->olocked / obj->otrapped / broken)
+    olocked: bool = False
+    otrapped: bool = False
+    broken: bool = False
+    # C: obj->age (a corpse's / egg's / lamp's clock; written where C
+    # writes it, read nowhere yet -- there is no timeout.c) and
+    # obj->recharged (the wand / ring recharge counter)
+    age: int = 0
+    recharged: int = 0
+    # accepted and always 0: pyhack has no artifact system
+    # (C: obj->oartifact)
+    oartifact: int = 0
 
 
 # ============================================================
@@ -812,6 +869,29 @@ class Monster:
     uen: int = 0
     uenmax: int = 0
     uenpeak: int = 0
+    # --- the makemon fields (PLAN-MAKEMON.md §3) ---
+    # the mons[] index of the type (C: mtmp->mnum); -1 (NON_PM) for a
+    # monster with no table row (the flat-stat demo monsters).
+    # core.mondata.set_mon_data keeps it in step with mdata; vitals,
+    # corpses, statues and genocide all key off it.
+    mnum: int = -1
+    # C: mtmp->female -- affects the name and corpse stacking
+    female: bool = False
+    # C: mtmp->mpeaceful.  The C zeromonst default is hostile (0), and
+    # makemon's peace_minded() is what makes a placid one, so the
+    # default here is the hostile one too.
+    mpeaceful: bool = False
+    # C: mtmp->malign -- the alignment score set_malign() computes for
+    # the kill-alignment bookkeeping (no alignment system yet; the
+    # value is recorded, nothing acts on it)
+    malign: int = 0
+    # C: mtmp->mavenge -- a peaceful monster that was attacked
+    mavenge: bool = False
+    # C: mtmp->mcan -- cancelled (blocks most special attacks)
+    mcan: bool = False
+    # C: mtmp->mstrategy -- the STRAT_WAITFORU / STRAT_CLOSE /
+    # STRAT_APPEARMSG bits of the M3_* flags
+    mstrategy: int = 0
     ueninc: List[int] = field(default_factory=lambda: [0] * MAXULEV)
     # the per-level HP increment (C: u.uhpinc[MAXULEV]); newhp() records
     # uhpinc[old_level] on a level-up and losexp() subtracts
@@ -897,6 +977,26 @@ class World:
     # core.mklev -- see PLAN-MKLEV.md).  It lives in the World because
     # levels 2..N generate lazily, long after new_world() returned.
     generator: str = "demo"
+    # the per-game monster-type status (C: svm: the mvitals[] array of
+    # born / died / flags counters the genocide, extinction and
+    # rndmonst machinery share).  One instance per World, the ObjTables
+    # pattern.
+    mon_state: "MonState" = field(default_factory=lambda: MonState())
+    # the hero's alignment (C: u.ualign.type).  There is no alignment
+    # system yet, so this is the constant A_NONE the demo uses
+    # (PLAN-MAKEMON.md divergence 1); peace_minded() reads it.
+    hero_align: int = A_NONE
+    # the id allocator (C: next_ident(), mkobj.c): one counter for
+    # monsters, objects and traps.  The hand-formatted demo ids
+    # ("goblin_2_1", "armor_0") are NOT produced through it -- they are
+    # load-bearing for the pinned tests -- so it only serves the new
+    # (generated) paths.
+    ident: int = 0
+
+    def new_id(self, prefix: str = "obj") -> str:
+        """Allocate a fresh unique id (C: next_ident())."""
+        self.ident += 1
+        return f"{prefix}_{self.ident}"
 
     @property
     def hero(self) -> Monster:

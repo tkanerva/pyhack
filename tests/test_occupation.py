@@ -42,7 +42,7 @@ def make_food(otyp, id="food_0", **kw):
 
 
 def add_food(w, it):
-    it.container = "player"
+    it.carrier = "player"
     w.items[it.id] = it
     w.hero.inventory.append(it)
     return it

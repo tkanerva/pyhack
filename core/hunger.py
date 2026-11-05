@@ -390,7 +390,7 @@ def _find_food(world: World, actor_id: str, item_id: str) -> Optional[Item]:
     also offers floor food (floorfood's prompt); the command names a
     carried item, house pattern."""
     item = world.items.get(item_id)
-    if item is None or item.container != actor_id:
+    if item is None or item.carrier != actor_id:
         return None
     return item
 
@@ -464,7 +464,7 @@ def _meal(world: World, actor_id: str, item_id: str,
         while True:
             rng = yield ev  # sent: this round's rng; yielded: events
             item = world.items.get(item_id)
-            if item is None or item.container != actor_id:
+            if item is None or item.carrier != actor_id:
                 # C: the eaten piece is gone (stolen / used up) --
                 # do_reset_eat: the meal ends, no message
                 return []

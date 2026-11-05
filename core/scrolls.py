@@ -84,7 +84,7 @@ SPE_LIM = 99
 
 def _find_scroll(world: World, monster_id: str, item_id: str) -> Optional[Item]:
     item = world.items.get(item_id)
-    if item is None or item.otype != ObjectType.SCROLL or item.container != monster_id:
+    if item is None or item.otype != ObjectType.SCROLL or item.carrier != monster_id:
         return None
     return item
 

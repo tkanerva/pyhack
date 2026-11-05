@@ -36,6 +36,6 @@ def pickup(world: World, mon_id: str, rng) -> List[Event]:
         return [MessageEvent("You see nothing here to pick up.")]
     top = here[-1]
     top.pos = None
-    top.container = mon_id
+    top.carrier = mon_id
     mon.inventory.append(top)
     return [MessageEvent(f"You pick up the {top.name}.")]

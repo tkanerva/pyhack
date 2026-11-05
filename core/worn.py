@@ -726,7 +726,7 @@ def erode_obj(world: World, item, ostr: Optional[str], type: int,
     """
     if item is None:
         return [], ER_NOTHING
-    mon = world.actors.get(item.container) if item.container else None
+    mon = world.actors.get(item.carrier) if item.carrier else None
     uvictim = mon is world.hero
     name = item.name if ostr is None else ostr
     print_ = (ef_flags & EF_VERBOSE) != 0
@@ -1049,7 +1049,7 @@ def Ring_on(world: World, ring) -> List[Event]:
     Kept as the C API surface for the call sites the do_wear / read /
     mhitu ports will add (C: read.c setworn(obj, mask), Ring_on(obj)).
     """
-    mon = world.actors.get(ring.container) if ring.container else None
+    mon = world.actors.get(ring.carrier) if ring.carrier else None
     if mon is None:
         return []
     return ring_on(world, mon, ring)
@@ -1060,7 +1060,7 @@ def Ring_off(world: World, ring) -> List[Event]:
     ``ring`` (the caller has already cleared the owornmask).  Delegates
     to core.rings.ring_off (PLAN-RING.md).  See Ring_on for the API-
     surface note."""
-    mon = world.actors.get(ring.container) if ring.container else None
+    mon = world.actors.get(ring.carrier) if ring.carrier else None
     if mon is None:
         return []
     return ring_off(world, mon, ring)

@@ -286,7 +286,7 @@ def _add_gear(w, otyp: ObjType, mask: int, name: str, spe: int = 0) -> Item:
     it = Item(id=f"gear_{otyp.name}", otype=ObjectType.ARMOR,
               name=name, otyp=otyp.value,
               oclass=int(OBJECTS[otyp.value].oclass), spe=spe,
-              owornmask=mask, container="player")
+              owornmask=mask, carrier="player")
     w.hero.inventory.append(it)
     w.items[it.id] = it
     return it
@@ -394,7 +394,7 @@ def _wear(w, otyp: ObjType, mask: int, name: str | None = None, spe=0,
     it = Item(id=f"ph3_{next(_worn_ids)}", otype=_COARSE[int(o.oclass)],
               name=name if name is not None else o.name,
               otyp=otyp.value, oclass=int(o.oclass), spe=spe, cursed=cursed,
-              greased=greased, owornmask=mask, container="player")
+              greased=greased, owornmask=mask, carrier="player")
     w.hero.inventory.append(it)
     w.items[it.id] = it
     return it

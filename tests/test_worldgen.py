@@ -63,7 +63,7 @@ def test_hero_starts_with_a_wielded_short_sword():
     hero = w.hero
     assert hero.wielded == "sword_0"
     sword = w.items["sword_0"]
-    assert sword.container == "player"
+    assert sword.carrier == "player"
     assert sword in hero.inventory
     assert sword.name == "short sword"
     # fine identity: ObjLike-compatible for core.weapon
@@ -130,7 +130,7 @@ def test_floor_armour_lies_on_floor_tiles():
         it = items[0]
         assert it.name == name and it.otyp == otyp.value
         assert it.cursed is cursed
-        assert it.pos == pos and it.container is None
+        assert it.pos == pos and it.carrier is None
         assert it.owornmask == 0
 
 
@@ -148,7 +148,7 @@ def test_floor_scrolls_lie_on_floor_tiles():
         assert it.name == name and it.otyp == otyp.value
         assert it.oclass == ObjClass.SCROLL.value
         assert it.scroll_type is stype
-        assert it.pos == pos and it.container is None
+        assert it.pos == pos and it.carrier is None
 
 
 def test_floor_weapons_lie_on_floor_tiles():
@@ -164,7 +164,7 @@ def test_floor_weapons_lie_on_floor_tiles():
         it = items[0]
         assert it.name == name and it.otyp == otyp.value
         assert it.oclass == ObjClass.WEAPON.value
-        assert it.pos == pos and it.container is None
+        assert it.pos == pos and it.carrier is None
 
 
 def test_floor_foods_lie_on_floor_tiles():
@@ -181,7 +181,7 @@ def test_floor_foods_lie_on_floor_tiles():
         it = items[0]
         assert it.name == name and it.otyp == otyp.value
         assert it.oclass == ObjClass.FOOD.value
-        assert it.pos == pos and it.container is None
+        assert it.pos == pos and it.carrier is None
     assert w.hero.uhunger == 900
     assert w.hero.uhs == HungerState.NOT_HUNGRY
 

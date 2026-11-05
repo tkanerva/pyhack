@@ -21,7 +21,7 @@ def test_pickup_takes_topmost_item():
     second = _floor(w, 2)
     ev = pickup(w, "player", SeqRng())
     # the most recently placed is C's chain head (documented)
-    assert second.pos is None and second.container == "player"
+    assert second.pos is None and second.carrier == "player"
     assert second in w.hero.inventory
     assert first.pos == HERO_POS  # the other one is still on the floor
     assert [e.text for e in ev] == ["You pick up the item 2."]
@@ -38,14 +38,14 @@ def test_pickup_ignores_items_on_other_tiles():
     far = _floor(w, 1, pos=(8, 4))
     ev = pickup(w, "player", SeqRng())
     assert [e.text for e in ev] == ["You see nothing here to pick up."]
-    assert far.pos == (8, 4) and far.container is None
+    assert far.pos == (8, 4) and far.carrier is None
 
 
 def test_pickup_through_step():
     w = make_world()
     it = _floor(w, 1, name="elven leather helm")
     ev = step(w, PickupCommand(), SeqRng())
-    assert it.pos is None and it.container == "player"
+    assert it.pos is None and it.carrier == "player"
     assert it in w.hero.inventory
     assert any(isinstance(e, MessageEvent)
                and e.text == "You pick up the elven leather helm."

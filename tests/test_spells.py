@@ -10,7 +10,7 @@ def world_with_book(spell_type, monsters=(), uen=10):
     w = make_world(monsters=monsters)
     w.hero.uen = w.hero.uenmax = uen
     book = Item(id="book_0", otype=ObjectType.BOOK, name="Book",
-                charges=1, spell_type=spell_type, container="player")
+                charges=1, spell_type=spell_type, carrier="player")
     w.items["book_0"] = book
     w.hero.inventory.append(book)
     return w

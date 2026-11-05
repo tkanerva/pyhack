@@ -74,7 +74,7 @@ def test_generated_world_carries_the_demo_kit(generator):
     deferred), but laid out on the generated level's free squares."""
     w = new_world(_rng(7), generator=generator)
     floor_items = [it for it in w.items.values()
-                   if it.pos is not None and it.container is None]
+                   if it.pos is not None and it.carrier is None]
     # 6 armour + 5 scrolls + 2 weapons + 2 wands + 3 books + 4 foods
     assert len(floor_items) == 22
     for item in floor_items:

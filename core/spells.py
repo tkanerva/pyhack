@@ -101,7 +101,7 @@ SELF_ZAPS: Dict[SpellType, ZapEffect] = {
 
 def _find_book(world: World, caster_id: str, book_id: str) -> Optional[Item]:
     item = world.items.get(book_id)
-    if item is None or item.otype != ObjectType.BOOK or item.container != caster_id:
+    if item is None or item.otype != ObjectType.BOOK or item.carrier != caster_id:
         return None
     return item
 

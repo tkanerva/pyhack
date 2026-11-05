@@ -21,7 +21,7 @@ def test_cannot_move_into_wall():
 def test_bump_attacks_the_monster():
     w = make_world(monsters=[make_monster(pos=(7, 4))])
     # hero hits for 2 (d20=1, 1d2=2); goblin's counterattack misses (d20=20)
-    ev = step(w, MoveCommand(1, 0), SeqRng(1, 2, 20))
+    step(w, MoveCommand(1, 0), SeqRng(1, 2, 20))
     assert w.actors["goblin_0"].hp == 6
     assert w.hero.hp == 25
     assert w.hero.pos == (6, 4)  # bumping does not move the hero
@@ -193,7 +193,7 @@ def test_same_seed_same_game():
 def _kit_item(i: int, otyp: ObjType, name: str, **kw) -> Item:
     it = Item(id=f"kit_{i}", otype=ObjectType.ARMOR, name=name,
               otyp=otyp.value, oclass=ObjClass.ARMOR.value, **kw)
-    it.container = "player"
+    it.carrier = "player"
     return it
 
 
@@ -233,10 +233,10 @@ def test_step_wear_refusal_consumes_no_state():
 def test_step_pickup_command():
     helm = _kit_item(1, ObjType.ELVEN_LEATHER_HELM, "elven leather helm",
                      pos=(6, 4))
-    helm.container = None  # on the floor, not carried
+    helm.carrier = None  # on the floor, not carried
     w = make_world(items=[helm])
     ev = step(w, PickupCommand(), SeqRng())
-    assert helm.pos is None and helm.container == "player"
+    assert helm.pos is None and helm.carrier == "player"
     assert helm in w.hero.inventory
     assert any(isinstance(e, MessageEvent)
                and e.text == "You pick up the elven leather helm."

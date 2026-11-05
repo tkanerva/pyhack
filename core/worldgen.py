@@ -259,13 +259,13 @@ def _starting_kit(world: World) -> None:
                  otyp=ObjType.SHORT_SWORD.value,
                  oclass=ObjClass.WEAPON.value, spe=0)
     world.items[sword.id] = sword
-    sword.container = "player"
+    sword.carrier = "player"
     hero.inventory.append(sword)
     hero.wielded = sword.id
 
     mail = Item(id="mail_0", otype=ObjectType.ARMOR, name="chain mail",
                 otyp=ObjType.CHAIN_MAIL.value, oclass=ObjClass.ARMOR.value)
-    mail.container = "player"
+    mail.carrier = "player"
     mail.owornmask = W_ARM
     hero.inventory.append(mail)
     world.items[mail.id] = mail
@@ -273,7 +273,7 @@ def _starting_kit(world: World) -> None:
     cloak = Item(id="cloak_0", otype=ObjectType.ARMOR, name="leather cloak",
                  otyp=ObjType.LEATHER_CLOAK.value,
                  oclass=ObjClass.ARMOR.value)
-    cloak.container = "player"
+    cloak.carrier = "player"
     hero.inventory.append(cloak)
     world.items[cloak.id] = cloak
 
@@ -281,7 +281,7 @@ def _starting_kit(world: World) -> None:
                   name="leather gloves",
                   otyp=ObjType.LEATHER_GLOVES.value,
                   oclass=ObjClass.ARMOR.value)
-    gloves.container = "player"
+    gloves.carrier = "player"
     hero.inventory.append(gloves)
     world.items[gloves.id] = gloves
 
@@ -289,7 +289,7 @@ def _starting_kit(world: World) -> None:
                 name="ring of protection (+1)",
                 otyp=ObjType.RIN_PROTECTION.value,
                 oclass=ObjClass.RING.value, spe=1)
-    ring.container = "player"
+    ring.carrier = "player"
     hero.inventory.append(ring)
     world.items[ring.id] = ring
 

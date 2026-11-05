@@ -48,7 +48,7 @@ def test_render_shows_every_floor_item_with_its_glyph():
     w = new_world(random.Random(42))
     rows = _map_rows(render(w, []), w.map.height)
     for it in w.items.values():
-        if it.pos is None or it.container is not None:
+        if it.pos is None or it.carrier is not None:
             continue
         x, y = it.pos
         if not _covered(w, it.pos):
@@ -60,7 +60,7 @@ def test_render_shows_all_seven_floor_item_classes():
     one is visible on the seed-42 screen."""
     w = new_world(random.Random(42))
     shown = {it.otype for it in w.items.values()
-             if it.pos is not None and it.container is None
+             if it.pos is not None and it.carrier is None
              and not _covered(w, it.pos)}
     assert shown == set(GLYPHS)
 
@@ -74,7 +74,7 @@ def test_render_floor_glyph_follows_pickup():
     w.items[it.id] = it
     assert _map_rows(render(w, []), w.map.height)[2][3] == "?"
     it.pos = None
-    it.container = "player"
+    it.carrier = "player"
     w.hero.inventory.append(it)
     assert _map_rows(render(w, []), w.map.height)[2][3] == " "
 

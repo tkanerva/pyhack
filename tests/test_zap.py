@@ -10,7 +10,7 @@ def world_with_wand(wand_type, **monster_kw):
     mon = make_monster(pos=(8, 4), **monster_kw)
     w = make_world(monsters=[mon])
     wand = Item(id="wand_0", otype=ObjectType.WAND, name="Wand",
-                charges=1, wand_type=wand_type, container="player")
+                charges=1, wand_type=wand_type, carrier="player")
     w.items["wand_0"] = wand
     w.hero.inventory.append(wand)
     return w

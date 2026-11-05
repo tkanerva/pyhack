@@ -47,8 +47,8 @@ def make_world(map=None, hero=None, monsters=(), traps=(), items=()):
         w.traps[t.id] = t
     for it in items:
         w.items[it.id] = it
-        if it.container is not None:
-            w.actors[it.container].inventory.append(it)
+        if it.carrier is not None:
+            w.actors[it.carrier].inventory.append(it)
     return w
 
 

@@ -336,7 +336,7 @@ def test_zap_kill_by_the_hero_grants_xp():
     mon = demo_goblin(hp=3, max_hp=3)
     w = make_world(monsters=[mon])
     wand = Item(id="wand_0", otype=ObjectType.WAND, name="Wand",
-                charges=1, wand_type=WandType.DEATH, container="player")
+                charges=1, wand_type=WandType.DEATH, carrier="player")
     w.items["wand_0"] = wand
     w.hero.inventory.append(wand)
     # the range roll (7 + 1), then the six d6 (all ones: 6 >= 3 hp)

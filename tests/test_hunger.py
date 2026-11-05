@@ -27,7 +27,7 @@ from core.spells import cast_spell
 from core.types import Item, ObjectType
 from conftest import SeqRng, make_world
 
-O = ObjType
+O = ObjType  # noqa: E741 -- the house alias for the object table
 SATIATED = HungerState.SATIATED
 NOT_HUNGRY = HungerState.NOT_HUNGRY
 HUNGRY = HungerState.HUNGRY
@@ -49,7 +49,7 @@ def make_food(otyp, id="food_0", cursed=False, blessed=False, **kw):
 
 
 def add_food(w, it):
-    it.container = "player"
+    it.carrier = "player"
     w.items[it.id] = it
     w.hero.inventory.append(it)
     return it
@@ -467,7 +467,7 @@ def test_tick_hunger_case16_carried_real_amulet():
     penalty from wearing it (u.uhave.amulet)."""
     w = make_world()
     am = make_amulet(O.AMULET_OF_YENDOR, mask=0)
-    am.container = "player"
+    am.carrier = "player"
     w.items[am.id] = am
     w.hero.inventory.append(am)
     set_hunger(w, 900)
@@ -563,7 +563,7 @@ def test_eat_food_floor_item_rejected():
     item, like ReadCommand); a floor item is simply not found."""
     w = make_world()
     ap = make_food(O.APPLE)
-    ap.container = None
+    ap.carrier = None
     ap.pos = (3, 3)
     w.items[ap.id] = ap
     ev = eat_food(w, "player", ap.id, SeqRng())
@@ -576,7 +576,7 @@ def test_eat_nonfood_refused():
     subset: the FOOD_CLASS test)."""
     w = make_world()
     sw = sword()
-    sw.container = "player"
+    sw.carrier = "player"
     w.items[sw.id] = sw
     w.hero.inventory.append(sw)
     ev = eat_food(w, "player", sw.id, SeqRng())
@@ -726,7 +726,7 @@ def _book_world():
     book = Item(id="book_0", otype=ObjectType.BOOK,
                 name="book of healing", otyp=O.SPE_HEALING.value,
                 oclass=ObjClass.SPBOOK.value, charges=5,
-                spell_type=SpellType.HEALING, container="player")
+                spell_type=SpellType.HEALING, carrier="player")
     w.items[book.id] = book
     w.hero.inventory.append(book)
     return w, book
