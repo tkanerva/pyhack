@@ -5,6 +5,50 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## Fix: `main.py --mklev` / `--cavern` died on the demo's rng
+
+**Why:** the demo entry point was the one path no test ran, and it
+still built its rng the way the pre-Wave-3 demo did:
+`random.Random(42)` for every generator.  The generated levels draw
+through C's `rn2` / `rnd` / `rn1` / `rnl` / `d` / `rne` --
+`random.Random` has none of them -- so `python main.py --mklev` stopped
+with `AttributeError: 'Random' object has no attribute 'rn2'` inside
+`RectManager.rnd_rect()`, in the middle of `makelevel`, before a single
+turn was played.  PLAN-MKLEV.md decision 8 said the port needs
+`core.rnd.Rng`; nothing made the shell pass it.
+
+**The choices:**
+
+1. **The shell picks the stream, per generator** (`main.make_rng`).
+   The pinned demo cave keeps `random.Random(42)` -- every earlier
+   wave's expectation was recorded on that stream -- and `--mklev` /
+   `--cavern` run on `core.rnd.Rng`, seeded from the same number so a
+   generated game is as reproducible as the demo's.  `Rng` also exposes
+   `randint` / `choice` / `shuffle`, so the rest of the runtime (`step`,
+   the monster AI, the combat dice) runs on it unchanged: one rng for
+   world generation and play, as before.
+2. **The contract is refused at the seam.**  `worldgen.require_c_rng()`
+   runs at the top of `_generated_level()` -- the funnel both
+   `new_world()` and `generate_level()` use -- and raises a `TypeError`
+   naming the missing draws and pointing at `core.rnd.Rng`.  A
+   generating call with the wrong rng now fails in one line at the
+   entrance instead of several hundred lines deep in the generator,
+   and the lazy path (levels 2..N, generated in the middle of a
+descent) is covered by the same check.
+3. **The entry point is tested, not just the generators.**  The
+   generators were covered by 130 mklev/cavern tests, all of which
+   built their rng the right way (`Rng`); the untested part was
+   `main.py`'s choice.  `test_the_demo_entry_point_builds_and_steps_
+   every_generator` now runs `main.make_rng` -> `new_world` -> a few
+   turns of `step` for all three generators, and two tests pin the
+   refusal (plus the message) on both entrances.
+
+Files: main.py (`make_rng`, `SEED`), core/worldgen.py
+(`require_c_rng`, `C_RNG_DRAWS`), tests/test_worldgen_generators.py,
+README.md (the `--mklev` / `--cavern` invocations).
+
+Tests: 1143 green (three new cases), mypy clean, flake8 clean.
+
 ## Wave 4a/4b: the monster and object genesis (makemon / mkobj)
 
 **Why:** every remaining level-generation stub was waiting for the same

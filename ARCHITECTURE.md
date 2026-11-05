@@ -203,7 +203,14 @@ details live in the PLAN-*.md files and the module docstrings):**
   are terrain + a system (`core/doors.py`, C lock.c): walking into a
   closed door opens it (C domove), `x<direction>` closes one
   (CloseCommand).  Draw order is preserved through the STUBs; the
-  documented divergences are PLAN-MKLEV.md §3.
+  documented divergences are PLAN-MKLEV.md §3.  The generated paths
+  draw through C's RNG (`rn2` / `rnd` / `rn1` / `rnl` / `d` / `rne`),
+  which `random.Random` does not have, so the caller picks the stream:
+  `main.make_rng()` keeps `random.Random(42)` for the pinned cave and
+  hands `core.rnd.Rng` to `--mklev` / `--cavern`, and
+  `worldgen.require_c_rng()` refuses the wrong one at the entrance to
+  the generators instead of letting it fail in the middle of
+  `makelevel`.
 
 **Intentional simplifications (documented, not bugs):**
 - The monster and object genesis (WAVE 4a/4b, core/makemon.py,
@@ -257,7 +264,13 @@ details live in the PLAN-*.md files and the module docstrings):**
   `SeqRng` (in `conftest.py`) presets exact dice rolls.
 - **Whole games** are deterministic: `new_world(random.Random(42))` +
   a command list reproduces byte-for-byte
-  (`tests/test_step.py::test_same_seed_same_game`).
+  (`tests/test_step.py::test_same_seed_same_game`).  The rng is the
+  caller's: a `random.Random` (or any object with
+  `randint`/`choice`/`shuffle`) drives the demo cave, `core.rnd.Rng`
+  drives a generated level -- `main.py`'s `make_rng(generator)` is the
+  one place that decision is made, and
+  `test_the_demo_entry_point_builds_and_steps_every_generator` runs it
+  for all three generators.
 
 ## Suggested next steps
 

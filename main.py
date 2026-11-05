@@ -9,22 +9,48 @@ from __future__ import annotations
 import os
 import random
 import sys
-from typing import List
+from typing import List, Union
 
 from core import GameOverEvent, MessageEvent, step
 from core.calendar import midnight
+from core.rnd import Rng
 from core.worldgen import CAVERN, DEMO, MKLEV, new_world
 from ui import read_command, render
 
+# The seed of the game (the old demo's 42).
+SEED = 42
+
+
+def make_rng(generator: str) -> Union[random.Random, Rng]:
+    """The game rng a world made by `generator` runs on.
+
+    Two streams, and the choice is the generator's:
+
+    - the pinned demo cave keeps ``random.Random(42)``, the stream every
+      earlier wave's expectations were recorded on;
+    - the generated levels (``--mklev`` / ``--cavern``) draw through the
+      ported C RNG -- ``rn2`` / ``rnd`` / ``rn1`` / ``rnl`` / ``d`` /
+      ``rne``, which ``random.Random`` does not have (PLAN-MKLEV.md
+      decision 8) -- so they run on ``core.rnd.Rng``; it also exposes
+      ``randint`` / ``choice`` / ``shuffle``, so the whole runtime
+      (step, the monster AI, the combat dice) works on it unchanged.
+
+    Seeded from the same number, so a generated game is as reproducible
+    as the demo's: the same seed draws the same level.
+    """
+    if generator == DEMO:
+        return random.Random(SEED)
+    return Rng(b"pyhack:%d" % SEED)
+
 
 def main() -> None:
-    rng = random.Random(42)  # same seed as the old demo
-    # the wall clock enters the game exactly here (C: midnight());
-    # World.midnight stays fixed for the whole game (deterministic step)
     # the level generator (WAVE3.md): --mklev / --cavern, the default
-    # is the pinned demo cave
+    # is the pinned demo cave; the rng follows the generator
     generator = MKLEV if "--mklev" in sys.argv else (
         CAVERN if "--cavern" in sys.argv else DEMO)
+    rng = make_rng(generator)
+    # the wall clock enters the game exactly here (C: midnight());
+    # World.midnight stays fixed for the whole game (deterministic step)
     world = new_world(rng, midnight=midnight(), generator=generator)
     log: List[str] = []
 

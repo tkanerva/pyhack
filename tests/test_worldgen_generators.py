@@ -18,8 +18,8 @@ from core.doors import close_door, open_door
 from core.rnd import Rng
 from core.step import step
 from core.types import (DoorMask, TerrainType, Tile, World)
-from core.worldgen import (CAVERN, DEMO, GENERATORS, MKLEV, demo_floor_items,
-                           new_world)
+from core.worldgen import (CAVERN, DEMO, GENERATORS, HERO_POS, MKLEV,
+                           demo_floor_items, new_world)
 from conftest import make_hero, make_map, make_world
 
 
@@ -39,6 +39,55 @@ def test_the_generator_names_are_the_three_known_ones():
 def test_unknown_generator_is_refused():
     with pytest.raises(ValueError):
         new_world(random.Random(1), generator="maze")
+
+
+def test_a_generated_level_refuses_the_demo_rng():
+    """The rng contract is refused at the seam, with a message that says
+    what to pass, not as an AttributeError from inside makelevel.
+
+    The demo cave draws through randint / choice / shuffle, which
+    random.Random has; the ported generators draw through rn2 / rnd / d
+    (PLAN-MKLEV.md decision 8), which it does not -- `main.py --mklev`
+    used to die on `'Random' object has no attribute 'rn2'` inside
+    RectManager.rnd_rect().
+    """
+    with pytest.raises(TypeError, match="core.rnd.Rng"):
+        new_world(random.Random(42), generator=MKLEV)
+
+
+def test_a_lazily_generated_level_refuses_the_demo_rng_too():
+    """generate_level() is the other entrance to the generators (the
+    lazy levels 2..N)."""
+    from core.worldgen import generate_level
+
+    w = new_world(_rng(2), generator=MKLEV, levels=3)
+    with pytest.raises(TypeError, match="rn2"):
+        generate_level(w, 2, random.Random(1))
+
+
+def test_the_demo_entry_point_builds_and_steps_every_generator():
+    """The entry point's own path: main.make_rng(generator) ->
+    new_world -> a few turns of step, on the very rng the game keeps
+    using.  This is the regression test for `python main.py --mklev`
+    (the shell used to hand `random.Random` to every generator)."""
+    from main import make_rng
+
+    for generator in GENERATORS:
+        rng = make_rng(generator)
+        w = new_world(rng, generator=generator)
+        assert w.generator == generator
+        if generator == DEMO:
+            assert w.hero.pos == HERO_POS, "the pinned cave's hero square"
+            assert w.map.rooms == []
+        else:
+            assert w.map.rooms, "a generated level has rooms"
+            assert w.stairs, "a generated level has staircases"
+        assert w.map.is_walkable(w.hero.pos)
+        for dx, dy in _MOVES:
+            if w.over:
+                break
+            step(w, MoveCommand(dx, dy), rng)
+            assert w.map.is_walkable(w.hero.pos)
 
 
 def test_demo_is_the_default_and_stays_pinned():

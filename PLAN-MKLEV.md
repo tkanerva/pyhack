@@ -112,7 +112,14 @@ Ground truth is the NetHack 5.0 C source in `../NetHack`
 8. **`generator="mklev"` needs `core.rnd.Rng`.**  The generators draw
    through `rn2`/`rnd`/`rn1`/`rnl` (`Random` has none of those);
    `Rng` keeps the old demo working too (it also exposes
-   `randint`/`choice`/`shuffle`).
+   `randint`/`choice`/`shuffle`).  The caller makes the choice:
+   `main.make_rng()` keeps `random.Random(42)` for the pinned cave and
+   hands `Rng` to `--mklev` / `--cavern`.  Coming back to this: the
+   demo went out with `random.Random` for every generator, so
+   `python main.py --mklev` died on `'Random' object has no attribute
+   'rn2'` -- fixed since, and `worldgen.require_c_rng()` now refuses a
+   non-C rng at the entrance to `new_world()` / `generate_level()`
+   (CHANGES.md, "Fix: main.py --mklev ...").
 
 ---
 

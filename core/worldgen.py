@@ -464,6 +464,34 @@ def _cavern_level(world: World, map_: Map, rng, lev: int) -> None:
     _cavern_stairs(map_, rng, lev, world.max_lev)
 
 
+# The draws the ported generators make (PLAN-MKLEV.md decision 8): the
+# level, the monster genesis and the object genesis all draw through
+# these, and the demo's random.Random has none of them.  `core.rnd.Rng`
+# has all of them plus the randint / choice / shuffle the demo path
+# uses, so one object serves both.
+C_RNG_DRAWS = ("rn2", "rnd", "rn1", "rnl", "d", "rne")
+
+
+def require_c_rng(rng) -> None:
+    """Refuse an rng the generated levels cannot draw on.
+
+    Without this the first `rn2()` call raises `AttributeError: 'Random'
+    object has no attribute 'rn2'` from deep inside the generator (it
+    was `RectManager.rnd_rect`, in the middle of makelevel), which says
+    nothing about what the caller has to pass.  `new_world()` and
+    `generate_level()` both funnel through _generated_level, so the
+    check lives there -- `main.py`'s `make_rng()` is the caller that
+    picks `Rng` for --mklev / --cavern.
+    """
+    missing = [name for name in C_RNG_DRAWS if not hasattr(rng, name)]
+    if missing:
+        raise TypeError(
+            "a generated level draws through rng.%s; %s has no %s -- "
+            "use core.rnd.Rng (main.make_rng(), PLAN-MKLEV.md decision 8)"
+            % (", rng.".join(C_RNG_DRAWS), type(rng).__name__,
+               ", ".join(missing)))
+
+
 def _generated_level(world: World, map_: Map, rng, lev: int) -> None:
     """One generated level in place on `map_` (C: the mklev() half of
     goto_level): the rooms + corridors + doors level (core.mklev, the
@@ -474,6 +502,7 @@ def _generated_level(world: World, map_: Map, rng, lev: int) -> None:
     PLAN-STAIRS.md §5).  `map_` is a parameter (not world.map): a
     lazy level is built while the hero still stands on the previous
     one."""
+    require_c_rng(rng)
     if world.generator == MKLEV:
         mklev(world, map_, rng, lev)
     else:
@@ -532,6 +561,13 @@ def new_world(rng, width: int = 40, height: int = 20, levels: int = 3,
     levels are the demo's 40x20 grid).  The name is stored on
     ``World.generator`` because levels 2..N generate lazily in
     generate_level, long after this returns.
+
+    `rng` is the caller's (the core takes no ambient state): the demo
+    cave draws through ``randint`` / ``choice`` / ``shuffle``, so a
+    ``random.Random`` works; a generated level draws through C's
+    ``rn2`` / ``rnd`` / ``d`` and co. and needs ``core.rnd.Rng`` --
+    `require_c_rng()` refuses anything else up front, and
+    ``main.make_rng()`` is the caller that picks per generator.
     """
     if generator not in GENERATORS:
         raise ValueError("unknown generator %r (want one of %s)"

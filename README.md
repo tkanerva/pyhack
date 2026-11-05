@@ -34,7 +34,9 @@ tests/           pytest suite
 ## Run
 
 ```
-python main.py
+python main.py            # the pinned demo cave
+python main.py --mklev    # a generated level: rooms, corridors, doors
+python main.py --cavern   # a generated cavern
 ```
 
 WASD / arrow keys to move, bump a monster to attack it, `g` to pick
@@ -67,8 +69,10 @@ pytest            # run from the repo root
 ```
 
 The tests are deterministic: the core takes an injected
-`random.Random` (or any object with `randint`/`choice`), and `tests`
-includes a `SeqRng` helper for exact roll-by-roll control.
+`random.Random` (or any object with `randint`/`choice`) on the demo
+paths -- and `core.rnd.Rng` on the ones that draw through C's
+`rn2`/`rnd` (the level generators); `tests` includes a `SeqRng` helper
+for exact roll-by-roll control.
 
 ## Type check
 
