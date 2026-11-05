@@ -1,8 +1,21 @@
 # Plan: Wave 4b — the object genesis layer (`mksobj` / `mkobj` / `mkgold`)
 
-**Status: proposed, nothing implemented.** The second half of table.txt
+**Status: phases A, B, C, D and E landed in substance; F and G are
+partly open.** The second half of table.txt
 row 1; the monster half is PLAN-MAKEMON.md. Written after Wave 3
 (PLAN-MKLEV.md) landed: 521 tests green, mypy clean.
+Landed as `core/mkobj.py` (see CHANGES.md "Wave 4a/4b"): the `Item`
+model of phase A (with `container` renamed to `carrier`), `mksobj` /
+`mksobj_init` per class, `mkobj` / `rnd_class` against ObjTables.prob,
+`mkobj_at` / `mksobj_at` / `place_object`, `mkbox_cnts`,
+`add_to_container` / `delete_contents`, `mkgold`, `mkcorpstat`,
+`weight` (whole), the BUC lottery, `rndmonnum` and `mkobj_erosions`.
+Still open: the `charges` -> `spe` migration of §4.A (the demo kit still
+uses the alias; `spe` is the field the genesis writes), `splitobj`, the
+container *merge* rules of phase E, `mkobj_erosions`' rust / rot /
+corrode material tests, and the phase-G terrain branches
+(fountain / sink / altar / grave need `set_levltyp`; the graffiti needs
+`make_engr_at`), whose rolls are deliberately not taken yet.
 
 **Goal:** `mksobj()` — the port of `src/mkobj.c` — so that the level
 generator, the special rooms and the special levels can put *real*

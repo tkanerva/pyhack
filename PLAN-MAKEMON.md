@@ -1,7 +1,22 @@
 # Plan: Wave 4a — the monster genesis layer (`makemon`)
 
-**Status: proposed, nothing implemented.** Written after Wave 3 landed
+**Status: phases A (as a depth band), B, C and D landed; E is the
+mechanism only; F and G are partly open.** Written after Wave 3 landed
 (PLAN-MKLEV.md: rooms + corridors + doors, 521 tests green, mypy clean).
+Landed as `core/makemon.py` + `core/place.py` (see CHANGES.md "Wave
+4a/4b"): the funnel, the selection half (uncommon / rndmonst_adj /
+MongenOrder / gen_ok / mkclass), the strength half (adj_lev / newmonhp /
+mbirth_limit / MonState.propagate), the mood half (peace_minded /
+set_malign), `mongets` / `mkmonmoney`, and `fill_ordinary_room()` now
+spawns through it.  What is still open, in this plan's terms: **A** is a
+76-row depth band, not the full 383 (the rows are assigned by C index,
+so the converter pass in §4.5 renumbers nothing); **E** has the
+inventory *mechanism* but not the `m_initweap` / `m_initinv` species
+tables; **F** (groups, grow_up, clone_mon) is untouched and the
+generator passes MM_NOGRP so the flag is honoured rather than faked;
+**G** retired the demo spawn and added the object half of
+fill_ordinary_room (gold / statue / final object), while the trap-type
+table, `mktrap_victim` and the special-room fillers are still STUBs.
 This is table.txt row 1, the `makemon` half; the object half is
 PLAN-MKOBJ.md. Row 1 is the highest-leverage port left: it is what
 turns the remaining level-generation STUBs from "raise
