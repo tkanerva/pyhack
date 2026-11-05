@@ -41,10 +41,13 @@ STUBs (announced where they are, never silently skipped):
   - the vault (create_vault() / do_vault() / mk_knox_portal()): needs
     the special-room stocking (fill_special_room, mkgold) plus the
     portal machinery.  makelevel() never asks for one.
-  - fill_ordinary_room()'s contents: the monster is a demo-kit monster
-    (worldgen.demo_monster) and the traps are the demo trap kit
-    (mktrap() below); gold, chests, statues, fountains, sinks, altars,
-    graves and engravings need mkgold()/mksobj() and are not placed.
+  - fill_ordinary_room()'s contents: the monster comes from the real
+    distribution (core.makemon -- the old three-demo-kind subset is
+    gone) and the traps from the demo trap kit (mktrap() below).  The
+    object half places gold, a statue and a final random object through
+    core.mkobj; the fountain / sink / altar / grave need the sanctioned
+    terrain writer (set_levltyp) and the engravings need make_engr_at,
+    so those rolls are not taken yet (see _fill_room_objects).
   - mktrap(): C's traptype_rnd() depth table, the dead adventurer
     (mktrap_victim), the rolling-boulder launch path and the
     once/impossible flags.  The trap types the demo implements are
@@ -1236,22 +1239,31 @@ def mktrap(world: World, rng, lev: int, depth: int, pos: Pos,
     return trap
 
 
-def _spawn_monster(world: World, rng, pos: Pos, lev: int,
+def _spawn_monster(world: World, map_: Map, rng, pos: Pos, lev: int,
                    asleep: bool) -> None:
-    """C: makemon() (the demo subset) -- one of the three demo monster
-    kinds, from the same factory the pinned demo world uses."""
-    from .worldgen import demo_monster  # local import: cycle
+    """C: makemon() -- one monster from the real monster distribution.
 
-    kind = rng.rn2(3)
-    i = len(world.actors)
-    ident = f"monster_{lev}_{i}"
-    while ident in world.actors:
-        i += 1
-        ident = f"monster_{lev}_{i}"
-    mon = demo_monster(kind, ident, pos, lev)
+    This is the call that replaced the three hand-tuned demo kinds
+    (_spawn_monster used to be `rng.rn2(3)` -> goblin / orc / bat): the
+    species, its level, its hit points, its gender and its mood all come
+    from core.makemon, so a generated level is populated the way NetHack
+    populates one (PLAN-MAKEMON.md phase D).
+
+    MM_NOGRP is passed until m_initgrp lands (phase F) and MM_NOMSG is
+    implicit -- there is no monster message layer.  The monster sleeps
+    because C's fill_ordinary_room asks for a sleeping one (MM_ASLEEP),
+    which is what makes a generated level start quiet.
+    """
+    from .makemon import makemon  # local import: cycle (makemon -> mkobj)
+    from .types import MmFlags as _Flags
+
+    flags = _Flags.NOGRP
     if asleep:
-        mon.sleeping = 25  # C: MM_ASLEEP -- a placed monster is asleep
-    world.actors[ident] = mon
+        flags |= _Flags.ASLEEP
+    # `map_` and not world.map: a lazy level is built while the hero
+    # still stands on the previous one (PLAN-MKLEV.md decision 3)
+    makemon(world, rng, None, pos, flags, map_=map_, lev=lev,
+            in_mklev=True)
 
 
 def fill_ordinary_room(world: World, map_: Map, rng, room: Room, lev: int,
@@ -1279,7 +1291,7 @@ def fill_ordinary_room(world: World, map_: Map, rng, room: Room, lev: int,
     if not rng.rn2(3):
         pos = somexyspace(map_, traps, room, rng)
         if pos is not None:
-            _spawn_monster(world, rng, pos, lev, asleep=True)
+            _spawn_monster(world, map_, rng, pos, lev, asleep=True)
     # C: put traps and mimics inside
     x = 8 - depth // 6
     if x <= 1:
@@ -1291,11 +1303,48 @@ def fill_ordinary_room(world: World, map_: Map, rng, room: Room, lev: int,
         if pos is not None and not occupied(map_, traps, pos):
             mktrap(world, rng, lev, depth, pos)
             traps = [t for t in world.traps.values() if t.lev == lev]
-    # C: then gold (!rn2(3)), fountain (!rn2(10)), sink (!rn2(60)),
-    # altar (!rn2(60)), grave (!rn2(80 - 2*depth)), statue (!rn2(20)),
-    # the bonus item, a box/chest (!rn2(nroom*5/2)), graffiti, and the
-    # final object (!rn2(3), then a 1/5 chain) -- all need mkgold() /
-    # mksobj() and are not placed yet.
+    _fill_room_objects(world, map_, rng, room, lev, depth, traps)
+
+
+def _fill_room_objects(world: World, map_: Map, rng, room: Room, lev: int,
+                       depth: int, traps: List[Trap]) -> None:
+    """C: the object half of fill_ordinary_room, in C's order.
+
+    Included (the object genesis is in -- PLAN-MKOBJ.md phase G): the
+    gold pile (!rn2(3)), the statue (!rn2(20)) and the final random
+    object (!rn2(3), C's `mkobj_at(RANDOM_CLASS, ...)`).
+
+    STUB, still in C order and each naming its C call: the fountain
+    (!rn2(10)), the sink (!rn2(60)), the altar (!rn2(60)) and the grave
+    (!rn2(80 - 2*depth)) need the sanctioned terrain writer (C:
+    set_levltyp / mkfount / mksink / mkaltar / mkgrave) -- table item 2
+    of the plan's ordering; the bonus item and the box / chest
+    (!rn2(nroom*5/2)) follow them; the graffiti needs make_engr_at.
+
+    The rolls that belong to the STUBs are not taken, so landing them
+    will shift a level's draw sequence -- exactly the kind of change
+    PLAN-MKLEV.md §2.7 asks a port to make deliberately, with the
+    seeded snapshot test as the tripwire.
+    """
+    from .mkobj import (RANDOM_CLASS, mkgold, mkobj_at, mkcorpstat)
+    from .objects import ObjType
+
+    if not rng.rn2(3):                      # C: gold
+        pos = somexyspace(map_, traps, room, rng)
+        if pos is not None:
+            mkgold(world, rng, 0, pos, lev)
+
+    # (fountain / sink / altar / grave: see the docstring)
+
+    if not rng.rn2(20):                     # C: a statue
+        pos = somexyspace(map_, traps, room, rng)
+        if pos is not None:
+            mkcorpstat(world, rng, int(ObjType.STATUE), pos=pos, lev=lev)
+
+    if not rng.rn2(3):                      # C: the final object
+        pos = somexyspace(map_, traps, room, rng)
+        if pos is not None:
+            mkobj_at(world, rng, RANDOM_CLASS, pos, lev)
 
 
 # ============================================================

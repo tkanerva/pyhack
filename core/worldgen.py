@@ -135,10 +135,11 @@ FLOOR_POTIONS: List[Tuple[Pos, str, ObjType, PotionType]] = [
     ((25, 9), "healing potion", ObjType.POT_HEALING, PotionType.HEALING),
 ]
 
-# The demo's three monster kinds: (permonst index, name, hp, damage).
-# The generated levels pick from this table too (core.mklev's
-# fill_ordinary_room demo subset); the real makemon() distribution is
-# not ported (PLAN-MAKEMON.md).
+# The demo cave's three monster kinds: (permonst index, name, hp,
+# damage).  Only the pinned demo generator uses this table now -- the
+# generated levels ("mklev" / "cavern") populate their rooms through
+# core.makemon's real distribution (PLAN-MAKEMON.md phase D), so their
+# monsters get their species, level and hit points from the table.
 DEMO_MONSTER_KINDS: List[Tuple[int, str, int, int]] = [
     (PM_GOBLIN, "Goblin", 8, 2),
     (PM_HILL_ORC, "Orc", 15, 4),
