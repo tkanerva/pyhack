@@ -117,14 +117,15 @@ def goto_level(world: World, target_lev: int, at_stairs: bool,
 
     Order mirrors C: (1) the on_level / range guard, (2) save the
     old level (park it in world.levels -- C's savelev writes the
-    level file; the demo keeps the object), (3) first visit ->
+    level file; the demo keeps the object), (3) set the level (C: u.uz,
+    which the generators read as the depth), (4) first visit ->
     generate (C: mklev()) else take the parked map back (C:
-    getlev()), (4) set the level + rebuild the stairways (C:
-    stairway_free_all + re-add), (5) hero placement on the matching
+    getlev()), (5) rebuild the stairways (C: stairway_free_all +
+    re-add), (6) hero placement on the matching
     staircase (C: u_on_dnstairs when going up, u_on_upstairs when
     going down -- the stairs back toward the level you came from),
-    (6) the arrival collision (C: u_collide_m), (7) the vision
-    reset + recalc (C: vision_reset + docrt), (8) the events
+    (7) the arrival collision (C: u_collide_m), (8) the vision
+    reset + recalc (C: vision_reset + docrt), (9) the events
     (LevelChangeEvent + the C message lines, verbatim).
 
     Everything else in the C goto_level (endgame / quest / knox
@@ -144,6 +145,15 @@ def goto_level(world: World, target_lev: int, at_stairs: bool,
     old_lev = world.lev
     up = target_lev < old_lev
     world.levels[old_lev] = world.map  # C: savelev
+    # C sets u.uz BEFORE it makes the level (`u.uz.dlevel = newlevel...`
+    # then the getlev()-fails-so-mklev() path), which matters because the
+    # level generators read the depth: rndmonst_adj()s difficulty band,
+    # mkgolds amount and mkobjs erosion all go through
+    # rules.level_difficulty(), and that is the level being *built*.
+    # Without this the first visit to level N would be stocked as if it
+    # were level N-1.
+    world.lev = target_lev
+    world.hero.lev = target_lev
     first_visit = target_lev not in world.levels
     m = world.levels.get(target_lev)
     if m is None:
@@ -152,8 +162,6 @@ def goto_level(world: World, target_lev: int, at_stairs: bool,
         del world.levels[target_lev]                # C: getlev()
     world.map = m
 
-    world.lev = target_lev
-    world.hero.lev = target_lev
     rebuild_stairs(world)
 
     if at_stairs:
