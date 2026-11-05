@@ -18,7 +18,8 @@ from core.doors import close_door, open_door
 from core.rnd import Rng
 from core.step import step
 from core.types import (DoorMask, TerrainType, Tile, World)
-from core.worldgen import (CAVERN, DEMO, GENERATORS, MKLEV, new_world)
+from core.worldgen import (CAVERN, DEMO, GENERATORS, MKLEV, demo_floor_items,
+                           new_world)
 from conftest import make_hero, make_map, make_world
 
 
@@ -70,13 +71,22 @@ def test_generated_world_is_playable(generator):
 
 @pytest.mark.parametrize("generator", [MKLEV, CAVERN])
 def test_generated_world_carries_the_demo_kit(generator):
-    """The floor kit is the demo's (the oinit distribution is still
-    deferred), but laid out on the generated level's free squares."""
+    """The demo floor kit is still laid out on the generated level's free
+    squares (the wand / scroll / potion demo needs it), and everything on
+    the floor stands somewhere legal.
+
+    Since Wave 4a/4b the room filler also places its own objects -- gold,
+    a statue, a final random object through core.mkobj -- so the count is
+    a floor now, not a pin: the kit's 22 items are all there and the
+    genesis may have added more.
+    """
     w = new_world(_rng(7), generator=generator)
     floor_items = [it for it in w.items.values()
                    if it.pos is not None and it.carrier is None]
     # 6 armour + 5 scrolls + 2 weapons + 2 wands + 3 books + 4 foods
-    assert len(floor_items) == 22
+    kit = {it.id for it in demo_floor_items()}
+    assert kit <= {it.id for it in floor_items}
+    assert len(floor_items) >= 22
     for item in floor_items:
         assert w.map.is_walkable(item.pos)
         assert item.pos != w.hero.pos
