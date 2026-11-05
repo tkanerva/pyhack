@@ -41,6 +41,13 @@ Design (PLAN-MKOBJ.md decisions 1-8):
   - `mksobj()` never places: the "make and place" helpers are separate.
   - ids come from `World.new_id()`, so a generated object can never
     collide with the hand-formatted demo kit's ids.
+  - an object exists from the moment it is built: `mksobj()` registers
+    it in `World.items` (C: newobj() links it into the object free
+    list, and every `contents` entry is an id that has to resolve), and
+    `place_object()` / `add_to_container()` then set the where-state.
+    The three states stay exclusive because *where* is read off
+    `pos` / `carrier` / the parent's `contents` list, never off the
+    registry.
   - `spe` is the C enchantment / charge field and the only counter the
     genesis writes; the demo's `Item.charges` alias is untouched here
     (it is migrated with the demo kit, PLAN-MKOBJ.md §4.A).
@@ -325,11 +332,16 @@ def mksobj(world: World, rng, otyp: int, init: bool = True,
     id, the class, the per-class initialisation, then the fixups that
     must happen even when `init` is False (a corpse's subject, a
     statue's gender, the oil in a flask), then the weight.
+
+    The object is registered in `World.items` as soon as it is built
+    (see the module docstring); it is *not* on the map -- `pos` and
+    `carrier` stay None until place_object() / add_to_container().
     """
     row = OBJECTS[otyp]
     item = Item(id=world.new_id("obj"), otype=coarse_otype(otyp),
                 name=row.name if row.name is not None else "strange object",
                 otyp=otyp, oclass=int(row.oclass), lev=world.lev)
+    world.items[item.id] = item
     item.age = max(world.turn, 1)
     item.quan = 1
     item.corpsenm = NON_PM
@@ -393,7 +405,7 @@ def mksobj_init(world: World, rng, item: Item, artif: bool) -> None:
     del artif                          # no artifacts: accepted, ignored
     otyp = item.otyp
     oclass = item.oclass
-    ulevel = world.hero.ulevel
+    ulevel = world.hero_ulevel
 
     if oclass == int(ObjClass.WEAPON):
         item.quan = rng.rn1(6, 6) if is_multigen(item) else 1
@@ -882,8 +894,15 @@ def _rloco(world: World, rng, item: Item, lev: int) -> None:
     floor = map_.floor_tiles()
     if floor:
         place_object(world, item, floor[rng.rn2(len(floor))], lev)
-    else:
-        place_object(world, item, world.hero.pos, lev)
+        return
+    hero = world.hero_or_none
+    if hero is None:
+        # no square and no hero (a level being generated): the object
+        # stays built but unplaced -- C's rloco would have nowhere to
+        # put it either
+        world.items[item.id] = item
+        return
+    place_object(world, item, hero.pos, lev)
 
 
 def rndmonnum(world: World, rng) -> int:

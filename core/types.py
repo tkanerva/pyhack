@@ -1078,6 +1078,31 @@ class World:
     def hero(self) -> Monster:
         return self.actors["player"]
 
+    @property
+    def hero_or_none(self) -> Optional[Monster]:
+        """The hero, or None while the game has not placed one yet.
+
+        C's equivalent is the u.ux / u.uy pair: level 1 is generated
+        (mklev()) before u_on_upstairs() puts the hero on the map, so
+        every "is the hero in the way?" test during generation reads
+        (0, 0) and answers "no" -- the same answer None gives here.
+        The genesis (core.makemon / core.place / core.mkobj) is the
+        one caller family that runs on both sides of that line.
+        """
+        return self.actors.get("player")
+
+    @property
+    def hero_ulevel(self) -> int:
+        """C's u.ulevel, with C's value before the hero exists: 1.
+
+        C inits u.ulevel to 1 in u_init() -- before the first mklev(),
+        which is why a level-1 monster's hit points and enchantment
+        rolls already see a level-1 adventurer.  The genesis reads this
+        instead of World.hero.ulevel so it works during generation.
+        """
+        hero = self.hero_or_none
+        return 1 if hero is None else hero.ulevel
+
     def monster_at(self, pos: Pos) -> Optional[Monster]:
         """First living actor on THIS level standing on `pos`, if any.
         The lev filter keeps other levels' actors out (decision 3: a

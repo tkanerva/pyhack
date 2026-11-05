@@ -20,7 +20,7 @@ from core.monst import (A_LAWFUL, G_GENOD, MONS, PM_GIANT_ANT, PM_GOBLIN,
                         PerMonst, monsndx)
 from core.rnd import Rng
 from core.rules import level_difficulty
-from core.types import MmFlags
+from core.types import MmFlags, World
 from conftest import make_map, make_monster, make_world
 
 
@@ -188,12 +188,33 @@ def test_makemon_never_lands_on_the_hero_or_another_monster():
 
 
 def test_makemon_returns_none_on_a_level_with_no_legal_square():
-    """C's NULL for "cannot place it": a solid-stone level refuses land
-    monsters instead of crashing (PLAN-MAKEMON.md §7)."""
+    """C's NULL for "cannot place it": a solid-stone level refuses a
+    monster asked for *anywhere* instead of crashing
+    (PLAN-MAKEMON.md §7).
+
+    A specific type at a specific square is the caller's decision in C
+    (makemon() only sanity-checks the coordinates, which is why the
+    special levels may put a monster in a wall); the goodpos() search
+    is the random-position and the random-type paths.
+    """
     m = blank_map(10, 6)
     w = make_world(map=m)
     assert spawn(w, _rng(), _mon(PM_GIANT_ANT)) is None
-    assert spawn(w, _rng(), _mon(PM_GIANT_ANT), (3, 3)) is None
+
+
+def test_makemon_does_not_need_a_placed_hero():
+    """C generates level 1 before the hero exists: `u.ulevel` is already
+    1 (u_init) and `u_at(x, y)` compares against an unplaced (0, 0), so
+    it is false for every real square.  The genesis reads
+    `World.hero_or_none` / `World.hero_ulevel` for exactly that reason.
+    """
+    w = World(map=make_map(width=12, height=8))
+    assert w.hero_or_none is None
+    assert w.hero_ulevel == 1
+    mon = spawn(w, _rng(), _mon(PM_GIANT_ANT), (3, 3))
+    assert mon is not None
+    assert mon.pos == (3, 3)
+    assert mon.m_lev == adj_lev(w, _mon(PM_GIANT_ANT))
 
 
 def test_makemon_honours_mm_asleep_and_mm_angry():
@@ -273,12 +294,17 @@ def test_set_malign_records_the_c_score():
 def test_a_generated_level_is_populated_from_the_real_table(seed):
     """fill_ordinary_room() calls makemon(), so every monster on a
     generated level carries a PerMonst type, a mons[] index, its
-    instance level and at least two hit points."""
+    instance level and at least two hit points.
+
+    C's monster roll is one room in three (`if (!rn2(3))
+    makemon((struct permonst *) 0, ...)`), so a small level legitimately
+    comes out empty: that half is test_the_room_filler_places_monsters,
+    and these are the properties of whatever was made.
+    """
     w = make_world(map=blank_map(40, 20))
     w.max_lev = 5
     makelevel(w, w.map, _rng(seed), 2)
     monsters = [m for m in w.actors.values() if not m.is_hero]
-    assert monsters, "the room filler must place monsters"
     for mon in monsters:
         assert mon.mdata is not None
         assert mon.mnum == monsndx(mon.mdata)
@@ -286,3 +312,18 @@ def test_a_generated_level_is_populated_from_the_real_table(seed):
         assert mon.max_hp >= 2 and mon.hp == mon.max_hp
         assert w.map.is_walkable(mon.pos)
         assert mon.pos != w.hero.pos
+
+
+def test_the_room_filler_places_monsters():
+    """C: fill_ordinary_room's `if (!rn2(3)) makemon(NULL, ...)` -- a
+    monster in one room in three.  A single small level is empty about
+    one time in four, so this counts over eight levels: a filler that
+    places nothing cannot reach the bar, while C's rate clears it with
+    room to spare."""
+    placed = 0
+    for seed in range(1, 9):
+        w = make_world(map=blank_map(40, 20))
+        w.max_lev = 5
+        makelevel(w, w.map, _rng(seed), 2)
+        placed += len([m for m in w.actors.values() if not m.is_hero])
+    assert placed >= 3, "the room filler must place monsters"

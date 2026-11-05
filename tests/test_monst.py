@@ -193,8 +193,9 @@ def test_worm_tail_is_inert():
 
 
 def test_noattacks_flag_consistency():
-    # every implemented monster has at least the right number of
-    # attack slots, and aatyp 0 means "no attack" in that slot
+    # every implemented monster has the right number of attack slots,
+    # every slot is inside the C field widths, and a monster that is
+    # not the dummy worm tail has something to do in combat
     for idx in SUBSET_PM:
         m = MONS[idx]
         assert len(m.mattk) == M.NATTK
@@ -203,7 +204,10 @@ def test_noattacks_flag_consistency():
             assert 0 <= a.adtyp <= 253
         if m.mlet == M.S_WORM_TAIL:
             continue
-        assert any(a.aatyp for a in m.mattk)
+        # an AT_NONE slot with a damage type and dice is a real attack
+        # (C: the floating eye's paralyzing gaze, the jellies' passive
+        # cold / acid), so "not NO_ATK" is the test, not "aatyp != 0"
+        assert any(a != M.NO_ATK for a in m.mattk)
 
 
 def test_distance_attack_classification():

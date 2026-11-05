@@ -22,6 +22,14 @@ PLAN-MKOBJ.md. Row 1 is the highest-leverage port left: it is what
 turns the remaining level-generation STUBs from "raise
 `NotImplementedError`" into a few lines each.
 
+*Run status:* the wave's tests were landed while the local pytest was
+crashing on startup; the first real run (1140 tests) is green and is
+recorded in CHANGES.md ("Verified when the test runner came back").
+It found two `makemon`-side bugs: the genesis runs *before* the hero
+exists (fixed with `World.hero_or_none` / `World.hero_ulevel`), and
+`goodpos()` has to return -- as C does -- on the water and lava
+branches, and to apply the closed-door half of C's `accessible()`.
+
 **Goal:** `makemon()` — the port of `src/makemon.c` — so that a
 generated level is populated by NetHack's own monster distribution
 instead of the three hand-tuned demo kinds, and so that the special

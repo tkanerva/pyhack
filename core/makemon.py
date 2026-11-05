@@ -202,7 +202,7 @@ def rndmonst_adj(world: World, rng, minadj: int,
     """
     zlevel = rules.level_difficulty(world)
     minmlev = monmin_difficulty(zlevel) + minadj
-    maxmlev = monmax_difficulty(zlevel, world.hero.ulevel) + maxadj
+    maxmlev = monmax_difficulty(zlevel, world.hero_ulevel) + maxadj
 
     totalweight = 0
     selected_mndx = -1
@@ -390,7 +390,7 @@ def mkclass_aligned(world: World, rng, mclass: int, spc: int,
         if k == 0 and zero_freq_for_entire_class:
             k = 1
         if k > 0:
-            too_high = adj_lev(world, ptr) > (world.hero.ulevel * 2)
+            too_high = adj_lev(world, ptr) > (world.hero_ulevel * 2)
             nums[mndx] = k + 1 - (1 if too_high else 0)
             num += nums[mndx]
 
@@ -435,7 +435,7 @@ def adj_lev(world: World, ptr: PerMonst) -> int:
         tmp -= 1                       # weaker than the level: drop one
     else:
         tmp += tmp2 // 5               # one per five of difference
-    tmp2 = world.hero.ulevel - ptr.mlevel
+    tmp2 = world.hero_ulevel - ptr.mlevel
     if tmp2 > 0:
         tmp += tmp2 // 4               # and one per four of hero level
     tmp2 = (3 * ptr.mlevel) // 2       # crude upper limit
@@ -739,12 +739,18 @@ def makemon(world: World, rng, ptr: Optional[PerMonst] = None,
     an extinct population.  Adding the monster to `world.actors` happens
     before the inventory is filled, exactly where C links it into fmon,
     so a nested call (a group member) sees it.
+
+    `world.hero_or_none` (not `world.hero`) is the hero read: level 1 is
+    generated before the hero is placed on the map, and C's `byyou`
+    (`u_at(x, y)`) is false then too -- it compares against an unplaced
+    (0, 0).
     """
     map_ = world.map if map_ is None else map_
     lev = world.lev if lev is None else lev
 
     anymon = ptr is None
-    byyou = (lev == world.hero.lev and pos == world.hero.pos)
+    hero = world.hero_or_none
+    byyou = hero is not None and lev == hero.lev and pos == hero.pos
     allow_minvent = not (mmflags & MmFlags.NO_MINVENT)
     countbirth = not (mmflags & MmFlags.NOCOUNTBIRTH)
 

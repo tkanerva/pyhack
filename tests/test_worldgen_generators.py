@@ -53,8 +53,14 @@ def test_demo_is_the_default_and_stays_pinned():
 @pytest.mark.parametrize("generator", [MKLEV, CAVERN])
 def test_generated_world_is_playable(generator):
     """A generated level: the hero stands on walkable floor, there are
-    staircases, monsters and traps, and the level knows where its rooms
-    are."""
+    staircases, the level knows where its rooms are, and whatever the
+    room filler put on it stands on legal squares.
+
+    C's filler gives a monster to one room in three
+    (`if (!rn2(3)) makemon((struct permonst *) 0, ...)` in
+    fill_ordinary_room), so a small level legitimately comes out empty
+    -- test_generated_worlds_hold_monsters is the population half.
+    """
     w = new_world(_rng(7), generator=generator)
     assert w.generator == generator
     assert w.map.rooms, "a generated level has rooms"
@@ -63,10 +69,22 @@ def test_generated_world_is_playable(generator):
     for stair in w.stairs:
         assert w.map.tile_at(stair.pos).typ == TerrainType.STAIRS
     monsters = [a for a in w.actors.values() if not a.is_hero]
-    assert monsters, "a generated level has monsters"
     for mon in monsters:
         assert w.map.is_walkable(mon.pos)
         assert mon.pos != w.hero.pos
+
+
+@pytest.mark.parametrize("generator", [MKLEV, CAVERN])
+def test_generated_worlds_hold_monsters(generator):
+    """The generated levels are populated by core.makemon, not by the
+    old three hand-tuned demo kinds: counted over six seeds, a generated
+    level 1 holds monsters.  (One seed is not enough -- with C's
+    one-room-in-three roll an empty level is normal.)"""
+    placed = 0
+    for seed in range(1, 7):
+        w = new_world(_rng(seed), generator=generator)
+        placed += len([a for a in w.actors.values() if not a.is_hero])
+    assert placed >= 3, "a generated level has monsters"
 
 
 @pytest.mark.parametrize("generator", [MKLEV, CAVERN])

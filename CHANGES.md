@@ -5,6 +5,147 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## Wave 4a/4b: the monster and object genesis (makemon / mkobj)
+
+**Why:** every remaining level-generation stub was waiting for the same
+two functions.  A generated level was populated by three hand-tuned demo
+kinds and carried no floor objects at all, so a special room could not
+ask for "a queen bee" or "an orc captain" and the vault had no hoard.
+This wave lands `src/makemon.c` and `src/mkobj.c` -- table.txt row 1.
+
+**The choices (PLAN-MAKEMON.md and PLAN-MKOBJ.md are the session
+specs):**
+
+1. **Two new system modules plus one shared choke point.**
+   `core/makemon.py` is the makemon() funnel and its helpers,
+   `core/mkobj.py` is the object genesis, and `core/place.py` is
+   `goodpos()` / `enexto()` (src/teleport.c) -- placement lives apart
+   because teleportation and the level change will need it too.  C's
+   `next_ident()` is `World.new_id()`, and the per-type status
+   (`svm.mvitals[]`) is `World.mon_state` (`core.mondata.MonState`, the
+   ObjTables pattern).
+2. **`makemon()` returns `Optional[Monster]`, and None is normal.**  C
+   returns NULL for "no monster": no legal square, a genocided species,
+   an extinct population.  The callers test the result (`fill_zoo` only
+   sleeps a monster it got), so a None return keeps that shape without
+   exceptions.
+3. **The level is a parameter, not a global.**  `makemon(world, rng,
+   ptr, pos, flags, map_=..., lev=..., in_mklev=...)`: a lazy level is
+   generated while the hero stands on the previous one, so the map, the
+   level number and `gi.in_mklev` are all threaded explicitly
+   (PLAN-MAKEMON.md decisions 4 and 8).  `World.monster_at_lev` is the
+   level-parameterised occupancy filter goodpos() needs -- one filter
+   implementation, two entry points.
+4. **The C draw order is kept**, because the level's rng stream is
+   shared: position, then type, then hit points, then gender, then
+   mood, then inventory.  The weighted reservoir sample of
+   `rndmonst_adj()` (C's `rn2(totalweight) < weight` walk) is ported
+   draw for draw, and mkobj's corpse / statue subjects go through the
+   same sampler, so a corpse and a spawn can never disagree about what
+   exists (or about genocide).
+5. **The monster table grew a depth band, not a hand-typed 383 rows.**
+   36 rows transcribed from include/monsters.h value by value: the ants
+   and the bees (ANTHOLE / BEEHIVE), blobs, jellies, gas spore, floating
+   eye, hobbit / dwarf / bugbear, the kobold leaders, the orc band
+   through orc-captain, piercer / rothe / scorpion, the rodents, pony,
+   white unicorn and the S_HUMAN soldiers (BARRACKS).  SUBSET_PM goes
+   40 -> 76; the rows are assigned by C index, so the completion pass
+   (the monsters.h converter, PLAN-MAKEMON.md §4.5) renumbers nothing.
+   `_nams` is the C NAMS() builder, for the three gendered types.
+6. **`Item` gains the struct obj fields and `container` becomes
+   `carrier`.**  Containment is a list of ids on the parent
+   (`Item.contents`), never an object graph, and a contained item keeps
+   `pos` and `carrier` None -- so the three where-states (floor /
+   carried / contained) are mutually exclusive by construction.  The
+   rename is what keeps the old field from meaning two things; it is a
+   mechanical sweep of every use in core/, ui/, conftest and the tests.
+   The erosion defect PLAN-MKOBJ.md §2 flags disappears with the
+   fields: `core.worn.erode_obj` reads `item.oeroded`, which a plain
+   Item now has.
+7. **The object genesis is a subset, class by class, and every gap is
+   named.**  `mksobj_init` covers weapons, armour, food, potions,
+   scrolls, spellbooks, wands, rings, amulets, the container tools,
+   gems and rocks; the exotic per-otyp switches (tins, candy bars, the
+   invocation tools) fall through to C's own `default: break`.  No
+   timers (corpse rot, eggs, oil, ice): `Item.age` is written where C
+   writes it and read nowhere.  No artifacts, no `splitobj`, no
+   container merging, no monster weapon/inventory tables (phase E), no
+   monster groups (phase F) -- the generator passes MM_NOGRP so the
+   flag is honoured, not faked.
+8. **The generator now uses both.**  `fill_ordinary_room()` calls
+   `makemon(MM_NOGRP | MM_ASLEEP)` instead of picking one of three demo
+   kinds (the old `_spawn_monster` body), and its object half places
+   gold, statues and the final random object in C's order -- the
+   fountains / sinks / altars / graves still wait for `set_levltyp`
+   (table item 2) and their rolls are not taken, which is why they are
+   listed as the next thing to land rather than quietly skipped.
+   `rules.level_difficulty()` is the one depth helper every caller
+   reads, so PLAN-SPLEV.md's dungeon topology is one edit.
+9. **No alignment system, so `peace_minded()` is C's shape with
+   constant inputs**: `World.hero_align` is A_NEUTRAL, so an aligned
+   monster is hostile to the neutral hero and a neutral one gets C's
+   co-aligned chance (PLAN-MAKEMON.md divergence 1).
+
+Files: core/{makemon,mkobj,place}.py (new), core/{mondata,monst,
+monst_defs,monst_data,types,rules,mklev,worldgen}.py, ui/console.py
+and the carrier rename across conftest + the tests; tests/
+{test_makemon,test_mkobj,test_place}.py (new) and the table-shape test.
+
+Tests: the 480-row `mksobj` smoke test, the placement invariants (never
+a wall / the hero / another monster / water a monster cannot survive),
+the MM_ flag behaviour, the genocided / extinct refusal, the difficulty
+band of rndmonst_adj, mkclass's class answer, the container
+where-states, gold merging, the BUC lottery, and the generated-level
+check that every monster carries a table row.
+
+**Verified when the test runner came back (the follow-up fixes).**
+The wave was written while pytest was crashing on startup, so its
+tests had never executed.  The first real run (1140 tests green, mypy
+clean over 87 files, flake8 clean) found three bugs in the new code
+and four test expectations that were wrong about C:
+
+1. **The genesis runs before the hero exists.**
+   `new_world(generator="mklev"|"cavern")` generates level 1 *and
+   then* installs the hero, so `World.hero` raised `KeyError: 'player'`
+   in `adj_lev` / `rndmonst_adj` / `mkclass_aligned` / `mksobj_init` --
+   every generated world crashed.  C is silently fine here because
+   `u.ulevel` is already 1 from `u_init()` and `u_at(x, y)` reads
+   `(0, 0)` during the first `mklev()`, which is never a real square.
+   `World.hero_or_none` and `World.hero_ulevel` (C's default, 1) are
+   now the genesis's two reads; the runtime keeps the strict
+   `World.hero`.
+2. **`goodpos()` fell through where C returns.**  C's pool and lava
+   branches `return (is_swimmer(mdat) || m_in_air(mtmp))` -- before the
+   ACCESSIBLE test -- so a flyer over a pool *is* a good position even
+   though water is not accessible; the port continued into the
+   accessible check and refused it (a bat could not be put over water).
+   Same for lava.
+3. **`accessible()` was the macro, not the function.**  C's `goodpos()`
+   calls monmove.c's `accessible(x, y)`, i.e.
+   `ACCESSIBLE(typ) && !closed_door(x, y)`; the port had only the
+   ACCESSIBLE half, so a land monster could be placed inside a closed
+   door.  Both halves are now in `core.place.goodpos()` (an amorphous
+   monster still slides under it -- that test comes first, as in C).
+4. **An object is registered when it is built, not when it is put
+   somewhere.**  `mksobj()` now adds the object to `World.items` at
+   creation (C: newobj(); and every `contents` entry is an id that has
+   to resolve), with `place_object()` / `add_to_container()` still the
+   only writers of the where-state.
+
+Four *test* expectations were wrong about C and were corrected rather
+than coded around: a specific type at a specific square is not
+`goodpos()`-checked by `makemon()` (only the random-position and
+random-type paths are); a statue's `spe` is the *caller's*
+`corpstatflags & CORPSTAT_SPE_VAL`, so `fill_ordinary_room`'s
+`CORPSTAT_NONE` overrides mksobj's gender roll; a chest from `mksobj`
+arrives with its `mkbox_cnts` contents; and a monster's first attack
+slot may be `AT_NONE` with a damage type (the floating eye's gaze, the
+jellies' passive cold) -- `NO_ATK` is C's "no attack" row, not
+`aatyp == 0`.  Two tests also asserted "a generated level has
+monsters" per seed; C's filler gives a monster to one room in three,
+so one level in four is legitimately empty -- they now count over six
+or eight levels, which is the property they meant.
+
 ## Wave 3: the level generators (mklev / mkroom / mkmap) + doors
 
 **Why:** the level was a 40x20 rectangle with 15 random walls, 10

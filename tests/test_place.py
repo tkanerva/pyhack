@@ -10,10 +10,11 @@ import pytest
 
 from core import place
 from core.mklev import blank_map
-from core.monst import MONS, PM_BAT, PM_FLOATING_EYE, PM_GIANT_SPIDER, PM_GOBLIN
+from core.monst import (MONS, PM_BAT, PM_BLUE_JELLY, PM_FLOATING_EYE,
+                        PM_GIANT_SPIDER, PM_GOBLIN)
 from core.rnd import Rng
-from core.types import (GP_ALLOW_U, GP_AVOID_MONPOS, GP_CHECKSCARY,
-                        MM_IGNOREWATER, TerrainType, Tile)
+from core.types import (DoorMask, GP_ALLOW_U, GP_AVOID_MONPOS,
+                        GP_CHECKSCARY, MM_IGNOREWATER, TerrainType, Tile)
 from conftest import make_map, make_monster, make_world
 
 
@@ -86,9 +87,26 @@ def test_water_is_ignorable():
 
 
 def test_a_closed_door_blocks_a_land_monster():
+    """C: accessible() is ACCESSIBLE() *and* !closed_door(), so a door
+    in its closed D_CLOSED state is not a good position -- while an
+    open door (D_ISOPEN) and a doorway (D_NODOOR, doormask 0) are."""
     w = _world()
-    w.map.tiles[3][3] = Tile(typ=TerrainType.DOOR)
+    w.map.tiles[3][3] = Tile(typ=TerrainType.DOOR,
+                             door_mask=DoorMask.CLOSED)
     assert not place.goodpos(w, _rng(), w.map, 1, (3, 3), MONS[PM_GOBLIN])
+    w.map.tiles[3][3] = Tile(typ=TerrainType.DOOR, door_mask=DoorMask.ISOPEN)
+    assert place.goodpos(w, _rng(), w.map, 1, (3, 3), MONS[PM_GOBLIN])
+
+
+def test_an_amorphous_monster_squeezes_under_a_closed_door():
+    """C: `if (amorphous(mdat) && closed_door(x, y)) return TRUE` --
+    before the accessible() test, so a jelly may be placed in a closed
+    doorway."""
+    w = _world()
+    w.map.tiles[3][3] = Tile(typ=TerrainType.DOOR,
+                             door_mask=DoorMask.CLOSED)
+    assert place.goodpos(w, _rng(), w.map, 1, (3, 3),
+                         MONS[PM_BLUE_JELLY])
 
 
 def test_enexto_finds_an_adjacent_square():

@@ -138,9 +138,12 @@ def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
     The subset, in the C order: in bounds; not the hero's square (unless
     GP_ALLOW_U); not already occupied (GP_AVOID_MONPOS); the per-type
     terrain tests (water, lava, wall-walking, amorphous through a closed
-    door, the eel's water preference); accessible terrain; no boulder;
-    no exclusion zone.  The hero's own water/lava cases and the
-    long-worm-segment case are not ported -- see the module docstring.
+    door, the eel's water preference) -- which RETURN, as C's do, so a
+    swimmer or a flyer over a pool is good and never reaches the
+    ACCESSIBLE test below; accessible terrain, closed doors included (C:
+    monmove.c#accessible); no boulder; no exclusion zone.  The hero's own
+    water/lava cases and the long-worm-segment case are not ported -- see
+    the module docstring.
     """
     allow_u = (gpflags & GP_ALLOW_U) != 0
     avoid_monpos = (gpflags & GP_AVOID_MONPOS) != 0
@@ -152,8 +155,8 @@ def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
         return False
 
     if not allow_u:
-        hero = world.hero
-        if hero.lev == lev and hero.pos == pos:
+        hero = world.hero_or_none
+        if hero is not None and hero.lev == lev and hero.pos == pos:
             return False
 
     if avoid_monpos and world.monster_at_lev(lev, pos) is not None:
@@ -163,12 +166,13 @@ def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
 
     if mdat is not None:
         if is_pool(typ) and not ignorewater:
-            # C: the hero case is not modelled; a monster has to swim or
-            # be off the ground.  Water levels are unported, so the
-            # Is_waterlevel / is_waterwall tests are constantly false.
-            if not (is_swimmer(mdat) or (not is_waterwall(pos)
-                                         and m_in_air(mdat))):
-                return False
+            # C returns here rather than falling through, so a swimmer
+            # or a monster in the air is good on water even though
+            # water is not ACCESSIBLE.  C's hero case is not modelled;
+            # water levels are unported, so the Is_waterlevel /
+            # is_waterwall tests are constantly false.
+            return is_swimmer(mdat) or (not is_waterwall(pos)
+                                        and m_in_air(mdat))
         elif mdat.mlet == S_EEL and rng.rn2(13) and not ignorewater:
             # an eel out of water is refused 12 times in 13 (C draws
             # this, which is why goodpos() takes the level's rng)
@@ -178,8 +182,7 @@ def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
             # could float above it (kept: a property of the species)
             if mdat.pmidx == PM_FLOATING_EYE:
                 return False
-            if not (m_in_air(mdat) or likes_lava(mdat)):
-                return False
+            return m_in_air(mdat) or likes_lava(mdat)
         if passes_walls(mdat) and may_passwall(map_, pos):
             return True
         if amorphous(mdat) and closed_door(map_, pos):
@@ -187,7 +190,9 @@ def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
         if checkscary and onscary(world, map_, lev, pos, mdat):
             return False
 
-    if not accessible(typ):
+    # C: accessible() -- ACCESSIBLE() *and* not a closed door, which is
+    # what stops a land monster being put behind one (monmove.c)
+    if not accessible(typ) or closed_door(map_, pos):
         if not (is_pool(typ) and ignorewater) \
                 and not (is_lava(typ) and ignorelava):
             return False

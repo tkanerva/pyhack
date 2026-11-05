@@ -9,10 +9,10 @@ import pytest
 
 from core.mklev import blank_map, makelevel
 from core.mkobj import (CORPSTAT_FEMALE, CORPSTAT_MALE, CORPSTAT_NEUTER,
-                        add_to_container, bcsign, bless, blessorcurse,
-                        curse, delete_contents, gold_at, hero_gold,
-                        is_container, mkcorpstat, mkgold, place_object,
-                        rnd_class, weight)
+                        CORPSTAT_NONE, add_to_container, bcsign, bless,
+                        blessorcurse, curse, delete_contents, gold_at,
+                        hero_gold, is_container, mkcorpstat, mkgold,
+                        place_object, rnd_class, weight)
 from core.mkobj import mkobj as make_random_object
 from core.mkobj import mksobj
 from core.monst import MONS
@@ -116,7 +116,10 @@ def test_a_corpse_weighs_what_the_species_weighs():
 
 def test_a_contained_item_is_not_on_the_floor_and_not_carried():
     w = _world()
-    box = mksobj(w, _rng(), int(O.CHEST))
+    # init=False: C's mkbox_cnts fills a chest with up to seven items,
+    # and this test is about the where-state of the one added
+    box = mksobj(w, _rng(), int(O.CHEST), init=False)
+    assert box.contents == []
     thing = mksobj(w, _rng(2), int(O.DAGGER))
     place_object(w, thing, (3, 3), w.lev)
     add_to_container(w, box, thing)
@@ -269,5 +272,14 @@ def test_a_statue_may_be_placed_by_the_generator():
     statue = mkcorpstat(w, _rng(4), int(O.STATUE), pos=(3, 3), lev=1)
     assert statue.pos == (3, 3)
     assert statue.corpsenm >= 0
-    # C: the gender lives in the overloaded spe field
-    assert statue.spe in (CORPSTAT_MALE, CORPSTAT_FEMALE, CORPSTAT_NEUTER)
+    # C: mkcorpstat records the *caller's* gender flags in the overloaded
+    # spe field (`otmp->spe = corpstatflags & CORPSTAT_SPE_VAL`), so
+    # CORPSTAT_NONE -- what fill_ordinary_room passes -- is 0,
+    # "unspecified", and overrides the roll mksobj() made
+    assert statue.spe == CORPSTAT_NONE
+    female = mkcorpstat(w, _rng(4), int(O.STATUE), pos=(4, 4), lev=1,
+                        spe=CORPSTAT_FEMALE)
+    assert female.spe == CORPSTAT_FEMALE
+    # ... while mksobj() itself does roll the gender into spe
+    plain = mksobj(w, _rng(4), int(O.STATUE))
+    assert plain.spe in (CORPSTAT_MALE, CORPSTAT_FEMALE, CORPSTAT_NEUTER)

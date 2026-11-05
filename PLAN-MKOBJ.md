@@ -17,6 +17,13 @@ corrode material tests, and the phase-G terrain branches
 (fountain / sink / altar / grave need `set_levltyp`; the graffiti needs
 `make_engr_at`), whose rolls are deliberately not taken yet.
 
+*Run status:* the wave's tests are written but were landed while the
+local pytest was crashing on startup; the first real run (1140 tests)
+is green and is recorded in CHANGES.md ("Verified when the test runner
+came back"): the object half needed one fix (`mksobj()` registers the
+item in `World.items` at creation) and the statue's `spe` is the
+caller's `corpstatflags`, as in C.
+
 **Goal:** `mksobj()` — the port of `src/mkobj.c` — so that the level
 generator, the special rooms and the special levels can put *real*
 objects on the floor: gold, chests with contents, statues, corpses,

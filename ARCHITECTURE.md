@@ -29,8 +29,12 @@ turn. The core has **no I/O, no global state, and no broadcast bus**:
         +-- stairs                 (stairs.py: the do.c / dungeon.c subset)
         +-- doors                  (doors.py: the lock.c doopen / doclose subset)
         +-- vision                 (vision.py: the vision.c port)
+        +-- monster genesis        (makemon.py: the makemon.c funnel;
+        |                          place.py: goodpos / enexto)
+        +-- object genesis         (mkobj.py: the mkobj.c funnel, the
+        |                          containers, mkgold)
         +-- rules                  (rules.py: dice, resist, apply_damage,
-                                        process_events)
+                                        level_difficulty, process_events)
 ```
 
 Events are frozen dataclasses. The UI renders `MessageEvent`s; tests
@@ -65,6 +69,7 @@ bus — and a recorded `(Command, [Event])` sequence *is* a replay.
 | `potion.py`   | `core/potions.py` |
 | `spell.py`    | `core/spells.py` |
 | `priest.py`, `pray.py` | the broken sketches were dropped, never ported; the C originals (`src/priest.c`, `src/pray.c`) are still unported (see "Suggested next steps") |
+| `game.py`'s monster spawns | `core/makemon.py` (the `src/makemon.c` port) + `core/place.py` for `goodpos` / `enexto` (`src/teleport.c`); the object kit -> `core/mkobj.py` (`src/mkobj.c`) |
 
 ## Behaviour decisions
 
@@ -201,6 +206,34 @@ details live in the PLAN-*.md files and the module docstrings):**
   documented divergences are PLAN-MKLEV.md §3.
 
 **Intentional simplifications (documented, not bugs):**
+- The monster and object genesis (WAVE 4a/4b, core/makemon.py,
+  core/mkobj.py, core/place.py): `makemon()` is C's funnel -- position,
+  then type (`rndmonst_adj`'s weighted reservoir sample), then hit
+  points (`adj_lev` / `newmonhp`), then gender, then mood
+  (`peace_minded` / `set_malign`), then inventory -- and it returns
+  `Optional[Monster]`, because C's NULL is a normal answer (no legal
+  square, a genocided species, an extinct population).  The level being
+  stocked is a parameter (`map_`, `lev`, `in_mklev`), so a lazy level is
+  built while the hero stands on another one; `World.monster_at_lev` is
+  the single occupancy filter, and `World.hero_or_none` /
+  `World.hero_ulevel` are the two hero reads that work before there is a
+  hero at all (level 1 is generated first; C reads `u.ulevel` = 1 and an
+  unplaced `u_at()` and gets the same answers).  `goodpos()` is C's,
+  including its early returns on water and lava and the closed-door half
+  of `accessible()`.  `mkclass` / `MongenOrder` walk the
+  per-class generation order, `MonState.propagate` counts births and
+  makes a species extinct, and `mkobj` is the object half: a subset per
+  class, with `Item.contents` (a list of ids) as the only containment
+  and `weight()` ported whole -- an object is registered in
+  `World.items` when `mksobj()` builds it, and `place_object()` /
+  `add_to_container()` then set its where-state.  Still STUBs inside
+  them, each named in the module docstrings: `m_initweap` /
+  `m_initinv` (the 400-line species weapon tables), monster groups,
+  mimics, shapechangers, the timers (corpse rot / eggs / oil / ice),
+  artifacts, `splitobj`, and container merging.  The monster table is a
+  **depth band** (76 of 383 rows, assigned by C index so the completion
+  pass renumbers nothing), and there is no alignment system, so
+  `peace_minded()` runs on the constant `World.hero_align` = A_NEUTRAL.
 - Monster AI: a monster that can see the hero (the ported vision,
   core/vision.py) chases with a greedy single step; the full
   `mmove()` (doors, fleeing, remembered positions, M2_WANDER, waking
@@ -231,16 +264,26 @@ details live in the PLAN-*.md files and the module docstrings):**
 1. Wire `QuaffCommand` into the console UI (zap / cast / eat are
    already wired; `q` is the quit key in this demo, so the quaff key
    is to choose).
-2. Port `src/priest.c` / `src/pray.c` as systems (start from the
-   local clone: `NetHack/src/priest.c` and `NetHack/src/pray.c`).
-3. Fill in the scroll STUBs in `core/scrolls.py` as their machinery
+2. Finish the monster / object genesis's phase E-G (PLAN-MAKEMON.md,
+   PLAN-MKOBJ.md): the `m_initweap` / `m_initinv` species tables, the
+   monster groups, and the terrain-writing half of
+   `fill_ordinary_room` (fountains / sinks / altars / graves), which
+   needs `set_levltyp` first.  The mechanism is in place, the data is
+   not.
+3. Complete `mons[]` with the monsters.h converter (PLAN-MAKEMON.md
+   §4.5): the rows are assigned by index, so it is one mechanical pass
+   and nothing renumbers.
+4. Port `src/priest.c` / `src/pray.c` as systems (start from the
+   local clone: `NetHack/src/priest.c` and `NetHack/src/pray.c`);
+   `makemon`'s MM_EPRI / MM_ESHK hooks are waiting for them.
+5. Fill in the scroll STUBs in `core/scrolls.py` as their machinery
    lands (the C provenance of each is in the module docstring).  Next
    candidates on existing machinery: SCR_DESTROY_ARMOR (the wrapper
    around the already-real `worn.disintegrate_arm` / `destroy_arm`),
    SCR_LIGHT (a `lit` flag on Tile), SCR_CONFUSE_MONSTER
    (rules.apply_confusion over nearby monsters).
-4. Full monster AI (`mmove()`) on the ported vision: doors, fleeing,
+6. Full monster AI (`mmove()`) on the ported vision: doors, fleeing,
    remembered positions, M2_WANDER (the greedy single-step chase is
    in).
-5. If the system/entity matrix grows, evolve into a lightweight ECS —
+7. If the system/entity matrix grows, evolve into a lightweight ECS —
    the events-out design stays the same.
