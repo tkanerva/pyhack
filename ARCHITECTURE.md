@@ -276,29 +276,67 @@ details live in the PLAN-*.md files and the module docstrings):**
 
 ## Suggested next steps
 
-1. Wire `QuaffCommand` into the console UI (zap / cast / eat are
-   already wired; `q` is the quit key in this demo, so the quaff key
-   is to choose).
-2. Finish the monster / object genesis's phase E-G (PLAN-MAKEMON.md,
-   PLAN-MKOBJ.md): the `m_initweap` / `m_initinv` species tables, the
-   monster groups, and the terrain-writing half of
-   `fill_ordinary_room` (fountains / sinks / altars / graves), which
-   needs `set_levltyp` first.  The mechanism is in place, the data is
-   not.
-3. Complete `mons[]` with the monsters.h converter (PLAN-MAKEMON.md
-   §4.5): the rows are assigned by index, so it is one mechanical pass
-   and nothing renumbers.
-4. Port `src/priest.c` / `src/pray.c` as systems (start from the
-   local clone: `NetHack/src/priest.c` and `NetHack/src/pray.c`);
-   `makemon`'s MM_EPRI / MM_ESHK hooks are waiting for them.
-5. Fill in the scroll STUBs in `core/scrolls.py` as their machinery
-   lands (the C provenance of each is in the module docstring).  Next
-   candidates on existing machinery: SCR_DESTROY_ARMOR (the wrapper
-   around the already-real `worn.disintegrate_arm` / `destroy_arm`),
-   SCR_LIGHT (a `lit` flag on Tile), SCR_CONFUSE_MONSTER
-   (rules.apply_confusion over nearby monsters).
-6. Full monster AI (`mmove()`) on the ported vision: doors, fleeing,
-   remembered positions, M2_WANDER (the greedy single-step chase is
-   in).
-7. If the system/entity matrix grows, evolve into a lightweight ECS —
-   the events-out design stays the same.
+Wave 4a/4b has landed (core/makemon.py / core/mkobj.py /
+core/place.py; the 480-row `mksobj` smoke; generated levels stocked
+from the tables; the demo still byte-identical).  The queue, in
+dependency order:
+
+1. **Complete the monster table** (PLAN-MAKEMON.md phase A, §4.5):
+   the one-off `include/monsters.h` converter fills `SUBSET_PM` 76 ->
+   383.  The rows are assigned by C index, so nothing renumbers; the
+   session is the converter + the `_validate()` cross-checks + the
+   ~20 spot rows.  Pure data, one mechanical pass — and it is what
+   turns `rndmonst_adj` / `mkclass` from a depth band into the real
+   distribution (every corpse, statue and special room reads it; a
+   half-filled table makes bugs look like tuning, PLAN-MAKEMON §4.6).
+2. **`set_levltyp` + the terrain writers** (the plans' "table item
+   2"): the sanctioned terrain mutator, then `mkfount` / `mksink` /
+   `mkaltar` / `mkgrave` (mklev.c).  That takes the fountain / sink /
+   altar / grave rolls of `fill_ordinary_room` in C order (PLAN-MKOBJ
+   phase G) — a deliberate draw-sequence change, the seeded snapshot
+   test is the tripwire — and it is the same writer Wave 5's
+   `mkswamp` and the temple altar need.
+3. **Wave 5: special rooms** (PLAN-SPECIAL-ROOMS.md), in the plan's
+   own staging: the temple first (needs `src/priest.c` / `src/pray.c`
+   as core systems and the `Monster.epri` extra — makemon already
+   accepts-and-ignores MM_EPRI / MM_ESHK), then the zoo family
+   (`fill_zoo` / `courtmon` / `squadmon` / `morguemon` / `antholemon`
+   / `mkundead` / `mk_zoo_thronemon` become `mkclass` + `makemon`
+   fill-ins), the shops last (shk.c is billing before it is a room).
+4. **The genesis residue** (independent of 1-3, interleavable):
+   phase E's `m_initweap` / `m_initinv` species tables (monster
+   inventories; the `mongets` / `mkmonmoney` mechanism is in), phase
+   F's groups / `grow_up` / `clone_mon` / `create_critters`, the
+   `Item.charges` -> `spe` migration (delete the alias; the readers
+   are zap / spells / potions / items / the demo kit, one commit),
+   `splitobj` + the container / pickup merge rules, the rust / rot /
+   corrode half of `mkobj_erosions`, and the fire-trap-erodes-armour
+   regression test.
+5. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
+   PLAN-DROP.md — invent.c / pickup.c / do.c + wield.c): the pickobj
+   / sortloot / getobj machinery over the real Item model; it
+   consumes 4's merge rules and `splitobj`.
+6. **The small UI debt**: wire `QuaffCommand` (zap / cast / eat are
+   wired; `q` quits, so the quaff key is to choose).
+7. **Scrolls**: fill in the STUBs of `core/scrolls.py` as their
+   machinery lands (the C provenance of each is in the module
+   docstring); next candidates on existing machinery:
+   SCR_DESTROY_ARMOR (the wrapper around the already-real
+   `worn.disintegrate_arm`), SCR_LIGHT (a `lit` flag on Tile),
+   SCR_CONFUSE_MONSTER (rules over nearby monsters).
+8. **Full monster AI** (`mmove()`) on the ported vision: doors,
+   fleeing, remembered positions, M2_WANDER (the greedy single-step
+   chase is in).
+9. **Wave 7 / 8, then the special levels**: throwing (PLAN-THROW.md,
+   dothrow.c + mthrowu.c), breath weapons (PLAN-BREATH.md, the
+   zap.c dobuzz beam engine), then PLAN-SPLEV.md's `des` API + the
+   lua level programs (the most parallelisable piece left).
+10. If the system/entity matrix grows, evolve into a lightweight ECS
+    — the events-out design stays the same.
+
+Also due: rerun `nethack_index/tools/generate_index.py` — INDEX.md
+was generated before Wave 4a/4b landed and still lists makemon.c /
+mkobj.c as unported; and PLAN-EXPERIENCE.md / PLAN-ARMOR.md's status
+headers predate their own landings (both systems are in and tested),
+so the next session touching either should refresh the header in the
+same commit.
