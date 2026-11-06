@@ -78,9 +78,9 @@ from .monst import (MAXMCLASSES, PM_NAMES, PerMonst,
                     S_DRAGON, S_EEL, S_GIANT, S_JABBERWOCK, S_NAGA,
                     S_SNAKE, S_XORN)
 from .objects import (Material, NUM_OBJECTS, ObjClass, OBJECTS, ObjType,
-                      P_NUM_SKILLS, PIERCE, Skill, WHACK)
+                      P_NUM_SKILLS, Skill, WHACK)
 
-O = ObjType  # short alias for table lookups
+O = ObjType  # noqa: E741 -- short alias for table lookups
 
 
 # ------------------------------------------------------------

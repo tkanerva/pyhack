@@ -39,7 +39,7 @@ from __future__ import annotations
 from math import isqrt  # noqa: F401  (stdlib replacement for C isqrt)
 from typing import Optional, Tuple
 
-from .hacklib_inflection import (
+from .hacklib_inflection import (  # noqa: F401  (re-export; see the docstring)
     ing_suffix,
     makesingular,
     makeplural,

@@ -1,7 +1,7 @@
 """Tests for the object table initialization (core.o_init)."""
-from core.objects import (ObjClass, ObjType, OBJECTS, MAXOCLASSES,
-                          IMMEDIATE, NODIR, NUM_OBJECTS, O)
-from core.o_init import (BASES, ObjTables, discover_object, init_oclass_probs,
+from core.objects import (IMMEDIATE, MAXOCLASSES, NODIR, NUM_OBJECTS,
+                          O, OBJECTS, ObjClass)
+from core.o_init import (ObjTables, discover_object,
                          interesting_to_discover, obj_shuffle_range,
                          oinit, observe_object, randomize_gem_colors,
                          setgemprobs, shuffle, typename, undiscover_object)
@@ -136,6 +136,7 @@ def test_obj_shuffle_ranges():
 def test_discovery_tracking():
     state = ObjTables(Rng(b"disco"))
     t = O.RIN_PROTECTION.value
+
     def class_disco(ocls):
         lo = state.bases[ocls]
         hi = state.bases[ocls + 1]

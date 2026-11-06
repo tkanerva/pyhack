@@ -1271,13 +1271,17 @@ def fill_ordinary_room(world: World, map_: Map, rng, room: Room, lev: int,
     """C: mklev.c#fill_ordinary_room -- put things inside a normal room.
 
     Included: the sleeping monster (C: 2/3 of rooms), the trap loop
-    (C: `while (!rn2(8 - depth/6))`), and nothing else yet.
+    (C: `while (!rn2(8 - depth/6))`), and the object half in C's order
+    (gold pile, statue, the final random object -- see
+    _fill_room_objects; the object genesis is in, PLAN-MKOBJ.md G).
 
-    STUB (no mkgold/mksobj): the gold pile, the box/chest, the statue,
-    the fountain / sink / altar / grave sprinkles and the random
-    engraving.  They are all one-liners once object creation exists;
-    each is listed in C order at the end of the function so the port is
-    a fill-in, not a rewrite.
+    STUB (each in C order, each naming its C call): the fountain /
+    sink / altar / grave sprinkles (they need the sanctioned terrain
+    writer, set_levltyp / mkfount / mksink / mkaltar / mkgrave -- table
+    item 2), the bonus item and the box / chest (!rn2(nroom*5/2)), and
+    the random engraving (make_engr_at).  Their rolls are not taken,
+    so landing them shifts a level's draw sequence -- a deliberate
+    change, with the seeded snapshot test as the tripwire.
 
     `map_` is a parameter (not `world.map`) because a lazily generated
     level is built while the hero still stands on the previous one.

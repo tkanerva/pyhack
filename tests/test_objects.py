@@ -4,12 +4,12 @@ The table is a mechanical transcription of include/objects.h; these
 tests pin the C numbering (so any future reordering fails loudly),
 the macro expansions for representative rows, and the class ranges.
 """
-from core.objects import (ObjClass, ObjType, OBJECTS, BASES, NUM_OBJECTS,
-                          FIRST_OBJECT, FIRST_AMULET, LAST_AMULET,
-                          FIRST_SPELL, LAST_SPELL, FIRST_REAL_GEM,
-                          LAST_REAL_GEM, FIRST_GLASS_GEM, LAST_GLASS_GEM,
-                          MAXOCLASSES, O, DEF_OC_SYMS, class_glyph,
-                          GOLD_SYM, SPBOOK_SYM, WEAPON_SYM)
+from core.objects import (ObjClass, OBJECTS, BASES, NUM_OBJECTS,
+                          FIRST_AMULET, LAST_AMULET, FIRST_SPELL,
+                          LAST_SPELL, FIRST_REAL_GEM, LAST_REAL_GEM,
+                          FIRST_GLASS_GEM, LAST_GLASS_GEM, MAXOCLASSES,
+                          O, DEF_OC_SYMS, class_glyph, GOLD_SYM,
+                          SPBOOK_SYM, WEAPON_SYM)
 
 
 def test_table_length():
@@ -280,4 +280,3 @@ def test_misc_rows():
     venom = OBJECTS[O.ACID_VENOM]
     assert venom.oclass == ObjClass.VENOM
     assert venom.wsdam == 6 and venom.nowish
-

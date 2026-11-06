@@ -10,7 +10,7 @@ from core.mondata import hates_blessings, hates_silver
 from core.monst import (M1_THICK_HIDE, MONS, PM_GARTER_SNAKE, PM_GOBLIN,
                         PM_GRAY_DRAGON, PM_GHOST, PM_NAMES,
                         PM_STONE_GOLEM, PM_VAMPIRE)
-from core.objects import (ObjClass, ObjType as O, OBJECTS, PIERCE,
+from core.objects import (ObjClass, ObjType as O, OBJECTS, PIERCE,  # noqa: E741
                           Skill, WHACK)
 from core.weapon import (
     DefSkill, P_BASIC, P_EXPERT, P_GRAND_MASTER, P_MASTER, P_SKILLED,

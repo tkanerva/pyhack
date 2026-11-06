@@ -25,11 +25,11 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Set, Tuple
 
-from .objects import (ObjClass, ObjType, OBJECTS, BASES,
-                     FIRST_OBJECT, LAST_REAL_GEM, MAXOCLASSES,
-                     NODIR, IMMEDIATE, NUM_OBJECTS)
+from .objects import (BASES, FIRST_OBJECT, IMMEDIATE, LAST_REAL_GEM,
+                      MAXOCLASSES, NODIR, NUM_OBJECTS, OBJECTS, ObjClass,
+                      ObjType)
 
-O = ObjType  # short alias for table lookups
+O = ObjType  # noqa: E741 -- short alias for table lookups
 
 
 # ------------------------------------------------------------

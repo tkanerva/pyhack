@@ -591,4 +591,4 @@ FIRST_GLASS_GEM = ObjType.WORTHLESS_WHITE_GLASS.value
 LAST_GLASS_GEM = ObjType.WORTHLESS_VIOLET_GLASS.value
 NUM_OBJECTS = len(ObjType)
 
-O = ObjType  # short alias for table lookups (C: the bare `objects[]`)
+O = ObjType  # noqa: E741 -- short alias for table lookups (C: the bare `objects[]`)

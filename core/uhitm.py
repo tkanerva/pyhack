@@ -97,6 +97,7 @@ from .rules import current_ability
 from .types import DamageType, Monster, World
 from .weapon import Skills, abon, dmgval, hitval, weapon_hit_bonus
 
+
 # ------------------------------------------------------------
 # RNG adapters (C rnd/d over the runtime rng.randint duck-type)
 # ------------------------------------------------------------

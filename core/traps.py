@@ -14,7 +14,7 @@ from .events import Event, MessageEvent, TrapSeenEvent, TrapTriggeredEvent
 from .items import cancel_items
 from .rules import (apply_damage, apply_stuck, put_to_sleep, resists, roll,
                     teleport_to_floor)
-from .types import DamageType, Monster, Trap, TrapType, World
+from .types import DamageType, Trap, TrapType, World
 from .worn import burnarmor
 
 TrapEffect = Callable[[World, Trap, str, object], List[Event]]
