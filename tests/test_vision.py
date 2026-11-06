@@ -233,6 +233,24 @@ def test_blind_monster_cannot_see():
     assert not m_can_see(w, goblin, (6, 4))
 
 
+def test_a_blind_hero_could_still_see_but_sees_nothing():
+    """C: vision.c's blind branch -- the could-see array is computed even
+    when blind (so monsters still see the hero) but nothing is marked
+    IN_SIGHT, so can_see() answers no everywhere.  The display layer
+    reads can_see(), which is how a blinded hero falls back on his
+    memory (tests/test_display.py)."""
+    w = make_world(monsters=[make_monster(pos=(8, 4))])
+    vision_recalc(w)
+    assert can_see(w, (7, 4))
+    assert m_can_see_u(w, w.actors["goblin_0"])
+
+    w.hero.blind = 3
+    vision_recalc(w)
+    assert not can_see(w, (7, 4))
+    assert could_see(w, (7, 4))          # the line of sight is still there
+    assert m_can_see_u(w, w.actors["goblin_0"])
+
+
 # ------------------------------------------------------------
 # do_clear_area (the area-of-effect engine)
 # ------------------------------------------------------------

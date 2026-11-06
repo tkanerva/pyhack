@@ -150,10 +150,21 @@ DEMO_MONSTER_KINDS: List[Tuple[int, str, int, int]] = [
 def generate_map(rng, width: int = 40, height: int = 20,
                  wall_count: int = 15,
                  keep_floor: Optional[List[Pos]] = None) -> Map:
+    """The demo cave: a STONE border, ROOM floor, scattered STONE
+    pillars.
+
+    The room floor is LIT (C: mklev's do_room_or_subroom sets `rlit`),
+    which is what the display layer needs to draw it as '.' instead of
+    as dark stone: with no light sources ported (core.display's STUB),
+    `Tile.lit` is the only thing that tells a visible floor from rock.
+    The scattered STONE tiles stay rock -- bare rock is blank in C too
+    (S_stone), which is why the hero sees gaps in the lit floor rather
+    than wall symbols.  No rng draw is added or removed.
+    """
     tiles = [[
         Tile(typ=TerrainType.STONE)
         if (x == 0 or y == 0 or x == width - 1 or y == height - 1)
-        else Tile(typ=TerrainType.ROOM)
+        else Tile(typ=TerrainType.ROOM, lit=True)
         for x in range(width)
     ] for y in range(height)]
     for _ in range(wall_count):
@@ -162,7 +173,7 @@ def generate_map(rng, width: int = 40, height: int = 20,
         tiles[y][x] = Tile(typ=TerrainType.STONE)
     if keep_floor:
         for pos in keep_floor:
-            tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.ROOM)
+            tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.ROOM, lit=True)
     return Map(tiles)
 
 

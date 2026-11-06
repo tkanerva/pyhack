@@ -28,10 +28,14 @@ Ported faithfully:
 
 Stubbed (STUB comments; to be filled in later):
   - light sources and room lighting (light.c): until then every tile
-    the hero *could* see is treated as lit, so IN_SIGHT == COULD_SEE;
+    the hero *could* see is treated as lit, so IN_SIGHT == COULD_SEE
+    (for a sighted hero; a blind one gets no IN_SIGHT at all, as in C);
   - xray / night vision / rogue level / underwater / pit vision;
-  - seenv "seen angle" bookkeeping (display.c) -- Tile has no seenv
-    yet, and there is no display to update;
+  - the seenv "seen angle" bookkeeping: C sets it in this function's
+    update loop (vision.c's `lev->seenv |= new_angle(...)` calls, which
+    also drive newsym()); pyhack records it in core.display instead,
+    where newsym() knows both the hero and the square.  new_angle()'s
+    T-wall spine extension refinement is not ported;
   - the O(1) pointer updates of dig_point()/fill_point():
     block_point()/unblock_point() rescan the whole row instead (same
     result, O(width) per change);
@@ -784,6 +788,10 @@ def vision_recalc(world: World) -> None:
     monsters can see the hero even when the hero cannot see them; the
     queries below (like C's cansee/couldsee macros) do not check
     blindness.  "Can this actor see at all?" is core.hacklib.can_see.
+    The IN_SIGHT bit, however, is withheld from a blind hero, so
+    can_see() -- and with it the display -- answers "nothing" (C:
+    vision.c's `else if (Blind)` branch computes the could-see array
+    and leaves every IN_SIGHT bit clear).
     """
     _ensure(world)
     m = world.map
@@ -791,6 +799,13 @@ def vision_recalc(world: World) -> None:
     hv = _fresh_hero_vision(m)
     _VisionC(m, hy, hx, hv.could_see, hv.row_min, hv.row_max, 0, None,
              None).run()
+    if is_blind(world.hero):
+        # C: vision.c -- "Calculate the could_see array even when blind
+        # so that monsters can see you, even if you can't see them."
+        # Nothing is marked IN_SIGHT, so the display can only show what
+        # the hero remembers.
+        world.vision = hv
+        return
     # STUB: no light sources yet (light.c) -- everything the hero could
     # see is treated as lit, so IN_SIGHT gets every COULD_SEE cell.  C
     # sets IN_SIGHT from room lighting, xray and night vision instead;

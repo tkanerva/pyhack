@@ -91,6 +91,10 @@ def main() -> None:
     print("   The floor items wear their NetHack glyphs")
     print("   (defsym.h): ? scrolls, ) weapons, [ armour, + spell books,")
     print("   / wands.")
+    print("   The map is your memory: a square you have not seen is blank,")
+    print("   a wall is | or - only once you have looked at it, a corridor")
+    print("   you walked down stays #, and monsters show only while you can")
+    print("   see them (the floor glyphs you have seen are remembered).")
     print()
 
     while not world.over:

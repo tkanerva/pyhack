@@ -29,6 +29,9 @@ turn. The core has **no I/O, no global state, and no broadcast bus**:
         +-- stairs                 (stairs.py: the do.c / dungeon.c subset)
         +-- doors                  (doors.py: the lock.c doopen / doclose subset)
         +-- vision                 (vision.py: the vision.c port)
+        +-- display                (display.py: what the hero remembers
+        |                          of the map, the display.c port; the
+        |                          glyph space is glyph.py)
         +-- monster genesis        (makemon.py: the makemon.c funnel;
         |                          place.py: goodpos / enexto)
         +-- object genesis         (mkobj.py: the mkobj.c funnel, the
@@ -161,6 +164,25 @@ details live in the PLAN-*.md files and the module docstrings):**
   C mklev draw order; the transition mirrors C `goto_level`'s order;
   reaching `World.max_lev` wins.  The deferred list is
   PLAN-STAIRS.md §5.
+- The display layer (core/display.py + core/glyph.py, the src/display.c
+  port): the screen is the hero's MEMORY of the level, not the true
+  terrain.  `Tile.glyph` (C: `levl[x][y].glyph`) starts at
+  `GLYPH_UNEXPLORED` and is written only by `newsym()`, and only where
+  `can_see()` is true; `Tile.seenv` (the C seen vector) records the
+  octants a square was seen from, so a wall the hero has not seen draws
+  as stone.  `render()` calls `display.docrt()` first -- C's window
+  port does the same before a redraw -- and then paints `Tile.glyph`,
+  overlaying monsters and trap effects live (they are never remembered).
+  Objects and known traps *are* remembered, so they survive out of
+  sight; the level change needs nothing special, because the memory is
+  tile state and is parked with the Map in `World.levels`.  `glyph.py`
+  is C's glyph space + defsym.h symbol table (S_* -> character), which
+  is also what replaced the renderer's hand-rolled glyph switches: walls
+  are now `|` / `-`, corridors `#`, doors `+` closed and `|`/`-` open.
+  Blindness withholds every IN_SIGHT bit (vision.c's `else if (Blind)`),
+  so a blind hero sees only his memory.  STUBs: lighting (an unlit floor
+  draws as stone), `wall_angle()`'s wall_info modes, the per-species
+  monster glyphs.
 - The hunger system (PLAN-HUNGER.md, core/hunger.py): the C 5.0
   0..2000 gauge + seven-state machine as data on `Monster`
   (`uhunger` / `uhs` / `fainted`); the per-turn ticker runs in the

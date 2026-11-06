@@ -5,6 +5,77 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The glyph memory: the screen is now what the hero has seen
+
+**Why:** the renderer drew `Tile.typ` -- the *true* terrain -- for
+every square of the level, so the hero looked through every wall and
+the map was 40x20 of mostly '#' (the wall test included stone, so
+unexplored rock was indistinguishable from a corridor he had actually
+walked down).  C splits this in three: vision decides what can be seen,
+display decides what is *remembered*, and the window port draws it.
+pyhack had only the first, so the previous session's `core/vision.py`
+port had nothing to draw with -- its own docstring said `Tile` had no
+seenv and there was no display to update.
+
+**The choices:**
+
+1. **`Tile.glyph` + `Tile.seenv` + `Tile.waslit` are the memory**
+   (C: `rm.h`'s `glyph` / `seenv` / `waslit`).  `glyph` starts at
+   `GLYPH_UNEXPLORED`, which draws blank, and only `newsym()` writes
+   it -- only where `can_see()` says the hero is looking.  `seenv` (the
+   C seen vector, SV0..SV7) records the octants a square was seen
+   from, which is what makes an unseen wall draw as stone instead of as
+   a wall.
+2. **A new display layer, faithful to display.c** (`core/display.py`):
+   `back_to_glyph()` (terrain -> glyph, including "a wall you have not
+   seen is stone"), `wall_angle()`, `trap_to_glyph()`, the `map_*`
+   recorders, `newsym()` (one square, "always correct"), `docrt()` (the
+   full redraw: `vision_recalc()` then newsym every square), the
+   `seenv`/`set_seenv()` bookkeeping and `mon_visible()`.  C's
+   `print_glyph()` is `glyph_to_char()`; the window port is still
+   `ui/console.render`.
+3. **The glyph space and the defsym.h tables are `core/glyph.py`**
+   (C: display.h's `glyph_offsets` + the defsym.h PCHAR table): the 74
+   S_* cmap symbols with their characters, the glyph offsets and the
+   `glyph_is_*` predicates.  This is also what made the renderer's
+   hand-rolled glyph switches unnecessary -- walls are `|` / `-`,
+   corridors `#`, a closed door `+`, an open one `|` / `-` (the old
+   renderer's `'` is not a defsym.h symbol at all), a lit floor `.`.
+4. **`render()` draws the memory, overlaid with the live things.**
+   `ui.render` calls `display.docrt()` (as C's window port does before a
+   redraw), paints `Tile.glyph` for every square, and overlays the hero
+   `'@'`, visible monsters `'M'` and a triggered trap `'X'` -- monsters
+   are *never* remembered (C: "monsters float above the map").
+   Objects and known traps are remembered by `map_object()` /
+   `map_trap()`, so they survive being out of sight, and a picked-up
+   object is cleared by the next `newsym()` of its square.
+5. **Blindness now reaches the display.**  `vision_recalc()` keeps C's
+   `else if (Blind)` branch: the could-see array is still computed (so
+   monsters can see the hero) but nothing is marked IN_SIGHT, so a
+   blind hero sees only his memory.
+6. **The demo cave's room floor is lit.**  With no light sources ported,
+   `Tile.lit` is the only thing that tells a visible floor from rock,
+   and the demo generator never set it, so the cave rendered blank.
+   It is a ROOM (C's rooms are lit); `generate_map` now says so.  No
+   rng draw gained or lost, so every pinned layout is unchanged.
+
+Files: core/glyph.py (new), core/display.py (new), core/types.py
+(`Tile.glyph` / `seenv` / `waslit`), core/vision.py (the blind branch,
+the docstring's seenv note), core/worldgen.py (`lit=True` in the demo
+map), ui/console.py (`docrt` + glyph painting + the legend), main.py
+(one intro line), tests/test_display.py (new), tests/test_console.py
+(re-pinned: visibility-aware item assertions, C's door/wall glyphs, the
+unexplored-is-blank and seen-corridor-only regression tests),
+tests/test_vision.py (the blind-hero test), README.md,
+ARCHITECTURE.md.
+
+Tests: 1166 green (19 new cases), mypy clean over 91 files, flake8
+clean on every file touched.
+
+Housekeeping: the stray `pyhack/~/.cache/mypy/` tree a past session
+left behind (a mypy run with a bogus HOME) is moved out of the
+checkout.
+
 ## Fix: `main.py --mklev` / `--cavern` died on the demo's rng
 
 **Why:** the demo entry point was the one path no test ran, and it

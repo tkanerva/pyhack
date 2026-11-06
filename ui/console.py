@@ -6,18 +6,19 @@ the dependency points one way only.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import List, Optional
 
+from core import display
 from core.commands import (CastCommand, CloseCommand, Command, EatCommand,
                            MoveCommand, PickupCommand, QuaffCommand,
                            ReadCommand, StairsCommand, TakeOffCommand,
                            WaitCommand, WearCommand, ZapCommand)
 from core.hunger import HU_STAT
 from core.items import wielded_of
-from core.objects import DEF_OC_SYMS, ObjClass, class_glyph
+from core.objects import DEF_OC_SYMS, ObjClass
 from core.spells import SPELL_ZAPS
-from core.types import (Direction, HungerState, Item, ObjectType, Pos,
-                        STAIR_DOWN, TerrainType, World)
+from core.types import Direction, HungerState, ObjectType, World
+from core.vision import can_see
 from core.worn import W_ACCESSORY, W_ARMOR, uac
 
 # The old code lower-cased the key before comparing against "\x1b[A",
@@ -151,10 +152,26 @@ def _inventory_line(world: World) -> str:
 
 
 def render(world: World, log: List[str]) -> str:
+    """Draw the screen.
+
+    The map half is C's display layer: `display.docrt()` refreshes what
+    the hero remembers of the level from the current view (C: the
+    window port calls docrt() before a redraw), and then every square
+    is painted from `Tile.glyph` -- the *memory*.  A square the hero
+    has never seen is GLYPH_UNEXPLORED and draws blank, a wall is only
+    a wall once it has been seen, and a corridor stays '#' after the
+    hero walked past it.  Monsters float above the map and are never
+    remembered (C: display_monster), so they are overlaid live, and
+    only while the hero can see them.
+    """
+    display.docrt(world)
     lines: List[str] = []
     lines.append(f"🗺️  Level {world.lev} of {world.max_lev}")
-    # the stair glyphs are C's defsym.h S_downstair '>' / S_upstair '<'
-    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | # = Wall/Corridor | ' = Door open | + = Door closed | . = Lit floor | > = Stairs down | < = Stairs up")
+    # the glyphs are the defsym.h symbols themselves (core.glyph): '|'
+    # and '-' are the walls, '#' a corridor, '+' a closed door ('|' and
+    # '-' again for an open one), '.' a lit floor, and a blank an
+    # unexplored square
+    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | | - = Wall or open door | # = Corridor | + = Closed door | . = Lit floor | > = Stairs down | < = Stairs up | blank = Unexplored")
     # the floor-glyph legend: the glyphs come from the same defsym.h
     # table the map uses (def_oc_syms, core.objects); the labels are
     # the classes the demo floor carries
@@ -170,17 +187,15 @@ def render(world: World, log: List[str]) -> str:
     lines.append("")
 
     hero_pos = world.hero.pos
-    monster_pos = {m.pos for m in world.actors.values() if not m.is_hero and m.alive}
-    triggered = {t.pos for t in world.traps.values() if t.triggered}
-    seen = {t.pos for t in world.traps.values() if t.seen and not t.triggered}
-
-    # the items lying on the floor (no carrier, a position): drawn
-    # with their class glyph (C: def_oc_syms[oclass].sym over the
-    # defsym.h OBJCLASS table -- core.objects.class_glyph)
-    floor_items: Dict[Pos, Item] = {}
-    for item in world.items.values():
-        if item.pos is not None and item.carrier is None:
-            floor_items[item.pos] = item
+    # monsters are drawn live, on top of the memory (C: see_monsters()
+    # floats them above the map; they are never part of levl[].glyph)
+    monster_pos = {m.pos for m in world.actors.values()
+                   if not m.is_hero and display.mon_visible(world, m)}
+    # a trap going off is a transient effect, so it is drawn live too --
+    # a *known* trap is part of the memory ('^', written by
+    # display.map_trap)
+    triggered = {t.pos for t in world.traps.values()
+                 if t.triggered and t.lev == world.lev}
 
     for y in range(world.map.height):
         row = []
@@ -190,40 +205,14 @@ def render(world: World, log: List[str]) -> str:
                 row.append("@")
             elif pos in monster_pos:
                 row.append("M")
-            elif pos in triggered:
+            elif pos in triggered and can_see(world, pos):
                 row.append("X")
-            elif pos in floor_items:
-                # the item's class glyph (the defsym.h table); a class
-                # without a symbol (the RANDOM placeholder) leaves the
-                # tile blank
-                row.append(class_glyph(floor_items[pos].oclass) or " ")
-            elif pos in seen:
-                row.append("^")
-            elif world.map.tile_at(pos).typ == TerrainType.STAIRS:
-                # the stair glyph under the hero/monsters/traps/items
-                # (C draws the stair glyph beneath them; a floor item
-                # on a stair keeps its glyph -- the renderer stays total)
-                tile = world.map.tile_at(pos)
-                row.append(">" if tile.stair_dir == STAIR_DOWN else "<")
             else:
-                tile = world.map.tile_at(pos)
-                if tile.typ == TerrainType.DOOR:
-                    # C: S_vcdoor '+' for a closed door, S_vodoor "'"
-                    # for an open one
-                    row.append("'" if tile.is_door_open() else "+")
-                elif tile.typ == TerrainType.SDOOR:
-                    # an undiscovered secret door is part of the wall
-                    row.append("#")
-                elif tile.typ == TerrainType.CORR \
-                        or world.map.is_wall(pos):
-                    # C: corridors and walls share '#'
-                    row.append("#")
-                elif tile.lit:
-                    # a lit room floor (C: S_room '.'); the demo cave
-                    # is unlit, so the pinned render is unchanged
-                    row.append(".")
-                else:
-                    row.append(" ")
+                # the hero's memory of the square: the terrain, a
+                # remembered object, a known trap -- or blank when the
+                # square has never been seen
+                row.append(display.glyph_to_char(
+                    world.map.tile_at(pos).glyph))
         lines.append("".join(row))
 
     hero = world.hero

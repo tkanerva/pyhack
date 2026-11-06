@@ -22,6 +22,7 @@ core/            pure simulation (no I/O)
   traps.py  zap.py  potions.py  scrolls.py  spells.py  hunger.py
   worn.py  rings.py  pickup.py  stairs.py  occupation.py
   uhitm.py  mhitu.py  weapon.py  vision.py  energy.py  props.py
+  display.py  glyph.py   what the hero remembers of the map
   objects*.py  monst*.py  mondata*.py  o_init.py  items.py
                the C tables (declarations / data / API split)
   isaac64.py  rnd.py  hacklib*.py
@@ -53,8 +54,12 @@ go get the floor armour), the spell `Pw` (a level-N book costs 5*N Pw,
 slow regen) and the hunger gauge: it
 drains 1/turn, fainting / starving / choking are live, and a big
 food is a multi-turn meal a nearby monster interrupts (eating the
-same item again resumes it).  The floor items wear their NetHack
-glyphs (the defsym.h object-class table) -- `?` scrolls, `)` weapons,
+same item again resumes it).  The map is your **memory** of the level
+(NetHack's display layer): a square you have not seen is blank, a wall
+only becomes `|`/`-` once you have looked at it, a corridor you walked
+through stays `#`, and monsters are only drawn while you can see them
+-- the floor items wear their NetHack glyphs (the defsym.h
+object-class table): `?` scrolls, `)` weapons,
 `[` armour, `+` spell books, `/` wands, `>` / `<` the stairs.  The
 floor kit: the demo scrolls (enchant weapon/armor, remove curse,
 teleportation, blank paper), the wands (striking, cold) and the books

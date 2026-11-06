@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag, auto
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
+from .glyph import GLYPH_UNEXPLORED
 from .o_init import ObjTables
 from .mondata import MonState
 from .monst_defs import A_NEUTRAL
@@ -584,10 +585,10 @@ class LevelFlags:
 class Tile:
     """One level location (C: struct rm, reduced).
 
-    STUB: the remaining rm fields (glyph, seenv, waslit, icedpool,
-    altarmask, diggable) are not ported yet -- they come with the
-    display (glyph/seenv), ice and altar work.  door_mask is only
-    meaningful for DOOR/SDOOR tiles; stair_dir only for STAIRS tiles.
+    STUB: the remaining rm fields (drawbridgemask, icedpool, altarmask,
+    diggable) are not ported yet -- they come with the drawbridge, ice
+    and altar work.  door_mask is only meaningful for DOOR/SDOOR tiles;
+    stair_dir only for STAIRS tiles.
     """
     typ: TerrainType = TerrainType.ROOM
     door_mask: DoorMask = DoorMask(0)
@@ -611,6 +612,21 @@ class Tile:
     # an east-west wall or a door in one.  Only meaningful for
     # HWALL/VWALL/DOOR/SDOOR; the door code reads it.
     horizontal: bool = False
+    # --- the display memory (display.c; written by core.display) ---
+    # what the HERO thinks is here (C: rm.h levl[x][y].glyph, "what the
+    # hero remembers.  This will never be a monster").  It starts as
+    # GLYPH_UNEXPLORED -- blank -- and only core.display.newsym()
+    # replaces it, once the hero can actually see the square.
+    glyph: int = GLYPH_UNEXPLORED
+    # the octants the hero has seen this square from (C: rm.h
+    # levl[x][y].seenv, the SV0..SV7 bits of core.display); 0 means
+    # never seen -- which is how an unexplored wall still draws as
+    # stone.  Never rewritten backwards (C: it is OR-ed, not set).
+    seenv: int = 0
+    # was the square lit when the hero last saw it (C: rm.h
+    # levl[x][y].waslit, "remembered as lit")?  Written by newsym(),
+    # read by back_to_glyph() for corridors.
+    waslit: bool = False
 
     def is_door_open(self) -> bool:
         """A door is passable unless closed/locked/trapped (C: the
