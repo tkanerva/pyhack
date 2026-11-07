@@ -26,6 +26,9 @@ turn. The core has **no I/O, no global state, and no broadcast bus**:
         +-- wear / take off        (worn.py: slots + the computed AC)
         +-- rings                  (rings.py: on/off + discovery)
         +-- pickup                 (pickup.py: the pickobj subset)
+        +-- inventory              (invent.py: the pack + its letters,
+        |                          the single writer of where an item
+        |                          is; PLAN-INVENT.md)
         +-- stairs                 (stairs.py: the do.c / dungeon.c subset)
         +-- doors                  (doors.py: the lock.c doopen / doclose subset)
         +-- vision                 (vision.py: the vision.c port)
@@ -208,6 +211,29 @@ details live in the PLAN-*.md files and the module docstrings):**
   newpw records it, losexp subtracts it) — not the regen period, which
   tick_energy computes from the level (C `regen_pw`).  The deferred
   list is PLAN-EXPERIENCE.md §5.
+- The inventory core (PLAN-INVENT.md phase A, core/invent.py): the
+  port of the item half of src/invent.c, and the **single writer** of
+  the PACK half of an item's where-state (`addinv` / `freeinv` /
+  `useup` / `useupall` / `delobj`); the floor half stays in
+  core.mkobj (`place_object` / `add_to_container` /
+  `delete_contents`), exactly C's invent.c / mkobj.c split.  The old
+  fourth writer `items.consume_item` is deleted (its call sites are
+  `invent.useup`), `worn._remove_destroyed` is `invent.delobj`,
+  `pickup` and the starting kit go through `addinv`, and the
+  `conftest.assert_item_locations` invariant (exactly one place per
+  item, every id resolves) is the tripwire for a new one.  Letters are
+  **assigned once** (C: `assigninvlet` walking a..z A..Z from
+  `World.lastinvnr`, the C `gl.lastinvnr`), so `Item.invlet` -- not an
+  index into the pack -- is what `ui/console._item_by_letter` looks
+  up: dropping or picking up an item no longer re-letters the rest of
+  the pack (the letter-drift defect).  `Item.charges` is retired in
+  favour of C's `spe` (the wand / book / tool charge field), and
+  `useup` is the one "one of these is gone" path, so eating the last
+  of a stack or destroying a chest cannot orphan the contents.  Still
+  open from the plan: merging (`mergable` / `merged`, phase B), the
+  naming slice (`core/objnam.py`, phase C), weight / encumbrance
+  (phase D), gold (phase E), the `i` list (phase F), `getobj` /
+  selection (phase G) and `#adjust` (phase H).
 - The level generators (WAVE3.md / PLAN-MKLEV.md, core/mklev.py,
   core/mkroom.py, core/mkmap.py, core/doors.py): `new_world(rng,
   generator="demo"|"mklev"|"cavern")` behind a switch that defaults to
@@ -272,7 +298,8 @@ details live in the PLAN-*.md files and the module docstrings):**
   sleepers by sound) is future work.  A monster that cannot see the
   hero random-walks (C: wander).
 - Web/pit "stuck" lasts 10 turns (NetHack: escape checks).
-- Spell study/learning mechanics dropped; books have charges only.
+- Spell study/learning mechanics dropped; books have pages (`spe`)
+  only.
 - Spell damage is a flat 2d6 (the old `d6 * nd` referenced a stat that
   never existed).
 - `src/priest.c` / `src/pray.c` are unported (the old Python sketches
@@ -327,17 +354,19 @@ order:
    fill-ins), the shops last (shk.c is billing before it is a room).
 3. **The genesis residue** (independent of 1-2, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
-   inventories; the `mongets` / `mkmonmoney` mechanism is in), phase
-   F's groups / `grow_up` / `clone_mon` / `create_critters`, the
-   `Item.charges` -> `spe` migration (delete the alias; the readers
-   are zap / spells / potions / items / the demo kit, one commit),
+   inventories; the `mongets` / `mkmonmoney` mechanism is in),
+   phase F's groups / `grow_up` / `clone_mon` / `create_critters`,
    `splitobj` + the container / pickup merge rules, the rust / rot /
    corrode half of `mkobj_erosions`, and the fire-trap-erodes-armour
-   regression test.
+   regression test.  (The `Item.charges` -> `spe` migration is DONE —
+   it landed with PLAN-INVENT.md phase A.)
 4. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
-   PLAN-DROP.md — invent.c / pickup.c / do.c + wield.c): the pickobj
-   / sortloot / getobj machinery over the real Item model; it
-   consumes 3's merge rules and `splitobj`.
+   PLAN-DROP.md — invent.c / pickup.c / do.c + wield.c): phase A is
+   in (`core/invent.py`: the pack, the letters, the single writer);
+   the rest of the plan's staging — stacking (B), naming (C), weight /
+   encumbrance (D), gold (E), the display half (F), selection (G) —
+   is what turns the pack into NetHack's, and it consumes 3's merge
+   rules and `splitobj`.
 5. **The small UI debt**: wire `QuaffCommand` (zap / cast / eat are
    wired; `q` quits, so the quaff key is to choose).
 6. **Scrolls**: fill in the STUBs of `core/scrolls.py` as their

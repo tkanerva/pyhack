@@ -3,13 +3,13 @@ import random
 
 from core.potions import quaff
 from core.types import Item, ObjectType, PotionType
-from conftest import make_hero, make_world
+from conftest import assert_item_locations, make_hero, make_world
 
 
 def world_with_potion(potion_type, hp=20, max_hp=25):
     w = make_world(hero=make_hero(hp=hp, max_hp=max_hp))
     pot = Item(id="pot_0", otype=ObjectType.POTION, name="Potion",
-               charges=1, potion_type=potion_type, carrier="player")
+               potion_type=potion_type, carrier="player")
     w.items["pot_0"] = pot
     w.hero.inventory.append(pot)
     return w
@@ -20,6 +20,7 @@ def test_healing_potion():
     quaff(w, "player", "pot_0", random.Random(1))
     assert w.hero.hp == 25
     assert w.hero.inventory == []  # empty potion consumed
+    assert_item_locations(w)
 
 
 def test_healing_caps_at_max():

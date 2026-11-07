@@ -3,7 +3,7 @@ from core import PickupCommand, step
 from core.events import MessageEvent
 from core.pickup import pickup
 from core.types import Item, ObjectType
-from conftest import SeqRng, make_world
+from conftest import SeqRng, assert_item_locations, make_world
 
 HERO_POS = (6, 4)
 
@@ -25,6 +25,7 @@ def test_pickup_takes_topmost_item():
     assert second in w.hero.inventory
     assert first.pos == HERO_POS  # the other one is still on the floor
     assert [e.text for e in ev] == ["You pick up the item 2."]
+    assert_item_locations(w)
 
 
 def test_pickup_empty_tile():
@@ -47,6 +48,8 @@ def test_pickup_through_step():
     ev = step(w, PickupCommand(), SeqRng())
     assert it.pos is None and it.carrier == "player"
     assert it in w.hero.inventory
+    assert it.invlet == "a"        # addinv letters the hero's pack
+    assert_item_locations(w)
     assert any(isinstance(e, MessageEvent)
                and e.text == "You pick up the elven leather helm."
                for e in ev)

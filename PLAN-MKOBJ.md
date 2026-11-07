@@ -10,12 +10,13 @@ model of phase A (with `container` renamed to `carrier`), `mksobj` /
 `mkobj_at` / `mksobj_at` / `place_object`, `mkbox_cnts`,
 `add_to_container` / `delete_contents`, `mkgold`, `mkcorpstat`,
 `weight` (whole), the BUC lottery, `rndmonnum` and `mkobj_erosions`.
-Still open: the `charges` -> `spe` migration of §4.A (the demo kit still
-uses the alias; `spe` is the field the genesis writes), `splitobj`, the
-container *merge* rules of phase E, `mkobj_erosions`' rust / rot /
-corrode material tests, and the phase-G terrain branches
-(fountain / sink / altar / grave need `set_levltyp`; the graffiti needs
-`make_engr_at`), whose rolls are deliberately not taken yet.
+Still open: `splitobj`, the container *merge* rules of phase E,
+`mkobj_erosions`' rust / rot / corrode material tests, and the phase-G
+terrain branches (fountain / sink / altar / grave need `set_levltyp`;
+the graffiti needs `make_engr_at`), whose rolls are deliberately not
+taken yet.  (The `charges` -> `spe` migration of §4.A landed with
+PLAN-INVENT.md phase A: `Item.charges` is deleted and `spe` is the
+only counter -- zap / spells / items / the demo kit all read it.)
 
 *Run status:* the wave's tests are written but were landed while the
 local pytest was crashing on startup; the first real run (1140 tests)
@@ -104,12 +105,10 @@ function in §1:
 | `oartifact: int = 0` | same | accepted, always 0 (no artifact system) |
 | `age` / `timed` | `obj->age`, `timed` | corpses rotting, eggs hatching, oil burning — **deferred**, but the fields should exist so `mksobj` can accept-and-ignore like C's `start_corpse_timeout` |
 
-Note the *duplication* that already exists and must not get worse:
-`Item.charges` (the demo's charge counter) vs `Item.spe` (C's `spe`).
-Rule for this wave: **`spe` is the C field; `charges` is a derived
-read-only view kept for the demo call sites** (`zap.py`, `spells.py`
-read `charges`). Migrate the readers in phase B and delete `charges`
-(one grep, ~12 uses).
+Note the *duplication* that used to exist: `Item.charges` (the demo's
+charge counter) vs `Item.spe` (C's `spe`).  It is RESOLVED: PLAN-INVENT.md
+phase A deleted `charges` and re-pointed the readers (`zap.py` /
+`spells.py` / `items.py` / the demo kit) at `spe`, the C field.
 
 ---
 

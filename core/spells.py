@@ -49,7 +49,7 @@ from typing import Dict, List, Optional
 
 from .energy import drain_energy, spell_lev_pw
 from .events import Event, MessageEvent
-from .items import consume_item
+from .invent import consume_obj_charge, useup
 from .rules import apply_damage, heal, roll
 from .types import (DamageType, Direction, Item, Monster, ObjectType,
                     SpellType, ZapEffect, World)
@@ -170,7 +170,7 @@ def cast_spell(world: World, caster_id: str, book_id: str,
     book = _find_book(world, caster_id, book_id)
     if book is None:
         return [MessageEvent("You don't have such a book.")]
-    if book.charges <= 0:
+    if book.spe <= 0:
         return [MessageEvent("The book is blank.")]
 
     caster = world.actors[caster_id]
@@ -254,7 +254,7 @@ def cast_spell(world: World, caster_id: str, book_id: str,
 
     # the energy drain + the page (C: after the effect)
     drain_energy(world, caster_id, cost)
-    book.charges -= 1
-    if book.charges <= 0:
-        consume_item(world, caster_id, book.id)
+    consume_obj_charge(world, caster_id, book)
+    if book.spe <= 0:
+        useup(world, caster_id, book)
     return events

@@ -1,10 +1,10 @@
 # Plan: Wave 6a — the inventory core (`src/invent.c`)
 
-**Status: proposed, nothing implemented.** Written against the tree
-that has 521 tests green and mypy clean, with Wave 3 (mklev / mkroom /
-mkmap + doors) landed and PLAN-MAKEMON / PLAN-MKOBJ /
-PLAN-SPECIAL-ROOMS / PLAN-SPLEV proposed. This is the first of three
-documents; they are one wave:
+**Status: phase A landed (`core/invent.py`); phases B-H proposed.**
+Written against the tree that has 521 tests green and mypy clean, with
+Wave 3 (mklev / mkroom / mkmap + doors) landed and PLAN-MAKEMON /
+PLAN-MKOBJ / PLAN-SPECIAL-ROOMS / PLAN-SPLEV proposed.  This is the
+first of three documents; they are one wave:
 
 | file | scope | C files |
 |---|---|---|
@@ -74,6 +74,15 @@ Data that already exists in pyhack and is *not* the problem:
 ---
 
 ## 2. Where pyhack stands: two functions out of 121
+
+*Written before phase A; the counts below are the baseline the phase
+started from.*  Since then `core/invent.py` exists (the location and
+letter groups: 14 of the 121), `Item.invlet` / `World.lastinvnr` are
+there, `charges` is gone, and defects 1 and 3 of §2.2 are fixed (a
+letter is assigned once; `useup` / `delobj` cannot orphan contents).
+Defect 2 ("four writers") is closed -- one writer per half now -- and
+defect 4 ("nothing can fail") is still open: the pack is unbounded
+until phase D's `near_capacity`.
 
 **Measured:** of `invent.c`'s 121 functions, exactly **two** exist in
 pyhack — `wearing_armor` and `is_worn`, both in `core/worn.py`. Every
@@ -237,9 +246,12 @@ takes the post-phase-A model as given.
 
 ## 4. Phases
 
-### Phase A — the model and the one writer (~1.5 sessions)
+### Phase A — the model and the one writer (~1.5 sessions) — **LANDED**
 
-The same commit as PLAN-MKOBJ phase A, done once:
+The same commit as PLAN-MKOBJ phase A, done once (the `quan` / `owt` /
+`contents` / `oeroded` / `oeroded2` / `corpsenm` fields and the
+`container` -> `carrier` rename landed with Wave 4a/4b; the `invlet` /
+`lastinvnr` fields and the `charges` -> `spe` retirement landed here):
 
 1. `Item` gains `quan`, `owt`, `invlet`, `contents`, `oeroded`,
    `oeroded2`, `olocked`, `otrapped`, `corpsenm`; `container` is
@@ -497,16 +509,19 @@ the identification port), `dounpaid` / `find_unpaid` / `count_unpaid`
 
 ## 8. Definition of done
 
-- [ ] `core/invent.py` exists and is the **only** writer of
+- [x] `core/invent.py` exists and is the **only** writer of
       `Item.pos` / `carrier` / `contents` / `Monster.inventory` /
-      `world.items`
-- [ ] `items.consume_item` is deleted; `worn._remove_destroyed` is a
+      `world.items` (phase A: the pack half; the floor half is
+      `core.mkobj`, and `conftest.assert_item_locations` is the
+      tripwire)
+- [x] `items.consume_item` is deleted; `worn._remove_destroyed` is a
       call to `invent.delobj`
-- [ ] `Item` has `quan` / `owt` / `invlet` / `contents` / `carrier` /
+- [x] `Item` has `quan` / `owt` / `invlet` / `contents` / `carrier` /
       `oeroded*`; `charges` is gone
-- [ ] the invariant test (exactly one location per item; every id
-      resolves) runs in every suite that touches items
-- [ ] the letter-drift test passes; `_item_by_letter` is a lookup
+- [x] the invariant test (exactly one location per item; every id
+      resolves) is `conftest.assert_item_locations`, called from the
+      suites that mutate items
+- [x] the letter-drift test passes; `_item_by_letter` is a lookup
 - [ ] `mergable` / `merged` / `merge_choice` ported with spans in the
       docstrings; cursed+blessed and `spe`-different items never stack
 - [ ] `core/objnam.py` renders `xname` / `doname` / `an` / `the` /
@@ -519,6 +534,7 @@ the identification port), `dounpaid` / `find_unpaid` / `count_unpaid`
 - [ ] `i` and the per-class lists render from `xprname`
 - [ ] `invent.select` / `select_many` give every C refusal message a
       test
-- [ ] `mypy` clean, `flake8` clean, existing 521 tests green
-- [ ] `ARCHITECTURE.md` gains the invent row in the module map and the
+- [x] `mypy` clean, `flake8` clean, the whole existing suite green
+      (1206 tests)
+- [x] `ARCHITECTURE.md` gains the invent row in the module map and the
       "single writer" paragraph; `CHANGES.md` gains the wave

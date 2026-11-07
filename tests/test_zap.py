@@ -3,14 +3,14 @@ from core import Direction
 from core.events import MessageEvent
 from core.types import Item, ObjectType, WandType
 from core.zap import use_wand
-from conftest import SeqRng, make_monster, make_world
+from conftest import SeqRng, assert_item_locations, make_monster, make_world
 
 
 def world_with_wand(wand_type, **monster_kw):
     mon = make_monster(pos=(8, 4), **monster_kw)
     w = make_world(monsters=[mon])
     wand = Item(id="wand_0", otype=ObjectType.WAND, name="Wand",
-                charges=1, wand_type=wand_type, carrier="player")
+                spe=1, wand_type=wand_type, carrier="player")
     w.items["wand_0"] = wand
     w.hero.inventory.append(wand)
     return w
@@ -23,6 +23,7 @@ def test_fire_wand_deals_flat_six_damage():
     use_wand(w, "player", WandType.FIRE, Direction.E, SeqRng(1, 1, 1, 1, 1, 1, 1))
     assert w.actors["goblin_0"].hp == 2
     assert w.items == {}  # charge consumed, item removed
+    assert_item_locations(w)
 
 
 def test_death_wand_resisted_by_undead():

@@ -71,7 +71,8 @@ from __future__ import annotations
 from typing import List, Optional
 
 from .events import Event, MessageEvent
-from .items import consume_item, wielded_of
+from .invent import useup
+from .items import wielded_of
 from .objects import (W_ARMC, W_ARM, W_ARMF, W_ARMG, W_ARMH, W_ARMOR,
                       W_ACCESSORY, W_ARMS, W_ARMU, W_WEP, object_type)
 from .rules import roll, teleport_to_floor
@@ -137,8 +138,9 @@ def some_armor(world: World, mon: Monster, rng) -> Optional[Item]:
 
 def _destroy_wielded(world: World, mon: Monster, weapon: Item) -> None:
     """C: useupall(uwep) -- the weapon disappears; the wielded slot
-    (C: uwep) empties with it."""
-    consume_item(world, mon.id, weapon.id)
+    (C: uwep) empties with it (the explicit clear stays until
+    PLAN-DROP phase C replaces the field with wield.setuwep)."""
+    useup(world, mon.id, weapon)
     if mon.wielded == weapon.id:
         mon.wielded = None
 
@@ -246,7 +248,7 @@ def _seffect_enchant_armor(world: World, mon: Monster, scroll: Item,
     if s > (5 if elven else 3) and rng.randint(1, s) > 1:
         name = _yname(mon, armor)
         worn.setnotworn(mon, armor)  # C: remove_worn_item
-        consume_item(world, mon.id, armor.id)  # C: useup(otmp)
+        useup(world, mon.id, armor)  # C: useup(otmp)
         return [MessageEvent(f"{name} violently glows for a while, "
                              f"then evaporates.")]
 
@@ -376,5 +378,5 @@ def read_scroll(world: World, monster_id: str, item_id: str,
         raise NotImplementedError(
             f"the scroll of {st.name.lower().replace('_', ' ')} is not "
             f"ported yet (C: src/read.c seffects())")
-    consume_item(world, monster_id, item.id)
+    useup(world, monster_id, item)  # C: useup(otmp)
     return events

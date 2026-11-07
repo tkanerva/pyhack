@@ -151,7 +151,7 @@ def test_generated_world_carries_the_demo_kit(generator):
     floor_items = [it for it in w.items.values()
                    if it.pos is not None and it.carrier is None]
     # 6 armour + 5 scrolls + 2 weapons + 2 wands + 3 books + 4 foods
-    kit = {it.id for it in demo_floor_items()}
+    kit = {it.id for it, _ in demo_floor_items()}
     assert kit <= {it.id for it in floor_items}
     assert len(floor_items) >= 22
     for item in floor_items:

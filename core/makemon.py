@@ -676,22 +676,22 @@ def mongets(world: World, rng, mon: Monster, otyp: int) -> Optional[str]:
     """Give a monster one object of type `otyp` (C: makemon.c#mongets).
 
     The subset of C's body that this port can honour: make the object
-    with mksobj() and put it in the monster's inventory.  C's extra
-    fixups (a corpse's corpsenm, the erosion rolls, the "the monster
-    wields it" bookkeeping for an AT_WEAP species) ride on mksobj /
-    m_dowear, which are phase E work.  Returns the new item's id, or
-    None if there is nothing to make.
+    with mksobj() and put it in the monster's inventory through
+    core.invent.addinv -- the pack half of the PLAN-INVENT.md
+    single-writer rule (a monster's pack carries no letters, so
+    addinv's letter half is a hero-only no-op).  C's extra fixups (a
+    corpse's corpsenm, the erosion rolls, the "the monster wields it"
+    bookkeeping for an AT_WEAP species) ride on mksobj / m_dowear,
+    which are phase E work.  Returns the new item's id, or None if
+    there is nothing to make.
     """
+    from .invent import addinv  # local import: the makemon <- mkobj cycle
     from .mkobj import mksobj  # local import: mkobj imports this module
 
     if not otyp:
         return None
     item = mksobj(world, rng, otyp)
-    item.carrier = mon.id
-    item.pos = None
-    item.lev = mon.lev
-    mon.inventory.append(item)
-    world.items[item.id] = item
+    addinv(world, mon.id, item)
     return item.id
 
 
@@ -701,6 +701,7 @@ def mkmonmoney(world: World, rng, mon: Monster, amount: int) -> None:
     A gold pile is one object whose `quan` is the amount, so this is
     mkgold() with the monster as the destination instead of the floor.
     """
+    from .invent import addinv  # local import: the makemon <- mkobj cycle
     from .mkobj import mksobj, weight  # local import: mkobj imports this
 
     from .objects import ObjType
@@ -709,11 +710,7 @@ def mkmonmoney(world: World, rng, mon: Monster, amount: int) -> None:
     gold = mksobj(world, rng, ObjType.GOLD_PIECE.value, init=False)
     gold.quan = amount
     gold.owt = weight(world, gold)
-    gold.carrier = mon.id
-    gold.pos = None
-    gold.lev = mon.lev
-    mon.inventory.append(gold)
-    world.items[gold.id] = gold
+    addinv(world, mon.id, gold)
 
 
 # ------------------------------------------------------------

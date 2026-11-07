@@ -64,6 +64,8 @@ def main() -> None:
     print("   r<letter> read a scroll | z<letter> zap a wand | c<letter> cast a spell")
     print("   The floor carries a healing potion: pick it up (g) and")
     print("   drink it with q<letter>.  Capital Q still quits.")
+    print("   Every carried item keeps its own letter (C: invlet_constant):")
+    print("   picking up or dropping one never re-letters the rest of the pack.")
     print("   e<letter> eat a food (the demo floor carries an apple, an orange,")
     print("   a food ration and a melon -- pick them up with g first).  The big")
     print("   foods are a multi-turn meal (a food ration: 5 turns, first bite")

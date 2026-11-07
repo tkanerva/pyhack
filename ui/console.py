@@ -44,12 +44,18 @@ def _ask_direction() -> Direction:
 
 
 def _item_by_letter(world: World, letter: str) -> Optional[str]:
-    """The inventory item of the hero carrying letter `a`, `b`, ...
-    (inventory order), or None."""
-    inv = world.hero.inventory
-    idx = ord(letter) - ord("a")
-    if 0 <= idx < len(inv):
-        return inv[idx].id
+    """The inventory item of the hero carrying `letter`, or None
+    (C: the obj_to_let() lookup getobj() does).
+
+    The letter is the item's own ``Item.invlet`` -- assigned once by
+    core.invent.assigninvlet and kept while the item is held (C:
+    flags.invlet_constant) -- not an index into the inventory list, so
+    dropping or picking up an item never re-letters anything else
+    (PLAN-INVENT.md §2.2 defect 1).
+    """
+    for it in world.hero.inventory:
+        if it.invlet == letter:
+            return it.id
     return None
 
 
@@ -135,15 +141,15 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
 
 
 def _inventory_line(world: World) -> str:
-    """The inventory line: carried items with their letter in
-    inventory order, worn items marked *worn* (the AC of the worn gear
-    is on the status line above)."""
+    """The inventory line: carried items with their own inventory
+    letter (``Item.invlet``, C: obj->invlet), worn items marked *worn*
+    (the AC of the worn gear is on the status line above)."""
     inv = world.hero.inventory
     if not inv:
         return "🎒 (empty)"
     parts = []
-    for i, it in enumerate(inv):
-        letter = chr(ord("a") + i)
+    for it in inv:
+        letter = it.invlet
         if it.owornmask & (W_ARMOR | W_ACCESSORY):
             parts.append(f"[{letter}: {it.name} *worn*]")
         else:

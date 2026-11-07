@@ -62,7 +62,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .events import Event, MessageEvent, ZapEvent
-from .items import cancel_items, consume_item
+from .invent import consume_obj_charge, useup
+from .items import cancel_items
 from .rules import (apply_damage, can_polymorph, find_target_in_line,
                     put_to_sleep, resists, roll, teleport_to_floor)
 from .types import (DamageType, Direction, Item, Monster, ObjectType,
@@ -298,7 +299,7 @@ def _find_wand(caster: Monster, wand_type: WandType) -> Optional[Item]:
     for item in caster.inventory:
         if (item.otype == ObjectType.WAND
                 and item.wand_type == wand_type
-                and item.charges > 0):
+                and item.spe > 0):
             return item
     return None
 
@@ -320,10 +321,11 @@ def use_wand(world: World, caster_id: str, wand_type: WandType,
         return [MessageEvent(f"You don't have a charged {name} wand.")]
 
     # C: the discharge happens -- a charge is consumed even when the
-    # bolt hits a wall
-    wand.charges -= 1
-    if wand.charges <= 0:
-        consume_item(world, caster_id, wand.id)
+    # bolt hits a wall (C: consume_obj_charge), and the last charge
+    # takes the wand with it (C: useup)
+    consume_obj_charge(world, caster_id, wand)
+    if wand.spe <= 0:
+        useup(world, caster_id, wand)
 
     if wand_type not in WAND_ZAPS:
         # not ported yet (C: the remaining weffects() cases)

@@ -778,7 +778,13 @@ class Item:
     id: str
     otype: ObjectType
     name: str
-    charges: int = 1
+    # the inventory letter (C: obj->invlet): the a..z A..Z '#' slot the
+    # item holds in its carrier's pack, assigned once by
+    # core.invent.assigninvlet and kept while the item is held (the C
+    # invlet_constant default, PLAN-INVENT.md decision 5); "" for an
+    # item that never went through the allocator (hand-built test
+    # items, floor kit before pickup)
+    invlet: str = ""
     blessed: bool = False
     cursed: bool = False
     pos: Optional[Pos] = None          # where it lies on the floor, if anywhere
@@ -1084,6 +1090,12 @@ class World:
     # load-bearing for the pinned tests -- so it only serves the new
     # (generated) paths.
     ident: int = 0
+    # the hero's last-assigned inventory-letter index (C: gl.lastinvnr):
+    # core.invent.assigninvlet walks the a..z A..Z slots from here, so a
+    # fresh letter comes out just after the one last used (the C
+    # invlet_constant behaviour, PLAN-INVENT.md decision 5).  -1 before
+    # the first assignment (C: reset_globals).
+    lastinvnr: int = -1
 
     def new_id(self, prefix: str = "obj") -> str:
         """Allocate a fresh unique id (C: next_ident())."""

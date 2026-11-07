@@ -15,6 +15,7 @@ from typing import List
 
 from core.commands import QuaffCommand, WaitCommand
 from core.objects import ObjClass
+from core.pickup import pickup
 from core.rnd import Rng
 from core.types import (DoorMask, Item, ObjectType, PotionType, TerrainType,
                         Tile, World)
@@ -22,6 +23,7 @@ from core.vision import can_see
 from core.worldgen import MKLEV, new_world
 from conftest import make_hero, make_world
 from ui import read_command, render
+from ui.console import _inventory_line
 
 # The floor glyphs of render(), by item class -- the defsym.h
 # OBJCLASS table's characters (core.objects.DEF_OC_SYMS), pinned here
@@ -100,18 +102,39 @@ def test_render_status_line_shows_power_points():
     assert "⚡ Pw: 7/8" in render(w, [])
 
 
+def test_inventory_line_uses_the_stored_letters():
+    """The UI half of the letter fix (PLAN-INVENT.md §2.2 defect 1):
+    the line prints each item's own ``Item.invlet``, so a pickup shows
+    up on a NEW letter instead of shifting every letter after it -- the
+    old `a` + index scheme."""
+    w = new_world(random.Random(42))
+    line = _inventory_line(w)
+    assert "[a: short sword]" in line
+    assert "[b: chain mail *worn*]" in line
+    before = {it.id: it.invlet for it in w.hero.inventory}
+    # stand the hero on a floor item and pick it up
+    item = next(it for it in w.items.values() if it.pos is not None)
+    w.hero.pos = item.pos
+    pickup(w, "player", None)
+    assert {it.id: it.invlet for it in w.hero.inventory
+            if it.id in before} == before
+    assert f"[{item.invlet}: {item.name}]" in _inventory_line(w)
+
+
 def test_read_command_quaff_key(monkeypatch):
     """C's key pair: lowercase q<letter> quaffs a carried potion,
     capital Q quits, a lone q (like a lone z/c) is a wait, and
-    q<letter> on a non-potion is a wait."""
+    q<letter> on a non-potion is a wait.  The letter is the item's own
+    ``Item.invlet`` (C: obj_to_let), not its index in the pack."""
     w = make_world()
     pot = Item(id="p_0", otype=ObjectType.POTION, name="healing potion",
                oclass=ObjClass.POTION.value, potion_type=PotionType.HEALING,
-               charges=1)
+               invlet="a", carrier="player")
     w.items[pot.id] = pot
     w.hero.inventory.append(pot)
     scroll = Item(id="s_0", otype=ObjectType.SCROLL, name="blank paper",
-                  oclass=ObjClass.SCROLL.value)
+                  oclass=ObjClass.SCROLL.value, invlet="b",
+                  carrier="player")
     w.items[scroll.id] = scroll
     w.hero.inventory.append(scroll)
 

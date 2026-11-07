@@ -100,6 +100,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .events import Event, MessageEvent
+from . import invent
 from .items import wielded_of
 from .objects import (ARM_BOOTS, ARM_CLOAK, ARM_GLOVES, ARM_HELM,
                       ARM_SHIELD, ARM_SHIRT, ARM_SUIT, FIRST_AMULET,
@@ -682,14 +683,13 @@ def obj_erode_type(item) -> int:
 
 def _remove_destroyed(world: World, mon: Optional[Monster], item) -> None:
     """C: the erode_obj destruction branch (remove_worn_item + delobj):
-    clear the worn slots, drop the item from the carrier's inventory
-    and the world registry.  C's <Type>_off() side effects stay the
-    no-op STUB hooks (_type_off)."""
+    clear the worn slots, then the single deletion point
+    (core.invent.delobj) drops the item from the carrier's inventory
+    and the world registry -- contents go with it (C: obfree).  C's
+    <Type>_off() side effects stay the no-op STUB hooks (_type_off)."""
     if mon is not None and item.owornmask:
         setworn(mon, None, item.owornmask)
-    if mon is not None:
-        mon.inventory = [i for i in mon.inventory if i.id != item.id]
-    world.items.pop(item.id, None)
+    invent.delobj(world, item.id)
 
 
 def erode_obj(world: World, item, ostr: Optional[str], type: int,

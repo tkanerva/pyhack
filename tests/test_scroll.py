@@ -26,7 +26,7 @@ ELVEN_HELM = O.ELVEN_LEATHER_HELM
 def make_scroll(scroll_type, id="scr_0", blessed=False, cursed=False):
     it = Item(id=id, otype=ObjectType.SCROLL,
               name=scroll_type.name.lower().replace("_", " "),
-              charges=1, blessed=blessed, cursed=cursed,
+              blessed=blessed, cursed=cursed,
               scroll_type=scroll_type, carrier="player")
     return it
 
@@ -40,7 +40,7 @@ def add_scroll(world, scroll):
 def sword(spe=0, cursed=False):
     sw = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
               otyp=O.SHORT_SWORD.value, oclass=ObjClass.WEAPON.value,
-              spe=spe, cursed=cursed)
+              spe=spe, cursed=cursed, carrier="player")
     return sw
 
 
@@ -48,7 +48,7 @@ def armor(otyp, spe=0, cursed=False, mask=W_ARM, id="arm_0",
           blessed=False):
     it = Item(id=id, otype=ObjectType.ARMOR, name=object_type(otyp).name,
               otyp=otyp.value, oclass=ObjClass.ARMOR.value, spe=spe,
-              blessed=blessed, cursed=cursed)
+              blessed=blessed, cursed=cursed, carrier="player")
     it.owornmask = mask
     return it
 
@@ -102,7 +102,7 @@ def test_untyped_scroll_rejected():
     """A scroll item without an effect tag has nothing to read."""
     w = make_world()
     scr = Item(id="scr_0", otype=ObjectType.SCROLL, name="scroll",
-               charges=1, carrier="player")
+               carrier="player")
     add_scroll(w, scr)
     ev = read(w, scr, SeqRng())
     assert texts(ev) == ["You have nothing to read."]

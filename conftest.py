@@ -56,6 +56,52 @@ def make_trap(trap_type: TrapType, pos=(6, 4), id="trap_0"):
     return Trap(id=id, trap_type=trap_type, pos=pos)
 
 
+def assert_item_locations(world: World) -> None:
+    """Assert the PLAN-INVENT.md item-location invariant over `world`.
+
+    Every item in ``World.items`` is in exactly ONE place -- on the
+    floor (``pos``), carried (``carrier``) or inside a container (a
+    parent's ``contents``) -- and every ``carrier`` / ``contents`` id
+    resolves to something in the world.  The pack half of the
+    where-state is written only by core.invent (addinv / freeinv /
+    useup / delobj) and the floor half only by core.mkobj
+    (place_object / add_to_container / delete_contents), so this is
+    the tripwire for a fifth writer sneaking back in.
+
+    Call it from any suite that mutates items, after the mutation.
+    """
+    parents: dict = {}
+    for parent in world.items.values():
+        for child_id in parent.contents:
+            assert child_id in world.items, \
+                f"{parent.id} lists contents id {child_id} that is not " \
+                f"in the world"
+            parents.setdefault(child_id, []).append(parent.id)
+    for item in world.items.values():
+        where = [name for name, on in
+                 (("floor", item.pos is not None),
+                  ("carrier", item.carrier is not None),
+                  ("container", item.id in parents)) if on]
+        assert len(where) <= 1, \
+            f"{item.id} is in more than one place: {where}"
+        if item.carrier is not None:
+            assert item.carrier in world.actors, \
+                f"{item.id} is carried by unknown {item.carrier}"
+        # an item that is nowhere at all is the "ghost" a bad writer
+        # leaves behind (the consume_item orphan of PLAN-INVENT.md)
+        assert where, (f"{item.id} ({item.name}) is nowhere: no pos, "
+                       f"no carrier, no container")
+
+
+def container_ids(world: World) -> set:
+    """The ids of the items that are inside a container (the third
+    where-state of `assert_item_locations`)."""
+    ids = set()
+    for parent in world.items.values():
+        ids.update(parent.contents)
+    return ids
+
+
 class SeqRng:
     """Stand-in for random.Random that returns preset values in order.
 

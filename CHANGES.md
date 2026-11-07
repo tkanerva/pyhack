@@ -5,6 +5,82 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The inventory core: one writer per half, and letters that stay put
+
+**Why:** the pack was a Python list.  Four different functions decided
+*where an item is* (`items.consume_item`, `worn._remove_destroyed`,
+`pickup.pickup`, `worldgen._starting_kit`) and they already disagreed:
+only one cleared the worn mask, none cleared `Monster.wielded`, and
+`consume_item` popped `World.items` unconditionally — so eating the
+last of a stack or destroying a chest left its contents as `Item`s
+with no `pos`, no `carrier` and no parent -- unreachable ghosts
+inside the registry (PLAN-INVENT.md §2.2).  The console also
+lettered the pack by *index* (`a` + position), so dropping an item
+re-lettered every item after it — a bug no test could see in the
+six-item demo and the first thing a real pack does.  This is
+PLAN-INVENT.md phase A.
+
+**The choices:**
+
+1. **`core/invent.py` is the single writer of the pack half** of an
+   item's where-state: `addinv`, `freeinv`, `useup` / `useupall`,
+   `delobj` (PLAN-INVENT.md decision 1, the `rules.apply_damage`
+   pattern).  The floor half stays in `core.mkobj`
+   (`place_object` / `add_to_container` / `delete_contents`) —
+   exactly C's invent.c / mkobj.c split — and the two halves stay
+   mutually exclusive by construction: the where-state is *derived*
+   from `pos` / `carrier` / the parent's `contents`, never stored.
+2. **Every caller moved, none was special-cased.**  `items.consume_item`
+   is deleted (12 call sites -> `invent.useup`, and `useup` is what
+   makes `quan--` and `obj->owt = weight(obj)` correct for a stack);
+   `worn._remove_destroyed` is `invent.delobj`;
+   `pickup.pickup`, `worldgen._starting_kit`, the demo floor kit and
+   `makemon.mongets` / `mkmonmoney` go through `addinv` /
+   `place_object`.  `addinv` composes C's `obj_extract_self` (clear
+   `pos`) with `addinv_core0`'s free-object check, because in pyhack
+   "on the floor" *is* `pos`.
+3. **`delobj` is the one "gone" path and it is recursive**: contents
+   go with the container (C: obfree "deletes contents also"), a
+   contained item leaves its parent's list (C: obj_extract_self) and
+   the parent's weight is recomputed, and the worn slot is cleared
+   *before* the item leaves the pack — the scan that clears the bit
+   reads the carrier's inventory, so the C order (useupall's
+   setnotworn then freeinv) is load-bearing.
+4. **Letters are assigned once** (`assigninvlet`, the a..z A..Z '#'
+   walk from `World.lastinvnr`, C: `gl.lastinvnr`; the coin stack is
+   always `$`).  `ui/console._item_by_letter` is now a lookup on
+   `Item.invlet`, not an index, so a pickup or a drop never re-letters
+   anything — the C `flags.invlet_constant` behaviour, made
+   unconditional (decision 5: the option belongs to unported
+   options.c).  `reorder_invent` keeps the pack sorted by the C
+   `inv_rank` key (`invlet ^ 040`: '#' '$' then a..z then A..Z), so
+   the list order and the letters never disagree.
+5. **`Item.charges` is retired in favour of `spe`** (decision 12):
+   `consume_obj_charge` decrements the C field, wands and spellbooks
+   read it, and a potion's count was never a charge — it is `quan`,
+   so `quaff` uses `useup` like everything else that is consumed.
+   One field, one meaning, and "a wand with 0 charges that stays in
+   the pack forever" is unrepresentable.
+6. **`conftest.assert_item_locations`** asserts the invariant (every
+   `Item` is in exactly one place and every id resolves).  It is the
+   tripwire for a fifth writer sneaking back in, and the new
+   `tests/test_invent.py` calls it after every mutating operation,
+   as do the pickup / potion / zap / hunger suites.
+
+**Deliberately not here** (the rest of the plan's staging): merging
+(`mergable` / `merged`, phase B — the pack still holds one `Item` per
+pickup), the naming slice (`core/objnam.py`, phase C), weight /
+encumbrance (phase D — `near_capacity` is still free of callers), gold
+(phase E), the `i` list (phase F) and `getobj` / selection (phase G).
+The panel's docstring lists the no-op hooks: `carry_obj_effects` (the
+figurine transform timer needs timeout.c) and the shop half of
+`consume_obj_charge`.
+
+**Verified:** 1206 tests green (the new `tests/test_invent.py` covers
+the letter group, the three deletion paths and the invariant),
+`mypy` and `flake8` clean.  The demo's pinned seeds and messages are
+unchanged — the letters are new state, not a new draw.
+
 ## The monster table converter: the whole 383 rows, converted from monsters.h
 
 **Why:** `MONS` was a 76-row depth band -- the rows the first gameplay

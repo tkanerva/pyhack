@@ -10,7 +10,8 @@ from __future__ import annotations
 from typing import List, Optional
 
 from .events import Event, MessageEvent
-from .items import cancel_items, consume_item
+from .invent import useup
+from .items import cancel_items
 from .rules import apply_confusion, can_polymorph, heal, put_to_sleep
 from .types import Item, ObjectType, PotionType, World
 
@@ -28,7 +29,7 @@ def quaff(world: World, monster_id: str, item_id: str, rng) -> List[Event]:
     item = _find_potion(world, monster_id, item_id)
     if item is None:
         return [MessageEvent("You don't have such a potion.")]
-    if item.charges <= 0:
+    if item.quan <= 0:
         return [MessageEvent("The potion is empty.")]
 
     actor = world.actors[monster_id]
@@ -55,7 +56,7 @@ def quaff(world: World, monster_id: str, item_id: str, rng) -> List[Event]:
         events.append(MessageEvent("You feel stronger." if actor.is_hero
                                    else f"{actor.name} feels stronger."))
 
-    item.charges -= 1
-    if item.charges <= 0:
-        consume_item(world, monster_id, item.id)
+    # C: dopot -- the flask is used up (C: useup(otmp): a potion's
+    # count is its quan, and the last flask takes the item with it)
+    useup(world, monster_id, item)
     return events

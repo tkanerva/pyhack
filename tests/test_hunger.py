@@ -25,7 +25,7 @@ from core.objects import (ObjClass, ObjType, Prop, W_AMUL, W_RINGL,
 from core.rules import current_ability, tick_actor
 from core.spells import cast_spell
 from core.types import Item, ObjectType
-from conftest import SeqRng, make_world
+from conftest import SeqRng, assert_item_locations, make_world
 
 O = ObjType  # noqa: E741 -- the house alias for the object table
 SATIATED = HungerState.SATIATED
@@ -71,6 +71,7 @@ def make_amulet(otyp, mask=W_AMUL, id="amul_0"):
 
 
 def wear(w, it):
+    it.carrier = "player"
     w.items[it.id] = it
     w.hero.inventory.append(it)
     return it
@@ -607,6 +608,7 @@ def test_eat_apple_delicious():
     assert w.hero.uhunger == 950
     assert ap not in w.hero.inventory
     assert w.items.get(ap.id) is None
+    assert_item_locations(w)
 
 
 def test_eat_cursed_food_terrible():
@@ -725,7 +727,7 @@ def _book_world():
     w.hero.uenmax = 20
     book = Item(id="book_0", otype=ObjectType.BOOK,
                 name="book of healing", otyp=O.SPE_HEALING.value,
-                oclass=ObjClass.SPBOOK.value, charges=5,
+                oclass=ObjClass.SPBOOK.value, spe=5,
                 spell_type=SpellType.HEALING, carrier="player")
     w.items[book.id] = book
     w.hero.inventory.append(book)
@@ -739,7 +741,7 @@ def test_cast_too_hungry_refused():
     w.hero.uhunger = 10
     ev = cast_spell(w, "player", book.id, None, SeqRng())
     assert texts(ev) == ["You are too hungry to cast that spell."]
-    assert book.charges == 5
+    assert book.spe == 5
     assert w.hero.uen == 20
 
 
@@ -748,7 +750,7 @@ def test_cast_at_11_hunger_is_allowed():
     w.hero.uhunger = 11
     ev = cast_spell(w, "player", book.id, None, SeqRng(1))   # success
     assert texts(ev)[0] == "You cast healing."
-    assert book.charges == 4
+    assert book.spe == 4
     assert w.hero.uen == 15
     assert w.hero.uhunger == 11
 

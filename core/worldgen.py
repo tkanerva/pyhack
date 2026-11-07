@@ -35,7 +35,9 @@ from typing import List, Optional, Tuple
 
 from .energy import init_energy
 from .experience import init_experience
+from .invent import addinv
 from .mklev import blank_map, fill_ordinary_room, mklev
+from .mkobj import place_object
 from .mkmap import mkmap
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType, W_ARM
@@ -127,7 +129,7 @@ FLOOR_FOODS: List[Tuple[Pos, str, ObjType]] = [
 
 # Demo floor potion at a FIXED position (reserved via generate_map):
 # the quaff-port demo kit -- one healing potion (POT_HEALING), zero
-# rng draws; charges=1 so quaff() can consume it.  The demo cave's
+# rng draws; quan=1 so quaff() can useup it.  The demo cave's
 # floor-only demo item: the generated levels carry the 22-item kit of
 # demo_floor_items() without it (the oinit distribution will replace
 # all of it, PLAN-MKLEV.md).
@@ -207,46 +209,55 @@ def demo_monster(kind: int, ident: str, pos: Pos, lev: int = 1) -> Monster:
                    m_lev=mdata.mlevel, is_flying=(pm == PM_BAT))
 
 
-def demo_floor_items() -> List[Item]:
+def demo_floor_items() -> List[Tuple[Item, Pos]]:
     """The demo floor kit -- armour, scrolls, weapons, wands, books
-    and food -- as a fresh list of Items at the FLOOR_* positions.
+    and food -- as fresh (item, position) pairs at the FLOOR_*
+    positions.
 
     One place builds them so the pinned demo cave and the generated
     levels carry the same kit (the generated paths move the positions;
     see _scatter_floor_items).  The healing potion (FLOOR_POTIONS) is
     not in this kit -- it is the demo cave's floor-only demo item;
     the generated levels carry the 22 items (the oinit distribution
-    will replace them, PLAN-MKLEV.md).
+    will replace them, PLAN-MKLEV.md).  The items come back WITHOUT a
+    position: the caller places them through core.mkobj.place_object
+    (the floor half of the PLAN-INVENT.md single-writer rule).  The
+    wand / book charge counts are their `spe` (the C charge field).
     """
-    items: List[Item] = []
+    items: List[Tuple[Item, Pos]] = []
     for i, (pos, name, otyp, cursed) in enumerate(FLOOR_ARMOR):
-        items.append(Item(id=f"armor_{i}", otype=ObjectType.ARMOR,
-                          name=name, otyp=otyp.value,
-                          oclass=ObjClass.ARMOR.value, pos=pos,
-                          cursed=cursed))
+        items.append((Item(id=f"armor_{i}", otype=ObjectType.ARMOR,
+                           name=name, otyp=otyp.value,
+                           oclass=ObjClass.ARMOR.value, cursed=cursed),
+                      pos))
     for i, (pos, name, otyp, stype) in enumerate(FLOOR_SCROLLS):
-        items.append(Item(id=f"scroll_{i}", otype=ObjectType.SCROLL,
-                          name=name, otyp=otyp.value,
-                          oclass=ObjClass.SCROLL.value, pos=pos,
-                          scroll_type=stype))
+        items.append((Item(id=f"scroll_{i}", otype=ObjectType.SCROLL,
+                           name=name, otyp=otyp.value,
+                           oclass=ObjClass.SCROLL.value,
+                           scroll_type=stype),
+                      pos))
     for i, (pos, name, otyp) in enumerate(FLOOR_WEAPONS):
-        items.append(Item(id=f"weapon_{i}", otype=ObjectType.WEAPON,
-                          name=name, otyp=otyp.value,
-                          oclass=ObjClass.WEAPON.value, pos=pos))
-    for i, (pos, name, otyp, wtype, charges) in enumerate(FLOOR_WANDS):
-        items.append(Item(id=f"wand_{i}", otype=ObjectType.WAND,
-                          name=name, otyp=otyp.value,
-                          oclass=ObjClass.WAND.value, pos=pos,
-                          wand_type=wtype, charges=charges))
-    for i, (pos, name, otyp, btype, charges) in enumerate(FLOOR_BOOKS):
-        items.append(Item(id=f"book_{i}", otype=ObjectType.BOOK,
-                          name=name, otyp=otyp.value,
-                          oclass=ObjClass.SPBOOK.value, pos=pos,
-                          spell_type=btype, charges=charges))
+        items.append((Item(id=f"weapon_{i}", otype=ObjectType.WEAPON,
+                           name=name, otyp=otyp.value,
+                           oclass=ObjClass.WEAPON.value),
+                      pos))
+    for i, (pos, name, otyp, wtype, spe) in enumerate(FLOOR_WANDS):
+        items.append((Item(id=f"wand_{i}", otype=ObjectType.WAND,
+                           name=name, otyp=otyp.value,
+                           oclass=ObjClass.WAND.value,
+                           wand_type=wtype, spe=spe),
+                      pos))
+    for i, (pos, name, otyp, btype, spe) in enumerate(FLOOR_BOOKS):
+        items.append((Item(id=f"book_{i}", otype=ObjectType.BOOK,
+                           name=name, otyp=otyp.value,
+                           oclass=ObjClass.SPBOOK.value,
+                           spell_type=btype, spe=spe),
+                      pos))
     for i, (pos, name, otyp) in enumerate(FLOOR_FOODS):
-        items.append(Item(id=f"food_{i}", otype=ObjectType.FOOD,
-                          name=name, otyp=otyp.value,
-                          oclass=ObjClass.FOOD.value, pos=pos))
+        items.append((Item(id=f"food_{i}", otype=ObjectType.FOOD,
+                           name=name, otyp=otyp.value,
+                           oclass=ObjClass.FOOD.value),
+                      pos))
     return items
 
 
@@ -265,45 +276,38 @@ def _starting_kit(world: World) -> None:
     """The carried starting kit: wielded short sword (fine identity,
     ObjLike-compatible for core.weapon), chain mail WORN (effective AC
     5), leather cloak / gloves and ring of protection (+1) carried.
-    No rng draws."""
+    No rng draws.  The move into the pack is core.invent.addinv (C:
+    u_init's ini_inv is mksobj + addinv) -- the pack half of the
+    PLAN-INVENT.md single-writer rule -- which also hands the items
+    their a..e letters."""
     hero = world.hero
     sword = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
                  otyp=ObjType.SHORT_SWORD.value,
                  oclass=ObjClass.WEAPON.value, spe=0)
-    world.items[sword.id] = sword
-    sword.carrier = "player"
-    hero.inventory.append(sword)
+    addinv(world, "player", sword)
     hero.wielded = sword.id
 
     mail = Item(id="mail_0", otype=ObjectType.ARMOR, name="chain mail",
                 otyp=ObjType.CHAIN_MAIL.value, oclass=ObjClass.ARMOR.value)
-    mail.carrier = "player"
     mail.owornmask = W_ARM
-    hero.inventory.append(mail)
-    world.items[mail.id] = mail
+    addinv(world, "player", mail)
 
     cloak = Item(id="cloak_0", otype=ObjectType.ARMOR, name="leather cloak",
                  otyp=ObjType.LEATHER_CLOAK.value,
                  oclass=ObjClass.ARMOR.value)
-    cloak.carrier = "player"
-    hero.inventory.append(cloak)
-    world.items[cloak.id] = cloak
+    addinv(world, "player", cloak)
 
     gloves = Item(id="gloves_0", otype=ObjectType.ARMOR,
                   name="leather gloves",
                   otyp=ObjType.LEATHER_GLOVES.value,
                   oclass=ObjClass.ARMOR.value)
-    gloves.carrier = "player"
-    hero.inventory.append(gloves)
-    world.items[gloves.id] = gloves
+    addinv(world, "player", gloves)
 
     ring = Item(id="ring_0", otype=ObjectType.RING,
                 name="ring of protection (+1)",
                 otyp=ObjType.RIN_PROTECTION.value,
                 oclass=ObjClass.RING.value, spe=1)
-    ring.carrier = "player"
-    hero.inventory.append(ring)
-    world.items[ring.id] = ring
+    addinv(world, "player", ring)
 
 
 # ============================================================
@@ -347,17 +351,18 @@ def _new_world_demo(rng, width: int, height: int, levels: int,
 
     _starting_kit(world)
 
-    # the demo floor kit at its fixed positions (see FLOOR_* above)
-    for it in demo_floor_items():
-        world.items[it.id] = it
+    # the demo floor kit at its fixed positions (see FLOOR_* above);
+    # place_object is the floor half of the item's where-state
+    for it, pos in demo_floor_items():
+        place_object(world, it, pos, world.lev)
 
     # the demo floor potion (fixed position, see FLOOR_POTIONS above):
     # fine identity (ObjLike) + effect tag for quaff dispatch
     for i, (pos, name, otyp, ptype) in enumerate(FLOOR_POTIONS):
         it = Item(id=f"potion_{i}", otype=ObjectType.POTION, name=name,
-                  otyp=otyp.value, oclass=ObjClass.POTION.value, pos=pos,
-                  potion_type=ptype, charges=1)
-        world.items[it.id] = it
+                  otyp=otyp.value, oclass=ObjClass.POTION.value,
+                  potion_type=ptype)
+        place_object(world, it, pos, world.lev)
 
     floor = [p for p in m.floor_tiles() if p != HERO_POS]
 
@@ -414,25 +419,27 @@ def _scatter_floor_items(world: World, rng) -> None:
     The oinit() object distribution is still deferred (PLAN-STAIRS.md
     §5), so a generated level carries the demo kit rather than NetHack's
     per-depth mix -- but at generator-chosen positions, which is what
-    makes the layouts playable."""
+    makes the layouts playable.  Each item goes down through
+    core.mkobj.place_object (the floor half of the single-writer rule);
+    an item the map has no free square for never enters
+    ``World.items`` at all, so nothing is left unplaced there (the
+    conftest.assert_item_locations invariant)."""
     from .mkroom import somexyspace  # local import: cycle
 
     traps = [t for t in world.traps.values() if t.lev == world.lev]
     taken = {it.pos for it in world.items.values() if it.pos is not None}
     taken.add(world.hero.pos)
-    for item in demo_floor_items():
-        item.pos = None
-        for _ in range(50):
+    for item, _ in demo_floor_items():
+        for _try in range(50):
             if not world.map.rooms:
                 break
             room = world.map.rooms[rng.rn2(len(world.map.rooms))]
             pos = somexyspace(world.map, traps, room, rng)
             if pos is None or pos in taken:
                 continue
-            item.pos = pos
+            place_object(world, item, pos, world.lev)
             taken.add(pos)
             break
-        world.items[item.id] = item
 
 
 def _cavern_stairs(map_: Map, rng, lev: int, max_lev: int) -> None:

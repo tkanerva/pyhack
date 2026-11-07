@@ -49,8 +49,9 @@ Design (PLAN-MKOBJ.md decisions 1-8):
     `pos` / `carrier` / the parent's `contents` list, never off the
     registry.
   - `spe` is the C enchantment / charge field and the only counter the
-    genesis writes; the demo's `Item.charges` alias is untouched here
-    (it is migrated with the demo kit, PLAN-MKOBJ.md §4.A).
+    genesis writes; the demo's old `Item.charges` alias is GONE (the
+    PLAN-INVENT.md phase A migration: `consume_obj_charge` decrements
+    `spe`, and the wands / books / demo kit were re-pointed at it).
   - `weight()` takes the World because a container's contents live in
     `World.items` (C walks an obj chain); that keeps the object model
     graph-free without a module-level registry.

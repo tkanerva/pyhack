@@ -1,4 +1,10 @@
-"""Item helpers: inventory manipulation and charge consumption."""
+"""Item helpers: the carried-item queries the systems share.
+
+The item LOCATION writers (where an item is: floor / pack / container /
+gone) live in core.invent (the pack half) and core.mkobj (the
+place_object / add_to_container half) -- the PLAN-INVENT.md
+"single writer" rule.  This module is query-only.
+"""
 from __future__ import annotations
 
 from typing import List, Optional
@@ -7,23 +13,17 @@ from .events import Event, MessageEvent
 from .types import Item, Monster, World
 
 
-def consume_item(world: World, monster_id: str, item_id: str) -> None:
-    """Remove an item from the world and from its carrier's inventory."""
-    item = world.items.pop(item_id, None)
-    if item is None:
-        return
-    carrier = world.actors.get(monster_id)
-    if carrier is not None:
-        carrier.inventory = [i for i in carrier.inventory if i.id != item_id]
-
-
 def cancel_items(world: World, monster: Monster) -> List[Event]:
     """Cancel all charged items in a monster's inventory (cancellation
-    zap / anti-magic trap / potion of cancellation)."""
+    zap / anti-magic trap / potion of cancellation).
+
+    C: cancel_items (src/zap.c) -- the charged half zeroes `spe` (the
+    wand / book / tool charge field), not a separate counter.
+    """
     changed = False
     for item in monster.inventory:
-        if item.charges > 0:
-            item.charges = 0
+        if item.spe > 0:
+            item.spe = 0
             changed = True
     if changed:
         text = ("Your magical items are cancelled!" if monster.is_hero

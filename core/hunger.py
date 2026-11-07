@@ -103,7 +103,7 @@ from typing import Generator, List, Optional
 
 from .events import Event, MessageEvent
 from .hacklib import rounddiv, sgn
-from .items import consume_item
+from .invent import useup
 from .occupation import OccupationStopped, start_occupation
 from .objects import (O, ObjClass, Prop, W_AMUL, W_ARMOR, W_RINGL, W_RINGR,
                       W_TOOL, object_type)
@@ -483,8 +483,8 @@ def _meal(world: World, actor_id: str, item_id: str,
                 # a later resume
                 return ev
             if item.oeaten >= full:
-                # done (C: done_eating): consume the piece
-                consume_item(world, actor_id, item.id)
+                # done (C: done_eating): consume the piece (C: useup)
+                useup(world, actor_id, item)
                 return ev + [MessageEvent(
                     f"You finish eating the {item.name}.")]
     except OccupationStopped:
@@ -525,8 +525,8 @@ def eat_food(world: World, actor_id: str, item_id: str,
     plan = _meal_plan(item, resume)
     if plan is None:
         # the piece is fully eaten (a stale item) -- C: the doeat
-        # used-up branch (the zero_victual reset)
-        consume_item(world, actor_id, item.id)
+        # used-up branch (the zero_victual reset; C: useup)
+        useup(world, actor_id, item)
         return []
     reqtime, nmod = plan
     mon = world.actors[actor_id]
@@ -547,8 +547,8 @@ def eat_food(world: World, actor_id: str, item_id: str,
     item.oeaten = min(item.oeaten + nmod, full)
     if item.oeaten >= full:
         # a one-bite piece (C: the reqtime 1 path -- no finish line;
-        # the fprefx was the whole feedback)
-        consume_item(world, actor_id, item.id)
+        # the fprefx was the whole feedback; C: useup)
+        useup(world, actor_id, item)
         return events
     if not mon.alive:
         return events  # the choke death -- the step ends the game
