@@ -1,1 +1,1 @@
-from .console import read_command, render  # noqa: F401  (the public ui surface)
+from .console import inventory_lines, read_command, render  # noqa: F401

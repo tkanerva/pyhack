@@ -13,7 +13,8 @@ core.vision.can_see() which squares they may talk about.
 import random
 from typing import List
 
-from core.commands import QuaffCommand, WaitCommand
+from core import invent
+from core.commands import ListCommand, QuaffCommand, WaitCommand
 from core.objects import ObjClass
 from core.pickup import pickup
 from core.rnd import Rng
@@ -22,7 +23,7 @@ from core.types import (DoorMask, Item, ObjectType, PotionType, TerrainType,
 from core.vision import can_see
 from core.worldgen import MKLEV, new_world
 from conftest import make_hero, make_world
-from ui import read_command, render
+from ui import inventory_lines, read_command, render
 from ui.console import _inventory_line
 
 # The floor glyphs of render(), by item class -- the defsym.h
@@ -233,3 +234,31 @@ def test_a_hash_on_the_screen_is_always_a_seen_corridor():
     for pos in hashes:
         assert w.map.tile_at(pos).typ == TerrainType.CORR, pos
         assert can_see(w, pos), pos
+
+
+def test_read_command_inventory_listing_keys(monkeypatch):
+    """C's display commands are keys of their own: `i` (ddoinv), the
+    class glyphs of dotypeinv, `*` (doprinuse) and `$` (doprgold).  A
+    ListCommand carries the key that asked, so the UI can answer it from
+    the world (there is no turn and no step())."""
+    w = make_world()
+
+    def press(key: str):
+        monkeypatch.setattr("builtins.input", lambda prompt: key)
+        return read_command(w)
+
+    for key in ('i', ')', '[', '"', '=', '(', '*', '$'):
+        assert press(key) == ListCommand(key)
+    # C's capital 'I' (inventtype) folds onto the same listing
+    assert press("I") == ListCommand("i")
+
+
+def test_inventory_lines_maps_each_key_to_the_formatter():
+    """The UI half: LIST_KEYS -> core.invent's display group.  The
+    console only decides which formatter answers, the core makes the
+    text (the core has no window)."""
+    w = new_world(random.Random(42))
+    assert inventory_lines(w, "i") == invent.display_inventory(w.hero)
+    assert inventory_lines(w, "[") == invent.display_inventory(w.hero, "[")
+    assert inventory_lines(w, "*") == invent.display_in_use(w.hero)
+    assert inventory_lines(w, "$") == [invent.doprgold(w.hero)]

@@ -82,7 +82,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Tuple
 
-from . import makemon, rules
+from . import invent, makemon, rules
 from .mondata import is_female, is_male, is_neuter, undead_to_corpse
 from .monst import (G_HELL, G_NOGEN, G_NOCORPSE, G_UNIQ, LOW_PM, MONS,
                     NON_PM, NUMMONS, PM_HUMAN, SPECIAL_PM)
@@ -846,9 +846,14 @@ def mkgold(world: World, rng, amount: int, pos: Pos, lev: int) -> Item:
 
 def hero_gold(world: World) -> int:
     """How much gold the hero carries (C: the money count behind
-    `u.ugold`).  A gold pile is one object whose `quan` is the amount."""
-    return sum(item.quan for item in world.hero.inventory
-               if item.oclass == int(ObjClass.COIN))
+    `u.ugold`).  A gold pile is one object whose `quan` is the amount.
+
+    C's name for the reading is ``invent.money_cnt``, which is where it
+    lives now (PLAN-INVENT.md phase E: whichever phase lands the
+    function owns it and the other drops its copy); this name stays
+    because the shop plan and ``uhitm.steal_it`` speak of it.
+    """
+    return invent.money_cnt(world.hero)
 
 
 # ------------------------------------------------------------

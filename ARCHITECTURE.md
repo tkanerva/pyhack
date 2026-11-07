@@ -229,11 +229,21 @@ details live in the PLAN-*.md files and the module docstrings):**
   the pack (the letter-drift defect).  `Item.charges` is retired in
   favour of C's `spe` (the wand / book / tool charge field), and
   `useup` is the one "one of these is gone" path, so eating the last
-  of a stack or destroying a chest cannot orphan the contents.  Still
+  of a stack or destroying a chest cannot orphan the contents.  The
+  **display half** (phase F, the non-menu path) is a set of pure
+  formatters in the same module -- `xprname`, `display_inventory` (the
+  `i` list and its per-class subsets, class headings from
+  `let_to_name`), `is_inuse` / `display_in_use` (`*`), `money_cnt` /
+  `doprgold` (`$`) -- over a reduced `doname` that reads the stored
+  `Item.name`, the stack count and the `(being worn)` / `(wielded)`
+  tail.  The console turns those keys into a `ListCommand`, answers it
+  itself (`ui.console.inventory_lines`) and `core.step` returns nothing
+  for it: **a listing is a render, not a turn** (C: ECMD_OK).  Still
   open from the plan: merging (`mergable` / `merged`, phase B), the
-  naming slice (`core/objnam.py`, phase C), weight / encumbrance
-  (phase D), gold (phase E), the `i` list (phase F), `getobj` /
-  selection (phase G) and `#adjust` (phase H).
+  naming slice (`core/objnam.py`, phase C -- it replaces `doname`),
+  weight / encumbrance (phase D), gold (phase E), the menu half of the
+  display and `prinv` (phase F), `getobj` / selection (phase G) and
+  `#adjust` (phase H).
 - The level generators (WAVE3.md / PLAN-MKLEV.md, core/mklev.py,
   core/mkroom.py, core/mkmap.py, core/doors.py): `new_world(rng,
   generator="demo"|"mklev"|"cavern")` behind a switch that defaults to
@@ -362,9 +372,11 @@ order:
    it landed with PLAN-INVENT.md phase A.)
 4. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
    PLAN-DROP.md — invent.c / pickup.c / do.c + wield.c): phase A is
-   in (`core/invent.py`: the pack, the letters, the single writer);
+   in (`core/invent.py`: the pack, the letters, the single writer) and
+   so is phase F's display half (`display_inventory` / `xprname` /
+   the reduced `doname`; the console's `i` family, which costs no turn);
    the rest of the plan's staging — stacking (B), naming (C), weight /
-   encumbrance (D), gold (E), the display half (F), selection (G) —
+   encumbrance (D), gold (E), selection (G) —
    is what turns the pack into NetHack's, and it consumes 3's merge
    rules and `splitobj`.
 5. **The small UI debt**: wire `QuaffCommand` (zap / cast / eat are

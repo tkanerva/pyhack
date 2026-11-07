@@ -5,6 +5,74 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The inventory list: `i` and friends, and a listing that costs no turn
+
+**Why:** the pack was shown one way -- the demo's `🎒 [a: short sword]
+[b: chain mail *worn*] ...` line -- and a line is not an inventory.
+NetHack's is a *list*: one entry per item, headed by its object class,
+keyed by the inventory letter the player has learned, with the gear in
+use marked.  It is also the place a stack ("3 arrows") will be
+visible once phase B lands -- which is why the display half of
+PLAN-INVENT.md (phase F) comes before the rest of that plan's staging
+even though it is not first on the list.
+
+**The choices:**
+
+1. **The formatters live in `core/invent.py`** (C: they are invent.c's
+   `xprname` / `display_inventory` / `display_pickinv`), and they are
+   *pure*: `display_inventory(mon, lets="")` returns a list of lines
+   and touches nothing.  C's `lets` is the class-glyph set of
+   `display_inventory`'s own doc comment ("list all objects with object
+   classes that match the order in lets"), so the per-class lists fall
+   out of the same function; the class order is C's `flags.inv_order`
+   (`INV_ORDER`, the sortpack default) and the headings are the
+   `let_to_name` table that phase A already had.
+2. **A listing is a render, not a turn.**  C's `ddoinv` and its
+   siblings return `ECMD_OK`, so they cost no move.  The console is
+   where the key becomes text: `read_command` returns
+   `ListCommand(what)`, `main.py` prints `ui.console.inventory_lines`
+   and waits for a key, and `core.step` answers a `ListCommand` with
+   `[]` before the per-turn upkeep -- so the rule holds for any
+   front-end, and a test can assert it (no events, no rng draw, no
+   clock tick).  This is the one place where a pyhack command does not
+   spend a turn; the demo's "a failed action still costs a turn" habit
+   is untouched.
+3. **`doname` is a deliberately small `objnam.c` slice**: `Item.name`,
+   the stack count through `makeplural` (a real port already in
+   `core.hacklib_inflection`), and C's `(being worn)` / `(on left
+   hand)` / `(wielded)` tail.  The article, the BUC prefix, the `+N`
+   and the erosion words are phase C's `core/objnam.py`, and `doname`
+   is the single function it replaces -- every line of every listing
+   goes through it, so there is one place to change.  A line therefore
+   reads `a - short sword (wielded)` today and `a - a +0 short sword
+   (weapon in right hand)` once phase C lands.
+4. **The wielded weapon is read from both places.**  `Monster.wielded`
+   is still a bare id (PLAN-DROP.md phase C moves it to `W_WEP`), so
+   `worn_suffix` / `is_inuse` test the mask *and* the id: the next
+   wield command works either way.
+5. **`money_cnt` moves to its C home**, and `mkobj.hero_gold` delegates
+   to it (PLAN-INVENT.md phase E's rule: whichever phase lands the
+   function owns it and the other drops its copy).  `$` prints C's
+   verbose wallet line; `hidden_gold` (gold inside a carried container)
+   is still phase E.
+
+**Keys:** `i` (the whole pack), `)` `[` `"` `=` `(` (one class),
+`*` (what is worn / wielded), `$` (the wallet).  The `🎒` line stays as
+the at-a-glance summary on the screen; the list is the detail.
+
+**Not here** (phase F's menu half): `prinv` (the message form -- it
+lands with phase C's messages), selecting an entry to act on it,
+`dotypeinv`'s class prompt (`I`), the in-use per-slot commands
+(`doprwep` / `doprarm` / ...: the class glyphs list the whole class
+rather than the worn pieces, C 5.0's reading), and `count_buc` /
+`tally_BUCX` / `count_contents`.
+
+**Verified:** 1220 tests green (14 new: the display group in
+`tests/test_invent.py`, the keys and the key -> formatter mapping in
+`tests/test_console.py`, the no-turn rule in `tests/test_step.py`, and
+`main()` printing the list in `tests/test_main.py`); mypy and flake8
+clean; demo seeds, layouts and messages unchanged.
+
 ## The inventory core: one writer per half, and letters that stay put
 
 **Why:** the pack was a Python list.  Four different functions decided

@@ -72,6 +72,24 @@ class PickupCommand:
 
 
 @dataclass(frozen=True)
+class ListCommand:
+    """Show an inventory listing (C: the display half of src/invent.c).
+
+    ``what`` is the key that asked for it: ``i`` for the whole pack
+    (C: ddoinv), one of the class glyphs ``) [ " = (`` for that one
+    class (C: dotypeinv without its prompt), ``*`` for what is being
+    worn or wielded (C: doprinuse) and ``$`` for the wallet (C:
+    doprgold).
+
+    A listing is a RENDER, not an action: it costs no turn (C: those
+    commands return ECMD_OK), so ``core.step`` answers it with no
+    events and no state change, and the console draws it through
+    core.invent's formatters -- the core has no window to write to.
+    """
+    what: str
+
+
+@dataclass(frozen=True)
 class StairsCommand:
     """Use the staircase under the hero (C: '>' -> dodown, '<' ->
     doup -- two C functions with one shared skeleton, collapsed into
@@ -93,4 +111,5 @@ class CloseCommand:
 
 Command = Union[MoveCommand, WaitCommand, ZapCommand, QuaffCommand,
                 CastCommand, ReadCommand, EatCommand, WearCommand,
-                TakeOffCommand, PickupCommand, StairsCommand, CloseCommand]
+                TakeOffCommand, PickupCommand, ListCommand,
+                StairsCommand, CloseCommand]

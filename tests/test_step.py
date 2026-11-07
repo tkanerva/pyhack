@@ -1,8 +1,8 @@
 """Tests for step(): one command in, world + events out."""
 import random
 
-from core import (MoveCommand, PickupCommand, TakeOffCommand, WaitCommand,
-                  WearCommand, step)
+from core import (ListCommand, MoveCommand, PickupCommand, TakeOffCommand,
+                  WaitCommand, WearCommand, step)
 from core.events import GameOverEvent, MessageEvent
 from core.objects import ObjClass, ObjType, W_ARM
 from core.types import DoorMask, Item, ObjectType, Tile, TerrainType
@@ -248,3 +248,15 @@ def test_step_pickup_command():
     assert any(isinstance(e, MessageEvent)
                and e.text == "You are now wearing the elven leather helm."
                for e in ev)
+
+
+def test_an_inventory_listing_costs_no_turn():
+    """C: ddoinv / dotypeinv / doprinuse / doprgold return ECMD_OK -- a
+    listing is a render.  step() answers a ListCommand with no events,
+    no draws from the rng (SeqRng is empty) and no state change: the
+    clock, the hunger gauge and the adjacent monster all stay put."""
+    w = make_world(monsters=[make_monster(pos=(7, 4))])
+    before = (w.turn, w.hero.uhunger, w.hero.hp)
+    assert step(w, ListCommand("i"), SeqRng()) == []
+    assert (w.turn, w.hero.uhunger, w.hero.hp) == before
+    assert w.actors["goblin_0"].pos == (7, 4)

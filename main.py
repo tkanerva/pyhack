@@ -11,11 +11,11 @@ import random
 import sys
 from typing import List, Union
 
-from core import GameOverEvent, MessageEvent, step
+from core import GameOverEvent, ListCommand, MessageEvent, step
 from core.calendar import midnight
 from core.rnd import Rng
 from core.worldgen import CAVERN, DEMO, MKLEV, new_world
-from ui import read_command, render
+from ui import inventory_lines, read_command, render
 
 # The seed of the game (the old demo's 42).
 SEED = 42
@@ -64,6 +64,10 @@ def main() -> None:
     print("   r<letter> read a scroll | z<letter> zap a wand | c<letter> cast a spell")
     print("   The floor carries a healing potion: pick it up (g) and")
     print("   drink it with q<letter>.  Capital Q still quits.")
+    print("   i lists everything you carry (C: ddoinv); a class glyph")
+    print("   lists just that class: ) weapons, [ armour, \" amulets,")
+    print("   = rings, ( tools.  * shows what you wear and wield, and $")
+    print("   your wallet.  A listing costs no turn.")
     print("   Every carried item keeps its own letter (C: invlet_constant):")
     print("   picking up or dropping one never re-letters the rest of the pack.")
     print("   e<letter> eat a food (the demo floor carries an apple, an orange,")
@@ -105,6 +109,16 @@ def main() -> None:
         cmd = read_command(world)
         if cmd is None:
             break
+        if isinstance(cmd, ListCommand):
+            # a listing is a RENDER, not a turn (C: ddoinv & co. return
+            # ECMD_OK): the console answers it from the world, the player
+            # reads it at leisure, and the loop redraws -- step() is
+            # never called, so the clock does not advance
+            print()
+            for line in inventory_lines(world, cmd.what):
+                print("   " + line)
+            input("   (press Enter) ")
+            continue
         events = step(world, cmd, rng)
         for e in events:
             if isinstance(e, MessageEvent):

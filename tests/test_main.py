@@ -19,7 +19,7 @@ import sys
 import pytest
 
 import main as shell
-from core.commands import MoveCommand, StairsCommand, WaitCommand
+from core.commands import ListCommand, MoveCommand, StairsCommand, WaitCommand
 
 
 @pytest.fixture()
@@ -62,3 +62,20 @@ def test_main_draws_the_last_frame_when_the_input_ends(play, capsys):
     out = capsys.readouterr().out
     assert out.count("Level 1 of 3") >= 2, "the world screen and the exit"
     assert ("You survive the cave" in out or "Thanks for playing" in out)
+
+
+def test_main_shows_an_inventory_listing_without_stepping(play, capsys,
+                                                          monkeypatch):
+    """`i` is answered by the console from the world (C: ECMD_OK), so
+    main prints the list -- the class headings of let_to_name and one
+    line per item, with the worn / wielded suffixes -- and redraws
+    without calling step()."""
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    play([], [ListCommand("i"), WaitCommand()])
+    out = capsys.readouterr().out
+    assert "Weapons" in out
+    assert "a - short sword (wielded)" in out
+    assert "b - chain mail (being worn)" in out
+    # the world was not stepped for the listing: the screen renders after
+    # it, on the same turn
+    assert "Level 1 of 3" in out

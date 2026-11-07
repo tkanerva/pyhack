@@ -11,8 +11,9 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .commands import (CastCommand, CloseCommand, Command, EatCommand,
-                       MoveCommand, PickupCommand, QuaffCommand, ReadCommand,
-                       StairsCommand, TakeOffCommand, WearCommand, ZapCommand)
+                       ListCommand, MoveCommand, PickupCommand,
+                       QuaffCommand, ReadCommand, StairsCommand,
+                       TakeOffCommand, WearCommand, ZapCommand)
 from .doors import close_door, open_door
 from .energy import tick_energy
 from .events import Event, GameOverEvent, MessageEvent
@@ -37,6 +38,15 @@ from .zap import use_wand
 
 def step(world: World, cmd: Command, rng) -> List[Event]:
     if world.over:
+        return []
+
+    if isinstance(cmd, ListCommand):
+        # A listing is a render, not a turn (C: ddoinv / dotypeinv return
+        # ECMD_OK, so the clock does not advance).  The console answers
+        # it from core.invent's formatters before step is ever called;
+        # the guard is here so that the "costs nothing" rule holds for
+        # any front-end, and so a test can assert it (PLAN-INVENT.md §6:
+        # a plain `i` must not tick the world).
         return []
 
     hero = world.hero

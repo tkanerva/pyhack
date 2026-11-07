@@ -14,7 +14,7 @@ from .events import (
     MessageEvent, StatusEvent, TrapSeenEvent, TrapTriggeredEvent, ZapEvent,
 )
 from .commands import (
-    CastCommand, CloseCommand, Command, EatCommand, MoveCommand,
+    CastCommand, CloseCommand, Command, EatCommand, ListCommand, MoveCommand,
     PickupCommand, QuaffCommand, ReadCommand, StairsCommand,
     TakeOffCommand, WaitCommand, WearCommand, ZapCommand,
 )
@@ -32,7 +32,7 @@ __all__ = [
     "LevelChangeEvent", "MessageEvent", "StatusEvent",
     "TrapSeenEvent", "TrapTriggeredEvent", "ZapEvent",
     "CastCommand", "CloseCommand", "Command", "EatCommand",
-    "MoveCommand", "PickupCommand", "QuaffCommand", "ReadCommand",
-    "StairsCommand", "TakeOffCommand", "WaitCommand", "WearCommand",
-    "ZapCommand", "step",
+    "ListCommand", "MoveCommand", "PickupCommand", "QuaffCommand",
+    "ReadCommand", "StairsCommand", "TakeOffCommand", "WaitCommand",
+    "WearCommand", "ZapCommand", "step",
 ]

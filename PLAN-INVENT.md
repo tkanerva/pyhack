@@ -1,6 +1,8 @@
 # Plan: Wave 6a — the inventory core (`src/invent.c`)
 
-**Status: phase A landed (`core/invent.py`); phases B-H proposed.**
+**Status: phase A landed (`core/invent.py`); phase F's display half
+landed (the `i` / class / `*` / `$` listings and the reduced `doname`);
+phases B-E, G-H proposed.**
 Written against the tree that has 521 tests green and mypy clean, with
 Wave 3 (mklev / mkroom / mkmap + doors) landed and PLAN-MAKEMON /
 PLAN-MKOBJ / PLAN-SPECIAL-ROOMS / PLAN-SPLEV proposed.  This is the
@@ -353,7 +355,34 @@ floor is hoovered; `pickup` in PLAN-PICKUP phase B can now fail.
 **Exit:** the hero can carry gold, drop it (PLAN-DROP), pick it up
 (PLAN-PICKUP) and be robbed; the pile merges on every re-`mkgold`.
 
-### Phase F — the display half (~2 sessions)
+### Phase F — the display half (~2 sessions) — **the non-menu half LANDED**
+
+Landed (the pure formatters in `core/invent.py` + the console keys):
+
+- `xprname` (the `let - name.` line), `display_inventory(mon, lets)`
+  (the `i` list and the per-class subsets, class headings from
+  `let_to_name`, the sortpack class order of `INV_ORDER`), `is_inuse` /
+  `display_in_use` (the `*` list), `money_cnt` / `currency` /
+  `doprgold` (the `$` wallet line);
+- the *reduced* `doname` / `worn_suffix` -- `Item.name`, the stack
+  count via `makeplural`, and C's `(being worn)` / `(on left hand)` /
+  `(wielded)` tail.  **Phase C replaces `doname`**: the article, the BUC
+  prefix, the `+N` and the erosion words are still missing, so a line
+  reads `a - short sword (wielded)` where NetHack says
+  `a - a +0 short sword (weapon in right hand)`;
+- `ListCommand(what)` + `ui.console.inventory_lines`: the console
+  answers the listing itself from the world (the keys `i`, `)`, `[`,
+  `"`, `=`, `(`, `*`, `$`), prints it and waits for a key -- and
+  `core.step` returns nothing for a `ListCommand`, so a listing costs
+  no turn (C: ECMD_OK).  Two tests pin that (no state change, no rng
+  draw).
+
+Still open in this phase: `prinv` (the message form -- it lands with
+phase C's messages), the menu half of `display_pickinv` (selecting an
+entry), `dotypeinv`'s class prompt (`I`), `doprwep` / `doprarm` /
+`doprring` / `dopramulet` / `doprtool` as *in-use* filters (the class
+glyphs list the whole class here, C 5.0 lists the worn pieces), and
+`count_buc` / `tally_BUCX` / `count_contents`.
 
 1. `xprname`, `prinv`: `<-letter-> name (N in total)` in the exact C
    column layout.
@@ -530,8 +559,11 @@ the identification port), `dounpaid` / `find_unpaid` / `count_unpaid`
       status line shows the burden; two documented "no encumbrance"
       simplifications are closed
 - [ ] `money_cnt` / `findgold` / `doprgold`; the leprechaun and gold
-      detection STUBs are filled
-- [ ] `i` and the per-class lists render from `xprname`
+      detection STUBs are filled (`money_cnt` and `doprgold` are in with
+      phase F; `findgold` and the two STUBs are phase E)
+- [x] `i` and the per-class lists render from `xprname` (phase F's
+      non-menu half; `doname` is the reduced phase-C stand-in, so the
+      article / BUC / `+N` wording is still open)
 - [ ] `invent.select` / `select_many` give every C refusal message a
       test
 - [x] `mypy` clean, `flake8` clean, the whole existing suite green

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from core import display
+from core import display, invent
 from core.commands import (CastCommand, CloseCommand, Command, EatCommand,
-                           MoveCommand, PickupCommand, QuaffCommand,
-                           ReadCommand, StairsCommand, TakeOffCommand,
-                           WaitCommand, WearCommand, ZapCommand)
+                           ListCommand, MoveCommand, PickupCommand,
+                           QuaffCommand, ReadCommand, StairsCommand,
+                           TakeOffCommand, WaitCommand, WearCommand,
+                           ZapCommand)
 from core.hunger import HU_STAT
 from core.items import wielded_of
 from core.objects import DEF_OC_SYMS, ObjClass
@@ -36,6 +37,12 @@ DIRECTIONS = {
     "ne": Direction.NE, "nw": Direction.NW, "se": Direction.SE,
     "sw": Direction.SW,
 }
+
+# The inventory-listing keys (C: the general commands of src/cmd.c):
+# 'i' is ddoinv and the class glyphs are dotypeinv's class choices; '*'
+# is doprinuse (what is worn / wielded) and '$' is doprgold.  None of
+# them is a turn (C: ECMD_OK) -- main.py answers them and redraws.
+LIST_KEYS = 'i)["=(*$'
 
 
 def _ask_direction() -> Direction:
@@ -72,8 +79,10 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     `x<n/s/e/w>` to close the door one step away (C: doclose -- 'c'
     already casts, so close moved to 'x'; a lone `x` is a wait) (the
     letters are the inventory letters shown in the screen's inventory
-    line), `>` to go down the stairs / `<` to climb up (C: the '>' / '<'
-    commands); anything else is a wait.
+    line), `i` for the whole inventory list (+ `)` `[` `"` `=` `(` for
+    one class, `*` for what is worn / wielded, `$` for the wallet --
+    listings, so they cost no turn), `>` to go down the stairs / `<` to
+    climb up (C: the '>' / '<' commands); anything else is a wait.
     """
     if world.occupation is not None:
         # C: while an occupation runs the bottom line shows the
@@ -88,6 +97,11 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     key = raw.lower()
     if key == "g":
         return PickupCommand()
+    # the inventory listings (C: ddoinv / dotypeinv / doprinuse /
+    # doprgold).  `input().lower()` leaves the class glyphs alone, and
+    # capital 'I' (C: inventtype) folds onto 'i' like every other key.
+    if key in LIST_KEYS:
+        return ListCommand(key)
     # the stair commands (C: '>' -> dodown, '<' -> doup); input().lower()
     # leaves both glyphs alone
     if key == ">":
@@ -138,6 +152,23 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
         dx, dy = ARROWS[key]
         return MoveCommand(dx, dy)
     return WaitCommand()
+
+
+def inventory_lines(world: World, what: str) -> List[str]:
+    """The body of one listing command, drawn by the UI from the world.
+
+    C's display functions talk to a window; here the core only formats
+    (core.invent's display group) and the console decides where the
+    text goes.  ``what`` is the key that asked (ui.console.LIST_KEYS):
+    ``i`` the whole pack, a class glyph that class, ``*`` what is in
+    use, ``$`` the wallet.
+    """
+    mon = world.hero
+    if what == "$":
+        return [invent.doprgold(mon)]
+    if what == "*":
+        return invent.display_in_use(mon)
+    return invent.display_inventory(mon, "" if what == "i" else what)
 
 
 def _inventory_line(world: World) -> str:

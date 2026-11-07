@@ -16,11 +16,13 @@ import pytest
 
 from core.invent import (CONTAINED_SYM, GOLD_SYM, NOINVSYM, addinv,
                          assigninvlet, carry_obj_effects,
-                         consume_obj_charge, delobj, freeinv,
-                         invletter_value, let_to_name, obj_to_let,
-                         reorder_invent, useup, useupall)
+                         consume_obj_charge, currency, delobj,
+                         display_in_use, display_inventory, doname,
+                         doprgold, freeinv, invletter_value, let_to_name,
+                         money_cnt, obj_to_let, reorder_invent, useup,
+                         useupall, xprname)
 from core.mkobj import add_to_container, place_object, weight
-from core.objects import MAXOCLASSES, ObjClass
+from core.objects import MAXOCLASSES, ObjClass, W_ARM, W_RINGL
 from core.pickup import pickup
 from core.types import Item, ObjectType
 from conftest import SeqRng, assert_item_locations, make_world
@@ -379,7 +381,6 @@ def test_delobj_takes_the_contents_with_it():
 def test_delobj_clears_the_worn_slot():
     """The single clearing point: a destroyed worn item cannot leave a
     slot bit the which_armor scan would answer for."""
-    from core.objects import W_ARM
     from core.worn import which_armor
     w = make_world()
     mail = addinv(w, "player", thing(id="t_0", name="chain mail"))
@@ -455,3 +456,162 @@ def test_pickup_and_useup_keep_the_invariant():
         useup(w, "player", it)
         assert_item_locations(w)
     assert not hero.inventory
+
+
+# ------------------------------------------------------------
+# The display group (C: display_inventory / xprname / doname)
+# ------------------------------------------------------------
+#
+# A listing is a RENDER: the pack order, the letters and the worn masks
+# are read, never written (PLAN-INVENT.md phase F / §6 "rendering
+# allocates no state").
+
+def test_doname_counts_a_stack():
+    """C: doname -- the count comes from `quan` and the name is
+    pluralised (C: makeplural): "3 arrows", never "3 arrow"."""
+    w = make_world()
+    arrows = addinv(w, "player", thing(id="t_0", name="arrow", quan=3,
+                                       oclass=ObjClass.WEAPON.value))
+    assert doname(w.hero, arrows) == "3 arrows"
+    # prinv's partial-stack form: the count passed in, not the stored one
+    assert doname(w.hero, arrows, quan=1) == "arrow"
+
+
+def test_doname_marks_the_gear_in_use():
+    """C: xname's tail -- (being worn) / (on left hand) / (wielded).
+    The wielded weapon is still the bare `Monster.wielded` id
+    (PLAN-DROP.md phase C moves it to W_WEP), so both are read."""
+    w = make_world()
+    mail = addinv(w, "player", thing(id="t_0", name="chain mail",
+                                     oclass=ObjClass.ARMOR.value))
+    mail.owornmask = W_ARM
+    ring = addinv(w, "player", thing(id="t_1", name="ring of protection",
+                                     oclass=ObjClass.RING.value))
+    ring.owornmask = W_RINGL
+    sword = addinv(w, "player", thing(id="t_2", name="short sword",
+                                      otype=ObjectType.WEAPON,
+                                      oclass=ObjClass.WEAPON.value))
+    w.hero.wielded = sword.id
+    cloak = addinv(w, "player", thing(id="t_3", name="leather cloak",
+                                      oclass=ObjClass.ARMOR.value))
+    assert doname(w.hero, mail) == "chain mail (being worn)"
+    assert doname(w.hero, ring) == "ring of protection (on left hand)"
+    assert doname(w.hero, sword) == "short sword (wielded)"
+    assert doname(w.hero, cloak) == "leather cloak"
+
+
+def test_xprname_is_the_c_letter_line():
+    """C: xprname (src/invent.c 2936-2995): `<let> - <name>` plus the
+    period `prinv` asks for."""
+    w = make_world()
+    sword = addinv(w, "player", thing(id="t_0", name="short sword"))
+    assert xprname(w.hero, sword, "a") == "a - short sword"
+    assert xprname(w.hero, sword, "a", dot=True) == "a - short sword."
+    assert xprname(w.hero, sword, "a", txt="bare hands") == "a - bare hands"
+
+
+def test_display_inventory_lists_the_demo_pack():
+    """The `i` list: the class headings of let_to_name (C: sortpack is
+    on by default), one line per item, letters ascending, the worn /
+    wielded suffixes on the gear in use."""
+    import random
+    from core.worldgen import new_world
+    w = new_world(random.Random(42))
+    assert display_inventory(w.hero) == [
+        "Weapons",
+        "a - short sword (wielded)",
+        "Armor",
+        "b - chain mail (being worn)",
+        "c - leather cloak",
+        "d - leather gloves",
+        "Rings",
+        "e - ring of protection (+1)",
+    ]
+
+
+def test_display_inventory_lists_one_class():
+    """`lets` is a string of CLASS GLYPHS (C: display_inventory's "list
+    all objects with object classes that match the order in lets"): the
+    `[` list is the carried armor, the `)` list the weapons, and a class
+    the hero carries nothing of answers with C's dotypeinv line."""
+    import random
+    from core.worldgen import new_world
+    w = new_world(random.Random(42))
+    assert display_inventory(w.hero, "[") == [
+        "Armor",
+        "b - chain mail (being worn)",
+        "c - leather cloak",
+        "d - leather gloves",
+    ]
+    assert display_inventory(w.hero, ")") == [
+        "Weapons",
+        "a - short sword (wielded)",
+    ]
+    assert display_inventory(w.hero, "(") == ["You have no such objects."]
+
+
+def test_display_inventory_of_an_empty_pack():
+    """C: display_pickinv's "Not carrying anything." -- not the class
+    message, because `lets` was empty."""
+    assert display_inventory(make_world().hero) == ["Not carrying anything."]
+
+
+def test_display_in_use_is_only_the_worn_and_wielded():
+    """C: doprinuse (the `*` command) -- the sword is wielded and the
+    mail is worn; the cloak, the gloves and the ring are only carried."""
+    import random
+    from core.worldgen import new_world
+    w = new_world(random.Random(42))
+    assert display_in_use(w.hero) == [
+        "Weapons",
+        "a - short sword (wielded)",
+        "Armor",
+        "b - chain mail (being worn)",
+    ]
+    assert display_in_use(make_world().hero) == [
+        "You are not wearing or wielding anything."]
+
+
+def test_a_gold_pile_shows_its_count_under_coins():
+    """Gold is a COIN-class stack (one Item, `quan` = the amount), so it
+    heads the list -- C: def_inv_order puts coins first -- and its count
+    is pluralised."""
+    w = make_world()
+    addinv(w, "player", thing(id="t_0", otype=ObjectType.COIN,
+                              name="gold piece", quan=5,
+                              oclass=ObjClass.COIN.value))
+    assert money_cnt(w.hero) == 5
+    assert display_inventory(w.hero) == ["Coins", "$ - 5 gold pieces"]
+
+
+def test_the_wallet_line():
+    """C: doprgold -- "Your wallet contains N zorkmids." / "Your wallet
+    is empty." (the verbose branch; the shop report is not ported)."""
+    w = make_world()
+    assert doprgold(w.hero) == "Your wallet is empty."
+    addinv(w, "player", thing(id="t_0", otype=ObjectType.COIN,
+                              name="gold piece", quan=120,
+                              oclass=ObjClass.COIN.value))
+    assert doprgold(w.hero) == "Your wallet contains 120 zorkmids."
+    assert currency(1) == "zorkmid"
+    assert currency(120) == "zorkmids"
+
+
+def test_rendering_does_not_touch_the_pack():
+    """The DoD requirement that a listing allocates no state: the same
+    items in the same (invlet) order with the same counts and masks
+    afterwards -- sorting for the display is done on a copy."""
+    import random
+    from core.worldgen import new_world
+    w = new_world(random.Random(42))
+
+    def snapshot():
+        return [(it.id, it.invlet, it.quan, it.owornmask, it.owt)
+                for it in w.hero.inventory]
+
+    before = snapshot()
+    display_inventory(w.hero)
+    display_inventory(w.hero, "[")
+    display_in_use(w.hero)
+    doprgold(w.hero)
+    assert snapshot() == before

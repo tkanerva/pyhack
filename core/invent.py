@@ -24,7 +24,14 @@ is PLAN-INVENT.md §1):
 - the letter group: ``assigninvlet`` (the a..z A..Z '$' '#'
   allocation, the C gl.lastinvnr walk on ``World.lastinvnr``),
   ``invletter_value``, ``reorder_invent``, ``obj_to_let``,
-  ``let_to_name`` (the C names[] class table).
+  ``let_to_name`` (the C names[] class table);
+- the display group (the non-menu half, phase F): ``doname`` /
+  ``worn_suffix`` (the reduced objnam.c naming -- phase C replaces
+  them), ``xprname``, ``display_inventory`` (the `i` list and its
+  per-class subsets), ``is_inuse`` / ``display_in_use`` (the `*`
+  list), ``money_cnt`` / ``currency`` / ``doprgold`` (the `$` line).
+  All of them are pure readings of the pack: a listing is a RENDER and
+  costs no turn (C: ECMD_OK).
 
 Callers (C: the same functions, the same order).  ``pickup`` ->
 addinv (pickobj), ``worldgen._starting_kit`` -> addinv (u_init's
@@ -48,9 +55,11 @@ shop, PLAN-SPECIAL-ROOMS).
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
-from .objects import DEF_OC_SYMS, MAXOCLASSES, ObjClass
+from .hacklib_inflection import makeplural
+from .objects import (DEF_OC_SYMS, MAXOCLASSES, ObjClass, W_ACCESSORY,
+                      W_AMUL, W_ARMOR, W_RINGL, W_RINGR, W_WEAPONS)
 from .types import Item, Monster, World
 
 # C: hack.h -- the invlet space (the defsym.h GOLD_SYM lives in
@@ -335,9 +344,210 @@ def carry_obj_effects(item: Item) -> None:
     it (addinv)."""
 
 
+# ------------------------------------------------------------
+# The display group (C: the non-menu half of src/invent.c's display
+# functions -- PLAN-INVENT.md phase F)
+# ------------------------------------------------------------
+#
+# A listing is a RENDER.  Every function below reads the pack and
+# returns text; none touches the world, so the console can answer the
+# `i` family of commands and the turn is not spent (C: ddoinv & co.
+# return ECMD_OK, and core.step has a matching early return).  The menu
+# half of C's display_pickinv (selecting an entry to act on it, the
+# persistent-inventory window) is not here: the console has no window
+# and there is nothing to select yet (phases F/G).
+#
+# `doname` is the reduced objnam.c slice.  The naming module proper
+# (phase C) brings the article ("a sword" / "an apple"), the BUC
+# prefix, the +N and the erosion words; until it lands, `Item.name` is
+# the whole noun phrase (the hand-written demo kit) and every line
+# below reads it.  `doname` is the one function phase C replaces.
+
+# C: options.c def_inv_order -- flags.inv_order, the class order the
+# sortpack display groups by (coins, then the pack's likely contents).
+# options.c is unported, so the default (sortpack On, include/optlist.h)
+# is fixed here.
+INV_ORDER = (
+    int(ObjClass.COIN), int(ObjClass.AMULET), int(ObjClass.WEAPON),
+    int(ObjClass.ARMOR), int(ObjClass.FOOD), int(ObjClass.SCROLL),
+    int(ObjClass.SPBOOK), int(ObjClass.POTION), int(ObjClass.RING),
+    int(ObjClass.WAND), int(ObjClass.TOOL), int(ObjClass.GEM),
+    int(ObjClass.ROCK), int(ObjClass.BALL), int(ObjClass.CHAIN),
+)
+
+
+def currency(amount: int) -> str:
+    """C: currency (src/objnam.c 4204-4206): the money noun.  It
+    belongs to the objnam slice (phase C); it lives here while
+    ``doprgold`` is its only caller."""
+    return "zorkmid" if amount == 1 else "zorkmids"
+
+
+def worn_suffix(mon: Monster, item: Item) -> str:
+    """The tail C's xname appends to an item that is in use: the
+    ``(being worn)`` / ``(on left hand)`` / ``(wielded)`` wording of
+    src/objnam.c (the reduced slice; phase C owns the full set).
+
+    The hero's wielded weapon is still the bare ``Monster.wielded`` id
+    rather than the ``W_WEP`` bit (PLAN-DROP.md phase C moves it), so
+    both are read: an item is wielded when either says so.
+    """
+    mask = item.owornmask
+    if mask & W_ARMOR:
+        return " (being worn)"
+    if mask & W_AMUL:
+        return " (around neck)"
+    if mask & W_RINGL:
+        return " (on left hand)"
+    if mask & W_RINGR:
+        return " (on right hand)"
+    if (mask & W_WEAPONS) or mon.wielded == item.id:
+        # C: "(weapon in right hand)" / "(alternate weapon; not wielded)";
+        # the handedness-free "(wielded)" is the plan's simplification
+        # (there is no left/right hand in the subset)
+        return " (wielded)"
+    return ""
+
+
+def doname(mon: Monster, item: Item, quan: int = 0) -> str:
+    """C: doname (src/objnam.c) -- the item's name as one line shows
+    it: the stack count when there is one (C: "3 arrows"), then the
+    worn / wielded suffix.
+
+    ``quan`` overrides the item's own count for a partial stack, the
+    way C's ``prinv`` hands a count to ``xprname`` (which temporarily
+    writes ``obj->quan``); 0 means "use ``Item.quan``".
+
+    The rest of C's doname -- the article, the BUC prefix ("a cursed"),
+    the enchantment ("+1"), the erosion words -- is PLAN-INVENT.md
+    phase C's ``core/objnam.py``.  Nothing here draws from the rng or
+    writes to the item: ``xname`` must stay a pure function of the
+    item plus the object tables (PLAN-INVENT.md §6).
+    """
+    count = quan if quan else item.quan
+    name = item.name
+    if count > 1:
+        name = f"{count} {makeplural(name)}"
+    return name + worn_suffix(mon, item)
+
+
+def xprname(mon: Monster, item: Item, let: str,
+            txt: Optional[str] = None, dot: bool = False,
+            quan: int = 0) -> str:
+    """C: xprname (src/invent.c 2936-2995) -- the ``<let> - <text>.``
+    line every inventory listing (and every "you pick up" message) is
+    built from.  ``txt`` replaces the item's own name; ``dot`` appends
+    C's period.
+
+    C's ``cost`` branch (the unpaid-item column of the Iu/Ix listings)
+    needs the shop; it is dropped with PLAN-SPECIAL-ROOMS, and the
+    ``CONTAINED_SYM`` / ``HANDS_SYM`` pseudo-letters come with the
+    container and wield work.
+    """
+    text = doname(mon, item, quan) if txt is None else txt
+    return let + " - " + text + ("." if dot else "")
+
+
+def is_inuse(mon: Monster, item: Item) -> bool:
+    """C: is_inuse (src/invent.c 2166-2170): a carried item the hero
+    is wearing or wielding.  C also counts an active lamp / leash
+    (``tool_being_used``), which needs the tool port."""
+    return (bool(item.owornmask & (W_ARMOR | W_ACCESSORY | W_WEAPONS))
+            or mon.wielded == item.id)
+
+
+def _class_rank(oclass: int) -> int:
+    """The sortpack sort key of a class (C: sortloot's ``orderclass``,
+    the position in ``flags.inv_order``); a class outside the order
+    sorts after the listed ones, in class-number order (C's
+    ``k = 1 + strlen(classorder)`` fallback)."""
+    if oclass in INV_ORDER:
+        return INV_ORDER.index(oclass)
+    return len(INV_ORDER) + oclass
+
+
+def _class_sym(item: Item) -> str:
+    """C: def_oc_syms[(int) otmp->oclass].sym -- the class glyph the
+    `lets` filter is written in."""
+    if 0 <= item.oclass < len(DEF_OC_SYMS):
+        return DEF_OC_SYMS[item.oclass].sym
+    return ""
+
+
+def _display_lines(mon: Monster, items: List[Item]) -> List[str]:
+    """The body of the display: group the items by class in the
+    sortpack order, print C's ``let_to_name`` heading for each class,
+    then one ``xprname`` line per item, letters ascending.
+
+    A copy is sorted, never ``Monster.inventory`` itself: the pack is
+    kept in invlet order by ``addinv`` and the display must not
+    re-order it (C: sortloot returns a loot array, and unsortloot puts
+    the chain back).
+    """
+    out: List[str] = []
+    for oclass in sorted({it.oclass for it in items}, key=_class_rank):
+        out.append(let_to_name(oclass))
+        group = [it for it in items if it.oclass == oclass]
+        for it in sorted(group, key=lambda i: invletter_value(i.invlet)):
+            out.append(xprname(mon, it, obj_to_let(it)))
+    return out
+
+
+def display_inventory(mon: Monster, lets: str = "") -> List[str]:
+    """C: display_inventory (src/invent.c 3473-3499) through the
+    non-menu path of ``display_pickinv`` (3098-3464): the `i` list.
+
+    ``lets`` is a string of CLASS GLYPHS -- C's "list all objects with
+    object classes that match the order in lets" (the ``)` `[` `"` `=`
+    `(` refresh commands): "" (or None in C) lists the whole pack.
+
+    The two empty answers are C's own: ``Not carrying anything.`` from
+    ``display_pickinv`` and ``You have no such objects.`` from
+    ``dotypeinv``.
+    """
+    items = [it for it in mon.inventory
+             if not lets or _class_sym(it) in lets]
+    if not items:
+        return ["You have no such objects." if lets
+                else "Not carrying anything."]
+    return _display_lines(mon, items)
+
+
+def display_in_use(mon: Monster) -> List[str]:
+    """C: doprinuse (src/invent.c 4789-4809) -- the `*` command: the
+    items the hero is wearing or wielding, in the same listing shape.
+    """
+    items = [it for it in mon.inventory if is_inuse(mon, it)]
+    if not items:
+        return ["You are not wearing or wielding anything."]
+    return _display_lines(mon, items)
+
+
+def money_cnt(mon: Monster) -> int:
+    """C: money_cnt (src/invent.c 1545-1554): the gold in the pack.
+    A gold pile is ONE item whose ``quan`` is the amount, so this is a
+    sum over the coin stacks (C: plus carried containers --
+    ``hidden_gold``, phase E)."""
+    return sum(it.quan for it in mon.inventory
+               if it.oclass == int(ObjClass.COIN))
+
+
+def doprgold(mon: Monster) -> str:
+    """C: doprgold (src/invent.c 4553-4598), the verbose branch: the
+    `$` command's wallet line.  The shop report and ``hidden_gold``
+    (gold stashed in a carried container) are PLAN-SPECIAL-ROOMS /
+    phase E."""
+    money = money_cnt(mon)
+    if not money:
+        return "Your wallet is empty."
+    return f"Your wallet contains {money} {currency(money)}."
+
+
 __all__ = [
-    "CONTAINED_SYM", "GOLD_SYM", "HANDS_SYM", "NOINVSYM",
+    "CONTAINED_SYM", "GOLD_SYM", "HANDS_SYM", "INV_ORDER", "NOINVSYM",
     "addinv", "assigninvlet", "carry_obj_effects", "consume_obj_charge",
-    "delobj", "freeinv", "invlet_basic", "invletter_value",
-    "let_to_name", "obj_to_let", "reorder_invent", "useup", "useupall",
+    "currency", "delobj", "display_in_use", "display_inventory",
+    "doname", "doprgold", "freeinv", "invlet_basic", "invletter_value",
+    "is_inuse", "let_to_name", "money_cnt", "obj_to_let", "reorder_invent",
+    "useup", "useupall", "worn_suffix", "xprname",
 ]
