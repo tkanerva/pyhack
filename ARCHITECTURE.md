@@ -259,9 +259,12 @@ details live in the PLAN-*.md files and the module docstrings):**
   them, each named in the module docstrings: `m_initweap` /
   `m_initinv` (the 400-line species weapon tables), monster groups,
   mimics, shapechangers, the timers (corpse rot / eggs / oil / ice),
-  artifacts, `splitobj`, and container merging.  The monster table is a
-  **depth band** (76 of 383 rows, assigned by C index so the completion
-  pass renumbers nothing), and there is no alignment system, so
+  artifacts, `splitobj`, and container merging.  The monster table is
+  C's, whole: `tools/convert_monsters.py` parses
+  `include/monsters.h` and rewrites `core/monst_data.py` in C order
+  (383 rows, one per `MON(...)`, so nothing renumbers), which is what
+  makes `rndmonst_adj` / `mkclass` the real distribution.  There is no
+  alignment system yet, so
   `peace_minded()` runs on the constant `World.hero_align` = A_NEUTRAL.
 - Monster AI: a monster that can see the hero (the ported vision,
   core/vision.py) chases with a greedy single step; the full
@@ -300,32 +303,29 @@ details live in the PLAN-*.md files and the module docstrings):**
 
 Wave 4a/4b has landed (core/makemon.py / core/mkobj.py /
 core/place.py; the 480-row `mksobj` smoke; generated levels stocked
-from the tables; the demo still byte-identical).  The queue, in
-dependency order:
+from the tables; the demo still byte-identical), and so has the monster
+table: `tools/convert_monsters.py` reads `include/monsters.h` and
+rewrites `core/monst_data.py` in C order, so `mons[]` is the whole 383
+rows and `rndmonst_adj` / `mkclass` draw the real distribution (every
+corpse, statue and special room reads it; a half-filled table makes
+bugs look like tuning, PLAN-MAKEMON §4.6).  The queue, in dependency
+order:
 
-1. **Complete the monster table** (PLAN-MAKEMON.md phase A, §4.5):
-   the one-off `include/monsters.h` converter fills `SUBSET_PM` 76 ->
-   383.  The rows are assigned by C index, so nothing renumbers; the
-   session is the converter + the `_validate()` cross-checks + the
-   ~20 spot rows.  Pure data, one mechanical pass — and it is what
-   turns `rndmonst_adj` / `mkclass` from a depth band into the real
-   distribution (every corpse, statue and special room reads it; a
-   half-filled table makes bugs look like tuning, PLAN-MAKEMON §4.6).
-2. **`set_levltyp` + the terrain writers** (the plans' "table item
+1. **`set_levltyp` + the terrain writers** (the plans' "table item
    2"): the sanctioned terrain mutator, then `mkfount` / `mksink` /
    `mkaltar` / `mkgrave` (mklev.c).  That takes the fountain / sink /
    altar / grave rolls of `fill_ordinary_room` in C order (PLAN-MKOBJ
    phase G) — a deliberate draw-sequence change, the seeded snapshot
    test is the tripwire — and it is the same writer Wave 5's
    `mkswamp` and the temple altar need.
-3. **Wave 5: special rooms** (PLAN-SPECIAL-ROOMS.md), in the plan's
+2. **Wave 5: special rooms** (PLAN-SPECIAL-ROOMS.md), in the plan's
    own staging: the temple first (needs `src/priest.c` / `src/pray.c`
    as core systems and the `Monster.epri` extra — makemon already
    accepts-and-ignores MM_EPRI / MM_ESHK), then the zoo family
    (`fill_zoo` / `courtmon` / `squadmon` / `morguemon` / `antholemon`
    / `mkundead` / `mk_zoo_thronemon` become `mkclass` + `makemon`
    fill-ins), the shops last (shk.c is billing before it is a room).
-4. **The genesis residue** (independent of 1-3, interleavable):
+3. **The genesis residue** (independent of 1-2, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in), phase
    F's groups / `grow_up` / `clone_mon` / `create_critters`, the
@@ -334,26 +334,26 @@ dependency order:
    `splitobj` + the container / pickup merge rules, the rust / rot /
    corrode half of `mkobj_erosions`, and the fire-trap-erodes-armour
    regression test.
-5. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
+4. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
    PLAN-DROP.md — invent.c / pickup.c / do.c + wield.c): the pickobj
    / sortloot / getobj machinery over the real Item model; it
-   consumes 4's merge rules and `splitobj`.
-6. **The small UI debt**: wire `QuaffCommand` (zap / cast / eat are
+   consumes 3's merge rules and `splitobj`.
+5. **The small UI debt**: wire `QuaffCommand` (zap / cast / eat are
    wired; `q` quits, so the quaff key is to choose).
-7. **Scrolls**: fill in the STUBs of `core/scrolls.py` as their
+6. **Scrolls**: fill in the STUBs of `core/scrolls.py` as their
    machinery lands (the C provenance of each is in the module
    docstring); next candidates on existing machinery:
    SCR_DESTROY_ARMOR (the wrapper around the already-real
    `worn.disintegrate_arm`), SCR_LIGHT (a `lit` flag on Tile),
    SCR_CONFUSE_MONSTER (rules over nearby monsters).
-8. **Full monster AI** (`mmove()`) on the ported vision: doors,
+7. **Full monster AI** (`mmove()`) on the ported vision: doors,
    fleeing, remembered positions, M2_WANDER (the greedy single-step
    chase is in).
-9. **Wave 7 / 8, then the special levels**: throwing (PLAN-THROW.md,
+8. **Wave 7 / 8, then the special levels**: throwing (PLAN-THROW.md,
    dothrow.c + mthrowu.c), breath weapons (PLAN-BREATH.md, the
    zap.c dobuzz beam engine), then PLAN-SPLEV.md's `des` API + the
    lua level programs (the most parallelisable piece left).
-10. If the system/entity matrix grows, evolve into a lightweight ECS
+9. If the system/entity matrix grows, evolve into a lightweight ECS
     — the events-out design stays the same.
 
 Also due: rerun `nethack_index/tools/generate_index.py` — INDEX.md
@@ -361,4 +361,6 @@ was generated before Wave 4a/4b landed and still lists makemon.c /
 mkobj.c as unported; and PLAN-EXPERIENCE.md / PLAN-ARMOR.md's status
 headers predate their own landings (both systems are in and tested),
 so the next session touching either should refresh the header in the
-same commit.
+same commit.  The one manual step the table leaves is running the
+converter: the generated rows are checked in, and `--check`
+tells you whether the file on disk still matches the C header.

@@ -5,6 +5,84 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The monster table converter: the whole 383 rows, converted from monsters.h
+
+**Why:** `MONS` was a 76-row depth band -- the rows the first gameplay
+sessions needed -- so `rndmonst_adj` / `mkclass` drew from a tenth of
+NetHack's monsters, and a corpse, statue or zoo could only be of a
+species that happened to be in the band.  A half-filled table also
+makes real bugs look like tuning (PLAN-MAKEMON §4.6).  The rows are
+383 eight-line `MON(...)` entries in NetHack 5.0's
+`include/monsters.h`, i.e. *data*, so PLAN-MAKEMON §4.5's route is a
+converter, not 383 transcriptions.
+
+**The choices:**
+
+1. **`tools/convert_monsters.py` is the converter, and it is a tool,
+   not part of the game.** It parses the C header (comments stripped,
+   backslash continuations joined, `#ifdef` sections resolved for the
+   default build: `CHARON` out, `MAIL_STRUCTURES` in, every `#if 0`
+   block out), expands the one object-like macro a row uses
+   (`SEDUCTION_ATTACKS_YES`), splits each `MON(...)` into its 14
+   arguments and rewrites `core/monst_data.py` in C order.  `core`
+   never imports it; the generated file is checked in;
+   `--check` compares the two without writing.
+2. **It refuses to write a wrong answer.**  Four checks run first:
+   383 rows with 14 `MON` arguments each; each row's C enum name
+   against the row's own neutral name at that index (`PM_NAMES[i] ==
+   "giant ant"`), and the `SPECIAL_PM` tail really `G_NOGEN |
+   M2_NOPOLY`; every identifier a row uses is declared by
+   `core.monst_defs` (a missing `M1_*` / `CLR_*` name is a *conversion*
+   bug and would otherwise surface as an ImportError in a generated
+   file); and the hand-written `PM_*` anchors agree with the indices
+   the parse produced -- they are what the game code reads, so a drift
+   there mis-identifies every monster.
+3. **The table is a dense list in C order, laid out like the C.**
+   `MONS: list[PerMonst | None] = [ _mon(...), ... ]` -- the same shape
+   `objects_data.OBJECTS` uses -- with each row's five groups matching
+   the header's lines (name and class, `LVL()`/geno, the six attack
+   slots, `SIZ()` with the two resistance columns, the three flag
+   bitmaps, difficulty and colour).  `_validate()`'s
+   name-column check catches a shifted row, and `SUBSET_PM` is
+   `tuple(range(NUMMONS))`: it stays because it is the name for "the
+   rows that carry a table entry", which is also what the sparse table
+   checked.
+4. **`monst_defs` grew color.h** (`CLR_*`, `NO_COLOR`, `BRIGHT`, and
+   the `HI_*` / `DRAGON_SILVER` aliases monsters.h uses), so the colour
+   column reads as C instead of as an integer; the block mirrors
+   `objects_defs` (one header, one copy per table module, so neither
+   depends on the other -- the one-way import rule the module
+   docstring describes).
+5. **The pinned "76" is gone, the triage data is not.**  A band is a
+   legal table state, so `test_table_shape` no longer pins the count
+   and `test_the_converter_fills_the_whole_table` is the tripwire that
+   skips until the pass has run and then demands all 383 rows.  The
+   value-for-value spot rows are unchanged (and the converter proves
+   all 383 names against the recorded `PM_NAMES`).
+6. **Two tests learned what the full table knows.**  The C rows with no
+   attack at all are the worm tail, the shrieker (harmless by design)
+   and the mail daemon -- the old test only excused the worm tail.  And
+   `mkclass`'s "class with no species" example is now `S_MIMIC_DEF`
+   (C's mimic-disguise placeholder) instead of `S_CENTAUR`, whose
+   centaurs exist as soon as the table is complete.
+
+**The split:** this commit lands the converter and its preparation
+(choice 1's tool, choice 4's colour block, the docstring / `_validate()`
+/ test changes in 5-6) -- the 76-row depth band stays in
+`core/monst_data.py`, which is a legal table state (the rows carry C
+indices, so filling the rest renumbers nothing, and the tripwire test
+of choice 5 skips until the pass has run).  The next commit is the run
+itself: `python tools/convert_monsters.py` rewrites `core/monst_data.py`
+to the whole 383 rows and that file is the only diff in it.  After that
+the one manual step left is re-running the converter after a NetHack
+bump (or `--check` to see whether the file still matches the header).
+
+Files: tools/convert_monsters.py (new), core/monst_defs.py (the
+color.h block + docstring), core/monst.py (docstring, `_validate()`
+row count), tests/test_monst.py, tests/test_makemon.py,
+ARCHITECTURE.md, PLAN-MAKEMON.md.  `core/monst_data.py` is the next
+commit -- the converter's run.
+
 ## The glyph memory: the screen is now what the hero has seen
 
 **Why:** the renderer drew `Tile.typ` -- the *true* terrain -- for

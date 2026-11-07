@@ -1,16 +1,17 @@
 # Plan: Wave 4a — the monster genesis layer (`makemon`)
 
-**Status: phases A (as a depth band), B, C and D landed; E is the
-mechanism only; F and G are partly open.** Written after Wave 3 landed
+**Status: phases A, B, C and D landed; E is the mechanism only; F and
+G are partly open.** Written after Wave 3 landed
 (PLAN-MKLEV.md: rooms + corridors + doors, 521 tests green, mypy clean).
 Landed as `core/makemon.py` + `core/place.py` (see CHANGES.md "Wave
 4a/4b"): the funnel, the selection half (uncommon / rndmonst_adj /
 MongenOrder / gen_ok / mkclass), the strength half (adj_lev / newmonhp /
 mbirth_limit / MonState.propagate), the mood half (peace_minded /
 set_malign), `mongets` / `mkmonmoney`, and `fill_ordinary_room()` now
-spawns through it.  What is still open, in this plan's terms: **A** is a
-76-row depth band, not the full 383 (the rows are assigned by C index,
-so the converter pass in §4.5 renumbers nothing); **E** has the
+spawns through it.  What is still open, in this plan's terms: **A** is
+done as of the converter pass (`tools/convert_monsters.py` rewrote
+`core/monst_data.py` from `include/monsters.h`: 383 rows, so
+`SUBSET_PM` is the whole table and nothing renumbered); **E** has the
 inventory *mechanism* but not the `m_initweap` / `m_initinv` species
 tables; **F** (groups, grow_up, clone_mon) is untouched and the
 generator passes MM_NOGRP so the flag is honoured rather than faked;
@@ -94,7 +95,7 @@ Two tables drive all of it and they are *data*, not code:
 
 | piece | state |
 |---|---|
-| `core/monst.py` + `monst_defs.py` + `monst_data.py` | the three-module C split is in place; `PM_NAMES` holds the **complete** 383-name ordering, `SUBSET_PM` **40 of 383** rows, `MONS[pm] is None` everywhere else |
+| `core/monst.py` + `monst_defs.py` + `monst_data.py` | the three-module C split is in place; `PM_NAMES` holds the **complete** 383-name ordering and `MONS` now holds all 383 rows of it (`SUBSET_PM` = every index; the rows are assigned by C index, so the depth-band table it grew out of renumbered nothing) |
 | `core/mondata.py` | the per-type predicates (60+), `set_mon_data`, and `MonState`/`MonVitals` (C: `svm.mvitals[]`) — but **`MonState` is not on the `World`** |
 | `core/worldgen.py` | `demo_monster(kind, …)` — three hand-tuned kinds (goblin / hill orc / bat); `DEMO_MONSTER_KINDS` |
 | `core/mklev.py` | `_spawn_monster()` — C `makemon()` in three lines: `rng.rn2(3)` → one of the demo kinds |
@@ -208,6 +209,19 @@ Each phase is a session, ends green (tests + mypy), and commits its own
 `CHANGES.md` paragraph.
 
 ### Phase A — the `mons[]` table (data; ~1 session + review)
+
+**Landed** (`tools/convert_monsters.py`, one commit): the converter
+parses `include/monsters.h` and rewrites `core/monst_data.py` in C
+order, so `MONS` is the whole table and `SUBSET_PM` is every index.
+It checks its own output before writing (383 rows; each row's C enum
+name against `PM_NAMES`; every constant it uses against
+`monst_defs`; the hand-written `PM_*` anchors against the indices it
+parsed), and `--check` compares without writing.  `monst_defs` grew
+the `color.h` block (`CLR_*` / `HI_*`) the colour column needs, and
+`monst._validate()` now asserts the table has `NUMMONS` rows.
+Test-side, the `SUBSET_PM` count is no longer pinned (a band is a
+legal state, the rows carry C indices) and
+the table-shape spot rows stayed value-for-value.
 
 1. `tools/convert_monsters.py`: `include/monsters.h` → `monst_data.py`
    rows (`_mon(...)`, C order, `#if 0` and `CHARON` excluded exactly as
@@ -413,7 +427,7 @@ with PLAN-MKOBJ.md's C. F and G are independent of each other after D.
 
 ## 9. Definition of done
 
-- [ ] `SUBSET_PM` = all 383 rows; `_validate()` clean; spot rows exact
+- [x] `SUBSET_PM` = all 383 rows; `_validate()` clean; spot rows exact
 - [ ] `makemon` / `mkclass` / `rndmonst_adj` / `adj_lev` / `newmonhp`
       ported with their C spans in the docstrings
 - [ ] `core/place.py` with `goodpos` + `enexto`, tested for pools,

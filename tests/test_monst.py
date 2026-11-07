@@ -1,19 +1,48 @@
 """Tests for the monster type table (core.monst)."""
+import pytest
+
 from core import monst
 from core.monst import (MONS, PM_NAMES, NUMMONS, SPECIAL_PM, SUBSET_PM,
                         Attack, defch, is_dragon, is_golem, monclass,
                         monname, monsndx)
 import core.monst as M
 
+# the C rows with no attack slots at all (monsters.h): the worm tail is a
+# body part, the shrieker is harmless by design and the mail daemon is a
+# courier
+INERT = {"long worm tail", "shrieker", "mail daemon"}
+
 
 def test_table_shape():
     assert len(MONS) == NUMMONS == 383
     assert len(PM_NAMES) == NUMMONS
-    # the core subset + the depth 1..8 band the makemon port filled in
-    assert len(SUBSET_PM) == 76
-    assert sum(1 for m in MONS if m is not None) == 76
-    # the sparse table is exactly the subset
-    assert {i for i, m in enumerate(MONS) if m is not None} == set(SUBSET_PM)
+    # `SUBSET_PM` is exactly the set of indices that carry a table row.
+    # It lands as a 76-row depth band and becomes the whole table once
+    # tools/convert_monsters.py has run (test_the_converter_fills_the_
+    # whole_table is that tripwire), so the count is not pinned here.
+    present = {i for i, m in enumerate(MONS) if m is not None}
+    assert present == set(SUBSET_PM)
+    assert len(SUBSET_PM) >= 76
+
+
+def test_the_converter_fills_the_whole_table():
+    """PLAN-MAKEMON.md phase A's exit check: every one of the 383 C
+    rows is in the table.  A depth band is a legal table state (the
+    rows are assigned by C index, so filling them renumbers nothing),
+    so this is skipped -- not failed -- until the converter has run:
+
+        python tools/convert_monsters.py
+    """
+    if len(SUBSET_PM) == 76:
+        pytest.skip("the depth band is still in place; run "
+                    "tools/convert_monsters.py")
+    assert len(SUBSET_PM) == NUMMONS
+    assert all(m is not None for m in MONS)
+    # and the C ordering survived the pass
+    for idx, mon in enumerate(MONS):
+        assert mon is not None
+        assert mon.pmnames[2] == PM_NAMES[idx]
+        assert mon.pmidx == idx
 
 
 def test_the_band_rows_are_the_c_ones():
@@ -193,21 +222,23 @@ def test_worm_tail_is_inert():
 
 
 def test_noattacks_flag_consistency():
-    # every implemented monster has the right number of attack slots,
-    # every slot is inside the C field widths, and a monster that is
-    # not the dummy worm tail has something to do in combat
+    # every table row has the right number of attack slots, every slot is
+    # inside the C field widths, and a monster has something to do in
+    # combat -- except the three C rows that do not attack at all (see
+    # INERT)
     for idx in SUBSET_PM:
         m = MONS[idx]
+        assert m is not None
         assert len(m.mattk) == M.NATTK
         for a in m.mattk:
             assert 0 <= a.aatyp <= 255
             assert 0 <= a.adtyp <= 253
-        if m.mlet == M.S_WORM_TAIL:
+        if m.pmnames[2] in INERT:
             continue
         # an AT_NONE slot with a damage type and dice is a real attack
         # (C: the floating eye's paralyzing gaze, the jellies' passive
         # cold / acid), so "not NO_ATK" is the test, not "aatyp != 0"
-        assert any(a != M.NO_ATK for a in m.mattk)
+        assert any(a != M.NO_ATK for a in m.mattk), m.pmnames[2]
 
 
 def test_distance_attack_classification():

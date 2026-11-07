@@ -10,8 +10,9 @@ Everything include/monsters.h and the headers it pulls in *declare*:
   names (S_ANT, M1_FLY, MR_POISON, ...) are kept as module-level
   aliases of the enum members so the transcribed code reads like the
   C it came from; plain ints are kept only where C has no enum either
-  (WT_* body weights, the A_* alignment bounds, G_FREQ which is a
-  mask, and the table indices/counts);
+  (the CLR_* / HI_* colours of color.h, the WT_* body weights, the A_*
+  alignment bounds, G_FREQ which is a mask, and the table
+  indices/counts);
 - `Attack` / `PerMonst` -- the struct attack / struct permonst rows;
 - the `_mon` builder (the C MON() macro) and its `_nam` helper;
 - the PM_* anchors -- the C enum monnums the game code refers to.
@@ -676,6 +677,49 @@ MS_SPELL = MSound.SPELL
 MS_BOAST = MSound.BOAST
 MS_GROAN = MSound.GROAN
 MS_FERRY = MSound.FERRY
+
+# colours (color.h -- #defines, so plain ints; the same block
+# objects_defs declares, because color.h is one header and each table
+# module keeps its own copy so that neither has to import the other)
+CLR_BLACK = 0
+CLR_RED = 1
+CLR_GREEN = 2
+CLR_BROWN = 3          # on IBM, low-intensity yellow is brown
+CLR_BLUE = 4
+CLR_MAGENTA = 5
+CLR_CYAN = 6
+CLR_GRAY = 7           # low-intensity white
+NO_COLOR = 8
+CLR_ORANGE = 9
+CLR_BRIGHT_GREEN = 10
+CLR_YELLOW = 11
+CLR_BRIGHT_BLUE = 12
+CLR_BRIGHT_MAGENTA = 13
+CLR_BRIGHT_CYAN = 14
+CLR_WHITE = 15
+CLR_MAX = 16
+
+# the half-way point for tty-based colour systems (color.h BRIGHT)
+BRIGHT = 8
+
+# colour aliases (color.h; monsters.h uses the HI_* ones)
+HI_DOMESTIC = CLR_WHITE       # for player + pets
+HI_LORD = CLR_MAGENTA         # for high-end monsters
+HI_OVERLORD = CLR_BRIGHT_MAGENTA   # for few uniques
+HI_OBJ = CLR_MAGENTA
+HI_METAL = CLR_CYAN
+HI_COPPER = CLR_YELLOW
+HI_SILVER = CLR_GRAY
+HI_GOLD = CLR_YELLOW
+HI_LEATHER = CLR_BROWN
+HI_CLOTH = CLR_BROWN
+HI_ORGANIC = CLR_BROWN
+HI_WOOD = CLR_BROWN
+HI_PAPER = CLR_WHITE
+HI_GLASS = CLR_BRIGHT_CYAN
+HI_MINERAL = CLR_GRAY
+DRAGON_SILVER = CLR_BRIGHT_CYAN
+HI_ZAP = CLR_BRIGHT_BLUE
 
 # monster body weights (weight.h; named constants, not an enum)
 WT_ETHEREAL = 0

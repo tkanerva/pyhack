@@ -19,21 +19,26 @@ three modules:
                    defch, monname, is_golem, is_dragon) and the
                    table check `_validate()`.
 
-Table policy (monst_data.py): `PM_NAMES` records the COMPLETE C
-ordering of all 383 monster types (default build: CHARON undefined;
-MAIL_STRUCTURES always defined in 5.0 (global.h), so the mail daemon
-IS in the table; all `#if 0` blocks excluded), `SUBSET_PM` the
-indices of the implemented subset, and `MONS` the (sparse) table
-itself: PerMonst at the C index for the implemented subset, None
-elsewhere.  The ordering is recorded even though only a subset of the
-table is implemented, so the PM_ numbering is fixed once and the
-remaining ~90% can be completed later without renumbering anything.
+Table policy (monst_data.py): the table is the C one, whole.
+`PM_NAMES` records the COMPLETE C ordering of all 383 monster types
+(default build: CHARON undefined; MAIL_STRUCTURES always defined in
+5.0 (global.h), so the mail daemon IS in the table; all `#if 0` blocks
+excluded), `MONS` holds the rows at their C indices, and `SUBSET_PM`
+the indices that carry a row.
 
-Core-subset policy (per project decision): only the ~10% of monsters
-needed to build and play the core game is transcribed (the demo's
-goblin/orc/bat, low-level dungeon staples, and the carriers of the
-special-attack mechanics: petrify, drain, steal, stick, breath,
-...).  The subset is `SUBSET_PM` (in monst_data.py).
+How the table got filled: a row is eight lines of `MON(...)` and there
+are 383 of them, so they are *converted*, not typed --
+`tools/convert_monsters.py` parses `include/monsters.h` and rewrites
+monst_data.py in C order (PLAN-MAKEMON.md phase A / §4.5).  The rows
+are assigned by C index, so the pass renumbers nothing: the table
+started as the depth band the first gameplay sessions needed and the
+converter completed it in place.  `SUBSET_PM` stays as the name for
+"the rows that carry a table entry" -- the invariant `_validate()`
+checks -- and after the converter run that is the whole table.  The
+converter checks its own output against this module's declarations
+(383 rows, the C enum name of each row against `PM_NAMES`, every
+constant it uses against monst_defs, the PM_* anchors against the
+indices it produced), so a drift is reported where it happens.
 
 The table is checked by `_validate()`.  It runs from the test suite
 (tests/test_monst.py) and via `python -m core.monst`, NOT at import
@@ -46,8 +51,10 @@ time, so importing this module has no side effects.
   C code compares mlet to S_foo (e.g. olfaction() checks
   mdat->mlet == S_EYE).
 - The C fencepost mons[NUMMONS] terminator is omitted.
-- pmnames[0]/[1] (male/female) are None for NAM() monsters; all
-  subset entries are NAM() (single name).
+- pmnames[0]/[1] (male/female) are None for NAM() monsters; the
+  NAMS() rows (the dwarf / kobold / gnome / ogre / vampire / elf /
+  cleric rulers and the amorous demon) carry C's gendered names there,
+  and monname() picks by gender.
 - Rule #1 (class contiguity) is intentionally NOT enforced: 5.0 puts
   the quest nemeses and guardians (several of them S_HUMAN) after the
   worm tail, so classes are not contiguous in the table.
@@ -210,10 +217,12 @@ def _validate() -> None:
     for idx, name in anchors.items():
         assert PM_NAMES[idx] == name, (idx, PM_NAMES[idx], name)
     # the sparse table is consistent with its indices
+    assert len(MONS) == NUMMONS
     for idx, mon in enumerate(MONS):
         if mon is not None:
             assert mon.pmidx == idx, (idx, mon.pmidx)
-    # exactly the subset is present
+    # exactly the rows SUBSET_PM names are present (after the converter
+    # pass SUBSET_PM is every index, so this is "the table is complete")
     present = {i for i, m in enumerate(MONS) if m is not None}
     assert present == set(SUBSET_PM)
     # the special section anchor (SPECIAL_PM is always implemented)

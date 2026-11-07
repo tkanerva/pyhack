@@ -16,8 +16,8 @@ from core.makemon import (MongenOrder, adj_lev, makemon as spawn,
                           uncommon)
 from core.mklev import blank_map, makelevel
 from core.monst import (A_LAWFUL, G_GENOD, MONS, PM_GIANT_ANT, PM_GOBLIN,
-                        PM_KILLER_BEE, PM_SOLDIER, S_ANT, S_CENTAUR, S_HUMAN,
-                        PerMonst, monsndx)
+                        PM_KILLER_BEE, PM_SOLDIER, S_ANT, S_HUMAN,
+                        S_MIMIC_DEF, PerMonst, monsndx)
 from core.rnd import Rng
 from core.rules import level_difficulty
 from core.types import MmFlags, World
@@ -116,11 +116,13 @@ def test_mkclass_returns_the_requested_class():
         assert ptr.mlet == S_ANT
 
 
-def test_mkclass_of_an_unimplemented_class_is_none():
-    """S_CENTAUR has no table rows yet: C would impossible(), the port
-    answers None (a level may not put a monster there)."""
+def test_mkclass_answers_none_for_a_class_with_no_species():
+    """S_MIMIC_DEF is C's mimic-disguise placeholder, not a monster: no
+    row carries that class, so mkclass() has nothing to answer.  C would
+    impossible(); the port answers None (a level may not put a monster
+    there)."""
     w = _world(lev=10)
-    assert mkclass(w, _rng(), S_CENTAUR) is None
+    assert mkclass(w, _rng(), S_MIMIC_DEF) is None
 
 
 def test_mkclass_aligned_respects_the_alignment():
