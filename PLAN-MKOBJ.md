@@ -1,7 +1,8 @@
 # Plan: Wave 4b — the object genesis layer (`mksobj` / `mkobj` / `mkgold`)
 
-**Status: phases A, B, C, D and E landed in substance; F and G are
-partly open.** The second half of table.txt
+**Status: phases A, B, C, D and E landed in substance; F is partly
+open, and G's terrain branches (fountain / sink / altar / grave) have
+landed with `set_levltyp`.** The second half of table.txt
 row 1; the monster half is PLAN-MAKEMON.md. Written after Wave 3
 (PLAN-MKLEV.md) landed: 521 tests green, mypy clean.
 Landed as `core/mkobj.py` (see CHANGES.md "Wave 4a/4b"): the `Item`
@@ -12,11 +13,16 @@ model of phase A (with `container` renamed to `carrier`), `mksobj` /
 `weight` (whole), the BUC lottery, `rndmonnum` and `mkobj_erosions`.
 Still open: `splitobj`, the container *merge* rules of phase E,
 `mkobj_erosions`' rust / rot / corrode material tests, and the phase-G
-terrain branches (fountain / sink / altar / grave need `set_levltyp`;
-the graffiti needs `make_engr_at`), whose rolls are deliberately not
-taken yet.  (The `charges` -> `spe` migration of §4.A landed with
-PLAN-INVENT.md phase A: `Item.charges` is deleted and `spe` is the
-only counter -- zap / spells / items / the demo kit all read it.)
+residue (the bonus item, the chest `!rn2(nroom*5/2)` and the graffiti,
+whose `make_engr_at` needs the engraving system), whose rolls are
+deliberately not taken yet.  (The `charges` -> `spe` migration of §4.A
+landed with PLAN-INVENT.md phase A: `Item.charges` is deleted and
+`spe` is the only counter -- zap / spells / items / the demo kit all
+read it.  The terrain branches landed after the last session's crash
+point: `set_levltyp` / `find_okay_roompos` / `mkfount` / `mksink` /
+`mkaltar` / `mkgrave` are in core.mklev, the `fill_ordinary_room`
+rolls are taken in C order, and `Tile.altarmask` + the AM_* /
+`align2amask` block sit in core.monst_defs / core.types.)
 
 *Run status:* the wave's tests are written but were landed while the
 local pytest was crashing on startup; the first real run (1140 tests)
@@ -344,7 +350,7 @@ vault hoard, and `oinit`'s per-depth object mix in `goto_level`
 |---|---|
 | `World.new_ident` | PLAN-MAKEMON.md B (do the field work there, once) |
 | `rndmonnum_adj` | PLAN-MAKEMON.md C |
-| `set_levltyp` (fountain / sink / altar / grave terrain) | table item 2 (S) |
+| ~~`set_levltyp` (fountain / sink / altar / grave terrain)~~ | LANDED: core.mklev (table item 2) |
 | `make_engr_at` (the graffiti branch, `make_grave`'s epitaph) | table item 2 / PLAN-SPLEV.md phase 0 |
 | the full trap table (`mktrap_victim`) | PLAN-SPLEV.md phase 0 |
 
@@ -360,9 +366,10 @@ vault hoard, and `oinit`'s per-depth object mix in `goto_level`
       `blessorcurse` / `mkbox_cnts` ported with C spans in the
       docstrings
 - [ ] the 480-row `mksobj` smoke test
-- [ ] `fill_ordinary_room` places, in C's order, gold, chests,
-      statues and the final object; fountains/sinks/altars/graves
-      once `set_levltyp` exists
+- [x] `fill_ordinary_room` places, in C's order, gold, fountain,
+      sink, altar, grave, statue and the final object (the terrain
+      branches landed with `set_levltyp`); the bonus item, the chest
+      and the graffiti STUBs remain
 - [ ] `pickup` merges compatible stacks
 - [ ] demo generator byte-identical; `mklev`/`cavern` levels carry real
       objects

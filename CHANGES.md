@@ -5,6 +5,66 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The sanctioned terrain mutator, and the room furniture rolls
+
+**Why:** `fill_ordinary_room`'s object half stopped at gold and the
+final random object because C's fountain / sink / altar / grave
+branches write TERRAIN, and pyhack had no sanctioned way to change a
+square's type: every generator painted `tile.typ` by hand, so the
+side effects C bakes into one place (`set_levltyp`, mkmaze.c) lived
+nowhere.  This is queue item 1 ("table item 2" in the plans) and
+PLAN-MKOBJ.md phase G's terrain half.
+
+**The choices:**
+
+1. **`set_levltyp` is the one terrain writer** (core.mklev, C:
+   mkmaze.c#set_levltyp): refuses out-of-bounds / out-of-range / a
+   stair in the way (C's `impossible()` is a refusal here -- a
+   generator must never abort on a geometry edge case), lights LAVA
+   destinations, and recounts `nfountains` / `nsinks` when a square
+   crosses the FOUNTAIN / SINK boundary.  The named non-ports: the
+   garden-theme SDOOR->AIR hack and the ice-melt follow-through (no
+   item timers).
+2. **The furniture generators are C's, one for one**: `find_okay_roompos`
+   (200 tries of `somexyspace` + `bydoor`), `mkfount` (blessed 1 in 7 =
+   `horizontal`, C `blessedftn`), `mksink`, `mkaltar` (OOROOM only,
+   alignment `rn2(3)-1` -> `align2amask`), `mkgrave` + `make_grave`
+   (engrave.c).  `make_grave`'s headstone engraving stays a STUB until
+   the engraving system; `mkgrave`'s buried loot (the dobell roll, the
+   `rnd(20) + level_difficulty()*rnd(5)` gold, the `rn2(5)` cursed-obj
+   loop) lands on the GRAVE square as ordinary floor items, because
+   pyhack has no grave-digging and the objects must be reachable.
+3. **`fill_ordinary_room` takes the rolls in C's order** (gold ->
+   fountain `!rn2(10)` -> sink `!rn2(60)` -> altar `!rn2(60)` -> grave
+   `!rn2(80-2*depth)` -> statue -> final object): a deliberate
+   draw-sequence change, the seeded tests are the tripwire.  Still
+   STUB, each named in `_fill_room_objects`: the bonus item, the chest
+   `!rn2(nroom*5/2)`, the graffiti (`make_engr_at`).
+4. **The altar data lands with the writer**: `Tile.altarmask` (C: the
+   `altarmask` overload of the rm flags field) and the align.h block
+   in core.monst_defs (`AM_*`, `align2amask`, `amask2align`), mirroring
+   the objects_defs pattern -- one header, one copy per table module.
+5. **`clear_level_structures` now clears the World half too.**  C
+   frees the level's object / monster state in the same call (the
+   per-square `objects[x][y]` / `monsters[x][y]` arrays, `objlist`,
+   `monlist`); pyhack's map-only reset was fine until the filler
+   placed objects, because the first generation's items / traps then
+   shifted the second generation's draw sequence and a seeded
+   regeneration over the same World came out different.  The function
+   now drops level `lev`'s items, traps and monsters (carried items go
+   with their carriers: a carried item keeps its carrier's level),
+   which is what makes a generated level repeatable over an
+   already-stocked one.
+6. **The room-corner test loosened to C**: `find_okay_roompos` draws
+   over the whole room rectangle, corners included (C: `rnd_loc`), so a
+   fountain on a room corner is legal; the corner is now asserted
+   standable (ROOM / FOUNTAIN / SINK / ALTAR / GRAVE), a wall would
+   still fail.
+
+**Verified:** 1220 tests green, mypy clean over 93 files, flake8
+clean; the demo's pinned seeds, layouts and messages are unchanged
+(the demo generator is a separate path and never calls `makelevel`).
+
 ## The inventory list: `i` and friends, and a listing that costs no turn
 
 **Why:** the pack was shown one way -- the demo's `🎒 [a: short sword]

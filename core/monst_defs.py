@@ -738,6 +738,39 @@ A_CHAOTIC = -1
 A_NEUTRAL = 0
 A_LAWFUL = 1
 
+# align.h -- the altar / alignment masks (C: the `altarmask` overload of
+# struct rm flags, rm.h).  The AM_* bits name which alignment an altar
+# answers to; AM_SHRINE marks a temple shrine, AM_SANCTUM the high altar.
+AM_NONE = 0x00
+AM_CHAOTIC = 0x01
+AM_NEUTRAL = 0x02
+AM_LAWFUL = 0x04
+AM_MASK = 0x07
+AM_SHRINE = 0x08
+AM_SANCTUM = 0x10
+
+
+def align2amask(al: int) -> int:
+    """C: align.h#Align2amask -- an alignment (A_*) to its altar mask
+    (AM_*): chaotic 1, neutral 2, lawful 4, none 0."""
+    if al == A_NONE:
+        return AM_NONE
+    if al == A_LAWFUL:
+        return AM_LAWFUL
+    return al + 2  # -1 => 1 (chaotic), 0 => 2 (neutral)
+
+
+def amask2align(mask: int) -> int:
+    """C: align.h#Amask2align -- an altar mask (AM_*) back to its
+    alignment (A_*): 4 => lawful, 2 => neutral, 1 => chaotic, 0 => none."""
+    masked = mask & AM_MASK
+    if masked == 0:
+        return A_NONE
+    if masked == AM_LAWFUL:
+        return A_LAWFUL
+    return masked - 2
+
+
 NORMAL_SPEED = 12
 
 

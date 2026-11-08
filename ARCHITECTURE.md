@@ -346,23 +346,20 @@ rewrites `core/monst_data.py` in C order, so `mons[]` is the whole 383
 rows and `rndmonst_adj` / `mkclass` draw the real distribution (every
 corpse, statue and special room reads it; a half-filled table makes
 bugs look like tuning, PLAN-MAKEMON §4.6).  The queue, in dependency
-order:
+order (item 1 LANDED: `set_levltyp` + `mkfount` / `mksink` /
+`mkaltar` / `mkgrave` in core.mklev, `fill_ordinary_room`'s
+fountain / sink / altar / grave rolls taken in C order, `Tile
+.altarmask` + the AM_* / `align2amask` block in core.monst_defs —
+the same writer Wave 5's `mkswamp` and the temple altar need):
 
-1. **`set_levltyp` + the terrain writers** (the plans' "table item
-   2"): the sanctioned terrain mutator, then `mkfount` / `mksink` /
-   `mkaltar` / `mkgrave` (mklev.c).  That takes the fountain / sink /
-   altar / grave rolls of `fill_ordinary_room` in C order (PLAN-MKOBJ
-   phase G) — a deliberate draw-sequence change, the seeded snapshot
-   test is the tripwire — and it is the same writer Wave 5's
-   `mkswamp` and the temple altar need.
-2. **Wave 5: special rooms** (PLAN-SPECIAL-ROOMS.md), in the plan's
+1. **Wave 5: special rooms** (PLAN-SPECIAL-ROOMS.md), in the plan's
    own staging: the temple first (needs `src/priest.c` / `src/pray.c`
    as core systems and the `Monster.epri` extra — makemon already
    accepts-and-ignores MM_EPRI / MM_ESHK), then the zoo family
    (`fill_zoo` / `courtmon` / `squadmon` / `morguemon` / `antholemon`
    / `mkundead` / `mk_zoo_thronemon` become `mkclass` + `makemon`
    fill-ins), the shops last (shk.c is billing before it is a room).
-3. **The genesis residue** (independent of 1-2, interleavable):
+2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),
    phase F's groups / `grow_up` / `clone_mon` / `create_critters`,
@@ -370,31 +367,31 @@ order:
    corrode half of `mkobj_erosions`, and the fire-trap-erodes-armour
    regression test.  (The `Item.charges` -> `spe` migration is DONE —
    it landed with PLAN-INVENT.md phase A.)
-4. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
+3. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
    PLAN-DROP.md — invent.c / pickup.c / do.c + wield.c): phase A is
    in (`core/invent.py`: the pack, the letters, the single writer) and
    so is phase F's display half (`display_inventory` / `xprname` /
    the reduced `doname`; the console's `i` family, which costs no turn);
    the rest of the plan's staging — stacking (B), naming (C), weight /
    encumbrance (D), gold (E), selection (G) —
-   is what turns the pack into NetHack's, and it consumes 3's merge
+   is what turns the pack into NetHack's, and it consumes 2's merge
    rules and `splitobj`.
-5. **The small UI debt**: wire `QuaffCommand` (zap / cast / eat are
+4. **The small UI debt**: wire `QuaffCommand` (zap / cast / eat are
    wired; `q` quits, so the quaff key is to choose).
-6. **Scrolls**: fill in the STUBs of `core/scrolls.py` as their
+5. **Scrolls**: fill in the STUBs of `core/scrolls.py` as their
    machinery lands (the C provenance of each is in the module
    docstring); next candidates on existing machinery:
    SCR_DESTROY_ARMOR (the wrapper around the already-real
    `worn.disintegrate_arm`), SCR_LIGHT (a `lit` flag on Tile),
    SCR_CONFUSE_MONSTER (rules over nearby monsters).
-7. **Full monster AI** (`mmove()`) on the ported vision: doors,
+6. **Full monster AI** (`mmove()`) on the ported vision: doors,
    fleeing, remembered positions, M2_WANDER (the greedy single-step
    chase is in).
-8. **Wave 7 / 8, then the special levels**: throwing (PLAN-THROW.md,
+7. **Wave 7 / 8, then the special levels**: throwing (PLAN-THROW.md,
    dothrow.c + mthrowu.c), breath weapons (PLAN-BREATH.md, the
    zap.c dobuzz beam engine), then PLAN-SPLEV.md's `des` API + the
    lua level programs (the most parallelisable piece left).
-9. If the system/entity matrix grows, evolve into a lightweight ECS
+8. If the system/entity matrix grows, evolve into a lightweight ECS
     — the events-out design stays the same.
 
 Also due: rerun `nethack_index/tools/generate_index.py` — INDEX.md

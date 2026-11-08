@@ -585,9 +585,10 @@ class LevelFlags:
 class Tile:
     """One level location (C: struct rm, reduced).
 
-    STUB: the remaining rm fields (drawbridgemask, icedpool, altarmask,
-    diggable) are not ported yet -- they come with the drawbridge, ice
-    and altar work.  door_mask is only meaningful for DOOR/SDOOR tiles;
+    STUB: the remaining rm fields (drawbridgemask, icedpool, diggable)
+    are not ported yet -- they come with the drawbridge and ice work.
+    door_mask is only meaningful for DOOR/SDOOR tiles; altarmask only
+    for ALTAR tiles (the C `altarmask` overload of the flags field);
     stair_dir only for STAIRS tiles.
     """
     typ: TerrainType = TerrainType.ROOM
@@ -627,6 +628,11 @@ class Tile:
     # levl[x][y].waslit, "remembered as lit")?  Written by newsym(),
     # read by back_to_glyph() for corridors.
     waslit: bool = False
+    # which alignment an ALTAR answers to (C: the `altarmask` overload of
+    # levl[x][y].flags, rm.h; the AM_* bits of align.h).  Written by the
+    # altar generators (core.mklev.mkaltar / the temple work); 0 for
+    # every non-altar tile.
+    altarmask: int = 0
 
     def is_door_open(self) -> bool:
         """A door is passable unless closed/locked/trapped (C: the

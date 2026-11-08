@@ -44,10 +44,11 @@ STUBs (announced where they are, never silently skipped):
   - fill_ordinary_room()'s contents: the monster comes from the real
     distribution (core.makemon -- the old three-demo-kind subset is
     gone) and the traps from the demo trap kit (mktrap() below).  The
-    object half places gold, a statue and a final random object through
-    core.mkobj; the fountain / sink / altar / grave need the sanctioned
-    terrain writer (set_levltyp) and the engravings need make_engr_at,
-    so those rolls are not taken yet (see _fill_room_objects).
+    object half places gold, a fountain, a sink, an altar, a grave, a
+    statue and a final random object (core.mkobj + the mkfount / mksink /
+    mkaltar / mkgrave terrain writers below); the bonus item, the chest
+    and the engravings (make_engr_at) are the remaining STUBs, their
+    rolls not taken (see _fill_room_objects).
   - mktrap(): C's traptype_rnd() depth table, the dead adventurer
     (mktrap_victim), the rolling-boulder launch path and the
     once/impossible flags.  The trap types the demo implements are
@@ -91,10 +92,12 @@ from typing import List, Optional, Tuple
 from .mkmap import litstate_rnd
 from .mkroom import (do_mkroom, has_dnstairs, has_upstairs, occupied,
                      somexyspace)
+from .monst_defs import align2amask
 from .types import (LevelFlags, MAXNROFROOMS, ROOMOFFSET, SHARED, DoorMask,
                     Map, Pos, Room, RoomType, STAIR_DOWN, STAIR_UP, Stairway,
                     TerrainType, Tile, Trap, TrapType, World, is_door,
-                    is_furniture, is_obstructed, is_pool, is_room, is_wall)
+                    is_furniture, is_lava, is_obstructed, is_pool, is_room,
+                    is_wall)
 
 
 # C: sp_lev.c -- the minimum distance kept between a room and anything
@@ -1088,6 +1091,47 @@ def makevtele(world: World, map_: Map, rng, depth: int, lev: int) -> None:
 # Level-wide housekeeping (C: mklev.c)
 # ============================================================
 
+def set_levltyp(map_: Map, x: int, y: int, newtyp: TerrainType) -> bool:
+    """C: mkmaze.c#set_levltyp -- the sanctioned terrain mutator.
+
+    Every change to a square's terrain type goes through here (the
+    swamps, the digging, the doors, the destruction, the furniture all
+    use it), so the side effects C bakes in live in exactly one place:
+
+      - a STAIRS / LADDER tile is never overwritten (C:
+        CAN_OVERWRITE_TERRAIN); the write is refused and False returned;
+      - a LAVA destination is always lit (C: IS_LAVA -> .lit = 1);
+      - crossing the FOUNTAIN / SINK boundary recounts the level's
+        fountain / sink flags (C: count_level_features()).
+
+    Refusals (out of bounds, a type outside STONE..CLOUD, a stair in the
+    way) return False instead of C's impossible(): a generator must
+    never abort over a geometry edge case.
+
+    Not ported, each named: the secret-door-in-a-garden-theme-room hack
+    (C: oldtyp == SDOOR && newtyp == AIR sets arboreal_sdoor; there are
+    no arboreal / themed rooms), and the ice-melt follow-through (C:
+    was_ice && newtyp != ICE runs obj_ice_effects() + spot_stop_timers()
+    -- pyhack has no item timers, so a melting ice tile just changes
+    type).
+    """
+    if not map_.in_bounds((x, y)):
+        return False
+    if not TerrainType.STONE <= newtyp <= TerrainType.CLOUD:
+        return False  # C: newtyp < STONE || newtyp >= MAX_TYPE
+    tile = map_.tiles[y][x]
+    oldtyp = tile.typ
+    if oldtyp in (TerrainType.STAIRS, TerrainType.LADDER):
+        return False  # C: CAN_OVERWRITE_TERRAIN refuses stairs
+    tile.typ = newtyp
+    if is_lava(newtyp):
+        tile.lit = True  # C: IS_LAVA(newtyp) -> levl[x][y].lit = 1
+    if (oldtyp == TerrainType.FOUNTAIN) != (newtyp == TerrainType.FOUNTAIN) \
+            or (oldtyp == TerrainType.SINK) != (newtyp == TerrainType.SINK):
+        count_level_features(map_)
+    return True
+
+
 def count_level_features(map_: Map) -> None:
     """C: mklev.c#count_level_features -- (re)count the fountains and
     sinks, which several systems read from the level flags."""
@@ -1102,13 +1146,18 @@ def count_level_features(map_: Map) -> None:
                 map_.flags.nsinks += 1
 
 
-def clear_level_structures(map_: Map) -> None:
+def clear_level_structures(world: World, map_: Map, lev: int) -> None:
     """C: mklev.c#clear_level_structures -- wipe the level back to bare
     rock: tiles, room records, doors and the level flags.
 
-    The C version also frees the object / monster / trap chains and the
-    region / exclusion lists; here those live on the World and are
-    filtered by level, so only the map-side state is reset.
+    C wipes the level's object and monster state in the same call (the
+    per-square svl.level.objects[x][y] / monsters[x][y] arrays, the
+    objlist and monlist chains); here those live on the World and are
+    filtered by level, so the call also drops level `lev`'s items,
+    traps and monsters (a carried item goes with its carrier: it keeps
+    its carrier's level).  Regenerating a level therefore starts from
+    a clean slate, as C's does, and a seeded generation is repeatable
+    over an already-stocked level.
     """
     for y in range(map_.height):
         for x in range(map_.width):
@@ -1117,6 +1166,15 @@ def clear_level_structures(map_: Map) -> None:
     map_.subrooms = []
     map_.doors = []
     map_.flags = LevelFlags()
+    for it in list(world.items.values()):
+        if it.lev == lev:
+            del world.items[it.id]
+    for trap in list(world.traps.values()):
+        if trap.lev == lev:
+            del world.traps[trap.id]
+    for mid, mon in list(world.actors.items()):
+        if mon.lev == lev and not mon.is_hero:
+            del world.actors[mid]
 
 
 def wallify_map(map_: Map, x1: int, y1: int, x2: int, y2: int) -> None:
@@ -1266,22 +1324,133 @@ def _spawn_monster(world: World, map_: Map, rng, pos: Pos, lev: int,
             in_mklev=True)
 
 
+def find_okay_roompos(map_: Map, traps: List[Trap], room: Room,
+                      rng) -> Optional[Pos]:
+    """C: mklev.c#find_okay_roompos -- a free room square that is not by
+    a door, up to 200 tries (the furniture placement point).
+
+    somexyspace() already answers "free and standable" (not occupied,
+    ROOM/CORR/ICE), so the loop only adds the bydoor() test C keeps
+    (furniture does not crowd a doorway).  A full room (somexyspace gives
+    up) or 200 door-adjacent answers returns None.
+    """
+    for _ in range(200):
+        pos = somexyspace(map_, traps, room, rng)
+        if pos is None:
+            return None
+        if not bydoor(map_, pos[0], pos[1]):
+            return pos
+    return None
+
+
+def mkfount(map_: Map, traps: List[Trap], room: Room, rng) -> None:
+    """C: mklev.c#mkfount -- a fountain in a room, blessed 1 in 7.
+
+    The level's fountain flag is kept by set_levltyp's recount, not a
+    separate nfountains++ here: C also increments the flag after
+    set_levltyp, which double-counts (set_levltyp already recounted the
+    new fountain), so pyhack counts once.
+    """
+    pos = find_okay_roompos(map_, traps, room, rng)
+    if pos is None:
+        return
+    if not set_levltyp(map_, pos[0], pos[1], TerrainType.FOUNTAIN):
+        return
+    if not rng.rn2(7):
+        map_.tile_at(pos).horizontal = True  # C: blessedftn = horizontal
+
+
+def mksink(map_: Map, traps: List[Trap], room: Room, rng) -> None:
+    """C: mklev.c#mksink -- a sink in a room.  (The nsinks flag is the
+    set_levltyp recount, see mkfount.)"""
+    pos = find_okay_roompos(map_, traps, room, rng)
+    if pos is None:
+        return
+    if not set_levltyp(map_, pos[0], pos[1], TerrainType.SINK):
+        return
+
+
+def mkaltar(map_: Map, traps: List[Trap], room: Room, rng) -> None:
+    """C: mklev.c#mkaltar -- an altar in an ordinary room, its alignment
+    the C three-way roll (chaotic / neutral / lawful)."""
+    if room.rtype != RoomType.OROOM:
+        return
+    pos = find_okay_roompos(map_, traps, room, rng)
+    if pos is None:
+        return
+    if not set_levltyp(map_, pos[0], pos[1], TerrainType.ALTAR):
+        return
+    al = rng.rn2(3) - 1  # C: rn2(A_LAWFUL + 2) - 1 -> -1, 0, 1
+    map_.tile_at(pos).altarmask = align2amask(al)
+
+
+def make_grave(world: World, map_: Map, traps: List[Trap], pos: Pos) -> None:
+    """C: engrave.c#make_grave -- a grave on a ROOM (or GRAVE) square
+    with no trap there.
+
+    STUB: the headstone engraving (C: del_engr_at + make_engr_at HEADSTONE
+    and get_rnd_text(EPITAPHFILE)) needs the engraving system, so the
+    epitaph roll is not taken.
+    """
+    tile = map_.tile_at(pos)
+    if tile.typ not in (TerrainType.ROOM, TerrainType.GRAVE):
+        return  # C: "Can we put a grave here?"
+    if any(t.pos == pos and not t.disarmed for t in traps):
+        return  # C: t_at(x, y) -- a trap blocks the grave
+    set_levltyp(map_, pos[0], pos[1], TerrainType.GRAVE)
+
+
+def mkgrave(world: World, map_: Map, traps: List[Trap], room: Room,
+            lev: int, rng) -> None:
+    """C: mklev.c#mkgrave -- a grave in an ordinary room, sometimes with
+    a bell and a buried load of cursed loot.
+
+    C buries the objects (add_to_buried) until the grave is kicked open
+    (dig.c).  pyhack has no grave-digging, so the objects are placed on
+    the GRAVE square as ordinary floor items instead -- the only way they
+    can ever be reached.  The draw sequence (the dobell roll, the gold
+    amount, the rn2(5) loot loop) is C's.
+    """
+    from . import rules
+    from .mkobj import (RANDOM_CLASS, curse, mksobj, mksobj_at, mkobj,
+                        place_object, weight)
+    from .objects import ObjType
+
+    dobell = not rng.rn2(10)  # C: rolled before the rtype test
+    if room.rtype != RoomType.OROOM:
+        return
+    pos = find_okay_roompos(map_, traps, room, rng)
+    if pos is None:
+        return
+    make_grave(world, map_, traps, pos)
+    if not rng.rn2(3):
+        gold = mksobj(world, rng, int(ObjType.GOLD_PIECE))
+        gold.quan = rng.rnd(20) + rules.level_difficulty(world) * rng.rnd(5)
+        gold.owt = weight(world, gold)
+        place_object(world, gold, pos, lev)
+    for _ in range(rng.rn2(5)):
+        item = mkobj(world, rng, RANDOM_CLASS, True)
+        curse(item)
+        place_object(world, item, pos, lev)
+    if dobell:
+        mksobj_at(world, rng, int(ObjType.BELL), pos, lev)
+
+
 def fill_ordinary_room(world: World, map_: Map, rng, room: Room, lev: int,
                        depth: int) -> None:
     """C: mklev.c#fill_ordinary_room -- put things inside a normal room.
 
     Included: the sleeping monster (C: 2/3 of rooms), the trap loop
     (C: `while (!rn2(8 - depth/6))`), and the object half in C's order
-    (gold pile, statue, the final random object -- see
-    _fill_room_objects; the object genesis is in, PLAN-MKOBJ.md G).
+    (gold pile, fountain, sink, altar, grave, statue, the final random
+    object -- see _fill_room_objects; the object genesis and the
+    terrain writers are in, PLAN-MKOBJ.md G).
 
-    STUB (each in C order, each naming its C call): the fountain /
-    sink / altar / grave sprinkles (they need the sanctioned terrain
-    writer, set_levltyp / mkfount / mksink / mkaltar / mkgrave -- table
-    item 2), the bonus item and the box / chest (!rn2(nroom*5/2)), and
-    the random engraving (make_engr_at).  Their rolls are not taken,
-    so landing them shifts a level's draw sequence -- a deliberate
-    change, with the seeded snapshot test as the tripwire.
+    STUB (each in C order, each naming its C call): the bonus item and
+    the box / chest (!rn2(nroom*5/2)), and the random engraving
+    (make_engr_at).  Their rolls are not taken, so landing them shifts
+    a level's draw sequence -- a deliberate change, with the seeded
+    snapshot test as the tripwire.
 
     `map_` is a parameter (not `world.map`) because a lazily generated
     level is built while the hero still stands on the previous one.
@@ -1314,18 +1483,16 @@ def _fill_room_objects(world: World, map_: Map, rng, room: Room, lev: int,
                        depth: int, traps: List[Trap]) -> None:
     """C: the object half of fill_ordinary_room, in C's order.
 
-    Included (the object genesis is in -- PLAN-MKOBJ.md phase G): the
-    gold pile (!rn2(3)), the statue (!rn2(20)) and the final random
-    object (!rn2(3), C's `mkobj_at(RANDOM_CLASS, ...)`).
-
-    STUB, still in C order and each naming its C call: the fountain
+    Included (the object genesis and the terrain writers are in --
+    PLAN-MKOBJ.md phase G): the gold pile (!rn2(3)), the fountain
     (!rn2(10)), the sink (!rn2(60)), the altar (!rn2(60)) and the grave
-    (!rn2(80 - 2*depth)) need the sanctioned terrain writer (C:
-    set_levltyp / mkfount / mksink / mkaltar / mkgrave) -- table item 2
-    of the plan's ordering; the bonus item and the box / chest
-    (!rn2(nroom*5/2)) follow them; the graffiti needs make_engr_at.
+    (!rn2(80 - 2*depth), the C mkfount / mksink / mkaltar / mkgrave),
+    the statue (!rn2(20)) and the final random object (!rn2(3), C's
+    `mkobj_at(RANDOM_CLASS, ...)`).
 
-    The rolls that belong to the STUBs are not taken, so landing them
+    STUB, still in C order and each naming its C call: the bonus item,
+    the box / chest (!rn2(nroom*5/2)) and the graffiti (make_engr_at).
+    The rolls that belong to those STUBs are not taken, so landing them
     will shift a level's draw sequence -- exactly the kind of change
     PLAN-MKLEV.md §2.7 asks a port to make deliberately, with the
     seeded snapshot test as the tripwire.
@@ -1338,7 +1505,17 @@ def _fill_room_objects(world: World, map_: Map, rng, room: Room, lev: int,
         if pos is not None:
             mkgold(world, rng, 0, pos, lev)
 
-    # (fountain / sink / altar / grave: see the docstring)
+    if not rng.rn2(10):                     # C: a fountain
+        mkfount(map_, traps, room, rng)
+    if not rng.rn2(60):                     # C: a sink
+        mksink(map_, traps, room, rng)
+    if not rng.rn2(60):                     # C: an altar
+        mkaltar(map_, traps, room, rng)
+    x = 80 - depth * 2                      # C: a grave, rarer the deeper
+    if x < 2:
+        x = 2
+    if not rng.rn2(x):
+        mkgrave(world, map_, traps, room, lev, rng)
 
     if not rng.rn2(20):                     # C: a statue
         pos = somexyspace(map_, traps, room, rng)
@@ -1495,7 +1672,7 @@ def makelevel(world: World, map_: Map, rng, lev: int,
     Steps 7 and 8 are in that order only because C splits them between
     makelevel() and mklev(); filling does not need the room numbers.
     """
-    clear_level_structures(map_)
+    clear_level_structures(world, map_, lev)
     depth = lev
     rects = RectManager(map_)
     smeq: List[int] = []
@@ -1532,8 +1709,11 @@ __all__ = [
     "cardinal_nextto_room", "check_room", "clear_level_structures",
     "count_level_features", "create_room", "create_subroom", "dig_corridor",
     "do_room_or_subroom", "dodoor", "dosdoor", "fill_ordinary_room",
-    "finddpos", "finddpos_shift", "generate_stairs", "good_rm_wall_doorpos",
-    "join", "make_niches", "makecorridors", "makelevel", "makeniche",
-    "makerooms", "makevtele", "maybe_sdoor", "mklev", "mkstairs", "mktrap",
-    "okdoor", "place_niche", "sort_rooms", "topologize", "wallify_map",
+    "find_okay_roompos", "finddpos", "finddpos_shift",
+    "generate_stairs", "good_rm_wall_doorpos",
+    "join", "make_grave", "make_niches", "makecorridors", "makelevel",
+    "makeniche", "makerooms", "makevtele", "maybe_sdoor", "mkaltar",
+    "mkfount", "mkgrave", "mklev", "mksink", "mkstairs", "mktrap",
+    "okdoor", "place_niche", "set_levltyp", "sort_rooms", "topologize",
+    "wallify_map",
 ]

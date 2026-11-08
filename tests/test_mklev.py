@@ -214,10 +214,16 @@ def test_makelevel_builds_rooms_and_corridors(seed):
     world, m = _gen(seed)
     assert m.rooms, "the generator must make rooms"
     assert m.flags.is_cavernous_lev is False
-    # every room is a real rectangle of ROOM floor
+    # every room is a real rectangle of standable floor
     for room in m.rooms:
         assert room.rtype == RoomType.OROOM
-        assert m.tile_at((room.lx, room.ly)).typ == TerrainType.ROOM
+        # the corner is ROOM floor -- or one of the furniture kinds
+        # fill_ordinary_room() places, because find_okay_roompos() draws
+        # somexyspace() over the whole room rectangle, corners included
+        # (C: rnd_loc); a wall there would be a bug, a fountain is not
+        assert m.tile_at((room.lx, room.ly)).typ in (
+            TerrainType.ROOM, TerrainType.FOUNTAIN, TerrainType.SINK,
+            TerrainType.ALTAR, TerrainType.GRAVE)
         assert room.hx > room.lx and room.hy > room.ly
     # and the level is not a solid block: corridors exist
     corrs = [(x, y) for y in range(m.height) for x in range(m.width)
@@ -366,8 +372,10 @@ def test_level_size_comes_from_the_map():
 
 
 def test_makelevel_is_idempotent_over_an_existing_level():
-    """clear_level_structures() wipes the map, the rooms and the flags,
-    so generating twice into the same Map is safe."""
+    """clear_level_structures() wipes the map, the rooms, the flags and
+    the level's items / traps / monsters (C frees the level's object and
+    monster lists in the same call), so generating twice into the same
+    Map over the same World is safe."""
     world, m = _gen(11)
     first = [[t.typ for t in row] for row in m.tiles]
     makelevel(world, m, _rng(11), 2)

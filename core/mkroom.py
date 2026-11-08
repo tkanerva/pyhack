@@ -425,14 +425,15 @@ def mkswamp(map_: Map, stairs: Iterable[Stairway],
             rng) -> Optional[Room]:
     """C: mkroom.c#mkswamp -- flood up to five rooms with pools.
 
-    STUB: needs the sanctioned terrain mutator (C: set_levltyp), the
-    engraving removal (C: del_engr_at) and monster generation for the
-    eels / fungus.  The checkerboard rule ((sx+sy) % 2) and the
-    nexttodoor() guard are the ported part of the shape.
+    STUB: the sanctioned terrain mutator (C: set_levltyp) has landed in
+    core.mklev; what is still needed is the engraving removal (C:
+    del_engr_at) and monster generation for the eels / fungus.  The
+    checkerboard rule ((sx+sy) % 2) and the nexttodoor() guard are the
+    ported part of the shape.
     """
     raise NotImplementedError(
-        "swamps need set_levltyp and monster generation (C: "
-        "src/mkroom.c mkswamp())")
+        "swamps need engraving removal and eel / fungus monster "
+        "generation (C: src/mkroom.c mkswamp())")
 
 
 def courtmon(rng) -> None:
