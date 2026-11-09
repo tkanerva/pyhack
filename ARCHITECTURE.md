@@ -74,7 +74,7 @@ bus — and a recorded `(Command, [Event])` sequence *is* a replay.
 | `zap.py`      | `core/zap.py` |
 | `potion.py`   | `core/potions.py` |
 | `spell.py`    | `core/spells.py` |
-| `priest.py`, `pray.py` | the broken sketches were dropped, never ported; the C originals (`src/priest.c`, `src/pray.c`) are still unported (see "Suggested next steps") |
+| `priest.py`, `pray.py` | the broken sketches were dropped, never ported; `src/priest.c` is now ported as the subset in `core/priest.py` (priestini / intemple / the shrine queries, PLAN-SPECIAL-ROOMS.md phase 1); `src/pray.c` is still unported (the #pray / #offer refusals name it) |
 | `game.py`'s monster spawns | `core/makemon.py` (the `src/makemon.c` port) + `core/place.py` for `goodpos` / `enexto` (`src/teleport.c`); the object kit -> `core/mkobj.py` (`src/mkobj.c`) |
 
 ## Behaviour decisions
@@ -211,6 +211,30 @@ details live in the PLAN-*.md files and the module docstrings):**
   newpw records it, losexp subtracts it) — not the regen period, which
   tick_energy computes from the level (C `regen_pw`).  The deferred
   list is PLAN-EXPERIENCE.md §5.
+- The priest system (PLAN-SPECIAL-ROOMS.md phase 1, core/priest.py +
+  core/mkroom.mktemple): the temple is an ALTAR tile with an alignment
+  mask (`Tile.altarmask` = `induced_align(80)` + `AM_SHRINE`, C:
+  mkroom.c mktemple in the C draw order -- priestini reads the mask
+  before AM_SHRINE is set) and a peaceful priest who knows the room:
+  `Epri` (C struct epri; `Monster.epri`, allocated by makemon's MM_EPRI
+  -- the C newepri half, the MM_ESHK & friends still accepted-and-
+  ignored) carries shralign / shroom / shrpos / shrlevel + the pacing
+  timers (carried, never ticked, §5.2).  `priestini` is C's: the
+  1-square ring in decl.c's xdir/ydir order (`si = rn2(N_DIRS)`), the
+  `pm_good_location` test (in-bounds + SPACE_POS -- C's DRY half,
+  furniture and all), the rloc() insurance, `makemon(PM_ALIGNED_CLERIC,
+  MM_EPRI, in_mklev=True)`, the 2-4 spellbooks (rn1(3, 2), mkobj's
+  SPBOOK_no_NOVEL through the addinv single writer); the robe tail
+  waits for PLAN-MAKEMON.md phase E (its roll not taken).  The entry
+  message is `intemple` (sacred / desecrated + the peace / forbidding
+  feeling; untended: the C eerie lines + the 1-in-5 hostile ghost, the
+  nomul(-3) a named skip), fired by the TEMPLE half of the room-entry
+  hook in core.step (C: the spoteffects -> check_special_room move,
+  once per room crossing).  `#pray` / `#offer` (PrayCommand /
+  OfferCommand, C do_extcmd) spend a turn and refuse with C's own
+  misaligned-altar line -- src/pray.c is out of scope (the plan says so
+  loudly).  The priest draws as the human glyph (C S_HUMAN is `@`;
+  the legend says so).
 - The inventory core (PLAN-INVENT.md phase A, core/invent.py): the
   port of the item half of src/invent.c, and the **single writer** of
   the PACK half of an item's where-state (`addinv` / `freeinv` /
@@ -312,10 +336,11 @@ details live in the PLAN-*.md files and the module docstrings):**
   only.
 - Spell damage is a flat 2d6 (the old `d6 * nd` referenced a stat that
   never existed).
-- `src/priest.c` / `src/pray.c` are unported (the old Python sketches
-  were dropped, never ported); they land as core systems — functions
-  over `World` returning events — from the C originals (see
-  "Suggested next steps").
+- `src/pray.c` is unported: a temple's `#pray` / `#offer` refuse with
+  C's misaligned-altar line (core.priest.do_pray / do_offer); sacrifice,
+  donation, altar wrath and the priest_talk service economy land with
+  the prayer work, named in the refusals' docstrings.  (`src/priest.c`
+  is ported as the phase-1 subset, see the priest-system bullet above.)
 
 ## Testing
 
@@ -346,19 +371,27 @@ rewrites `core/monst_data.py` in C order, so `mons[]` is the whole 383
 rows and `rndmonst_adj` / `mkclass` draw the real distribution (every
 corpse, statue and special room reads it; a half-filled table makes
 bugs look like tuning, PLAN-MAKEMON §4.6).  The queue, in dependency
-order (item 1 LANDED: `set_levltyp` + `mkfount` / `mksink` /
-`mkaltar` / `mkgrave` in core.mklev, `fill_ordinary_room`'s
+order (the terrain item LANDED: `set_levltyp` + `mkfount` / `mksink`
+/ `mkaltar` / `mkgrave` in core.mklev, `fill_ordinary_room`'s
 fountain / sink / altar / grave rolls taken in C order, `Tile
 .altarmask` + the AM_* / `align2amask` block in core.monst_defs —
-the same writer Wave 5's `mkswamp` and the temple altar need):
+the writer Wave 5's `mkswamp` and the temple altar needed; the
+temple itself has landed with it, queue item 1):
 
 1. **Wave 5: special rooms** (PLAN-SPECIAL-ROOMS.md), in the plan's
-   own staging: the temple first (needs `src/priest.c` / `src/pray.c`
-   as core systems and the `Monster.epri` extra — makemon already
-   accepts-and-ignores MM_EPRI / MM_ESHK), then the zoo family
-   (`fill_zoo` / `courtmon` / `squadmon` / `morguemon` / `antholemon`
-   / `mkundead` / `mk_zoo_thronemon` become `mkclass` + `makemon`
-   fill-ins), the shops last (shk.c is billing before it is a room).
+   own staging: the temple is LANDED (core/priest.py + mktemple +
+   Epri + the #pray / #offer refusals + the entry hook; phase 1 of the
+   plan is the record of what landed and why); next is the zoo family
+   (`fill_zoo` in C order with the gold budget, `courtmon` /
+   `squadmon` / `morguemon` / `antholemon` / `mkundead` /
+   `mk_zoo_thronemon` become `mkclass` + `makemon` fill-ins, the
+   `fill_special_room` dispatcher in mkroom (C: sp_lev.c -- the trap
+   about its home is in the plan), `Room.needfill`, and the two
+   missing `_roll_special_room` conditions: the medusa cap faked as
+   `world.max_lev - 5` + the `G_GONE` pre-checks), then the swamp
+   (blocked on the engraving half of phase 0: `make_engr_at` /
+   `del_engr_at`), the shops last (shk.c is billing before it is a
+   room).
 2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),

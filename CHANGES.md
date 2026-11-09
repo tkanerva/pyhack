@@ -5,6 +5,87 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The temple: the priest system and the shrine (Wave 5, phase 1)
+
+**Why:** queue item 1 (PLAN-SPECIAL-ROOMS.md, staging "temple first
+because it is the cheapest complete one"): a generated level should be
+able to contain a temple with a shrine and a priest.  The terrain half
+(the previous session) made the altar writable; this session makes the
+room *mean* something.
+
+**The choices:**
+
+1. **The priest system is a module, not a subclass** (core/priest.py,
+   C: src/priest.c): `Epri` is an optional dataclass on Monster
+   (C: `mextra->epri`, mextra.h 95-106), allocated by makemon's
+   MM_EPRI -- the C newepri block, so the flag finally does work
+   (MM_ESHK / MM_EDOG / MM_EMIN / MM_EGD stay accepted-and-ignored
+   until their systems), and `priestini()` fills it.  One `Monster`
+   type stays true (the same reason the hero is a Monster).
+2. **`priestini` is C's, draw for draw** (priest.c 220-272): the
+   1-square ring in decl.c's xdir/ydir order with `si = rn2(N_DIRS)`,
+   the `pm_good_location` test reduced to in-bounds + SPACE_POS (C's
+   DRY half of is_ok_location, sp_lev.c -- faithfully accepting the
+   furniture next to the shrine), the rloc() insurance (enexto),
+   `makemon(PM_ALIGNED_CLERIC, MM_EPRI, in_mklev=True)`, then
+   shroom / shralign (read off the altar *before* mktemple sets
+   AM_SHRINE, C's order) / shrpos / shrlevel, mpeaceful, ispriest,
+   set_malign, and the 2-4 spellbooks (`rn1(3, 2)`, mkobj's
+   SPBOOK_no_NOVEL through the addinv single writer).  Named skips,
+   each in the docstrings: the robe tail (PLAN-MAKEMON.md phase E --
+   its rn2(2) roll is NOT taken), mon_learns_traps (no per-monster
+   trap knowledge), the emin tail of "a cleric without MM_EPRI" (no
+   emin in pyhack).
+3. **`mktemple` keeps C's order and the temple stocks inline**
+   (mkroom.c 607-630): `pick_room(TRUE)` -> rtype -> shrine_pos ->
+   ALTAR (through the sanctioned set_levltyp; C writes levl[]
+   directly, the mutator has no side effect on an ALTAR destination) ->
+   induced_align(80) -> priestini -> `|= AM_SHRINE` ->
+   flags.has_temple.  Unlike the zoo family / shop, no needfill: C's
+   mktemple stocks everything itself, so fill_special_room (phase 2)
+   will only carry its flag.
+4. **`induced_align` lives with its only caller** (core/priest.py; C:
+   dungeon.c 2010-2025): no special levels and no dungeon topology in
+   pyhack, so the two flag tests short-circuit and the answer is
+   always the temperate-dungeon roll, `rn2(3) - 1` -> align2amask
+   (one draw; C would draw two rn2(100)s only against set flags).
+5. **The entry message is a hook, and the hook is C's**
+   (core.step._room_entry; C: the spoteffects() -> check_special_room()
+   half of a hero move, hack.c): crossing a TEMPLE room boundary fires
+   `intemple` once (the boundary crossing stands in for C's u.urooms /
+   u.uentered bookkeeping; the epri pacing timers are carried and
+   never ticked, plan §5.2).  `intemple` is the reduced port:
+   "Pilgrim, you enter a sacred/desecrated place!" + the peace /
+   forbidding feeling (co-alignment of `World.hero_align` and
+   epri.shralign; the ualign.record halves never trip at 0), the
+   untended eerie lines (C's rn2(4)) and the 1-in-5 hostile ghost that
+   appears next to the hero (C's makemon at the hero's square IS the
+   enexto path -- "next to you" for free); the intone passage, the
+   Sanctum half and the nomul(-3) are named skips.
+6. **`#pray` / `#offer` are real commands that refuse** (PrayCommand /
+   OfferCommand; C: do_extcmd -> dopray / doffer, src/pray.c): a turn
+   is spent, the answer is C's own misaligned-altar line ("You feel
+   you should not do that here."), and the docstrings name pray.c --
+   the plan's "refused with a 'not yet' line, the C provenance in the
+   docstring".
+7. **Rendering: the priest is the human glyph, and the human glyph is
+   `@`** (defsym.h MONSYM(53, '@', HUMAN, S_HUMAN): the same character
+   as the hero -- the console legend now says "@ = Hero (or Priest)"
+   and gained the altar's `_`; the display port already had the
+   ALTAR -> S_altar branch, so no glyph-space change).
+8. **The special-room roll now carries its level**
+   (mklev._roll_special_room: world / lev / the level's traps through
+   do_mkroom -> mktemple), so a lazily generated level's temple is
+   stocked on the level it belongs to; the shop / swamp branches
+   still raise (STUBs), which is why the game path keeps
+   specials=False.
+
+mypy clean over 95 files, flake8 clean, 1231 tests green (12 new in
+tests/test_priest.py); the demo's pinned seeds, layouts and messages
+are unchanged (the demo generator never calls makelevel with
+specials=True, and the room-entry hook draws nothing for a level with
+no rooms).
+
 ## The sanctioned terrain mutator, and the room furniture rolls
 
 **Why:** `fill_ordinary_room`'s object half stopped at gold and the

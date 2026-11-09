@@ -4,6 +4,7 @@ Everything in this module is plain data.  There is no I/O and no
 gameplay logic here -- behaviour lives in core.rules, core.step and the
 system modules (traps, zap, potions, spells, vision).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ Pos = Tuple[int, int]
 # contracts.py, trap.py and zap.py)
 # ============================================================
 
+
 class TrapType(Enum):
     PIT = auto()
     SPIKED_PIT = auto()
@@ -52,7 +54,7 @@ class TrapType(Enum):
 
 
 class DamageType(Enum):
-    MELEE = auto()          # new: plain physical damage (resisted by nobody)
+    MELEE = auto()  # new: plain physical damage (resisted by nobody)
     MAGIC_MISSILE = auto()
     FIRE = auto()
     COLD = auto()
@@ -62,7 +64,9 @@ class DamageType(Enum):
     POISON = auto()
     ACID = auto()
     CANCELLATION = auto()
-    STARVING = auto()       # new: C done(STARVING) / done(CHOKING) killers ("starvation" / "Choked on ..."); DeathEvent.by keeps them distinct
+    STARVING = (
+        auto()
+    )  # new: C done(STARVING) / done(CHOKING) killers ("starvation" / "Choked on ..."); DeathEvent.by keeps them distinct
 
 
 class ObjectType(Enum):
@@ -124,6 +128,7 @@ class ScrollType(Enum):
     armor, remove curse, teleportation) -- the rest are STUBs that
     raise NotImplementedError until their machinery is ported.
     SCR_MAIL is compiled out, as in core.objects."""
+
     ENCHANT_ARMOR = auto()
     DESTROY_ARMOR = auto()
     CONFUSE_MONSTER = auto()
@@ -166,6 +171,7 @@ class HungerState(IntEnum):
     exactly) -- the hero's hunger state `u.uhs`, computed by the
     thresholds in core.hunger.newuhs (src/eat.c) and shown on the
     status line (the HU_STAT texts, C botl.c)."""
+
     SATIATED = 0
     NOT_HUNGRY = 1
     HUNGRY = 2
@@ -196,17 +202,18 @@ class ZapEffect(Enum):
     invisible, light, ...) are absent by design: each lands with the
     machinery it needs (doors, monster speed, invisibility, ...).
     """
-    FIRE = auto()             # C: ZT_FIRE (WAN_FIRE; no C spell -- fireball is area)
-    COLD = auto()             # C: ZT_COLD (WAN_COLD + SPE_CONE_OF_COLD)
-    LIGHTNING = auto()        # C: ZT_LIGHTNING (WAN_LIGHTNING + the 3.x lightning spell)
-    MAGIC = auto()            # C: ZT_MAGIC_MISSILE (SPE_MAGIC_MISSILE + WAN_MAGIC_MISSILE)
-    STRIKING = auto()         # C: bhitm WAN_STRIKING -> SPE_FORCE_BOLT (zap_punch, d(2,12))
-    SLEEP = auto()            # C: ZT_SLEEP (WAN_SLEEP + SPE_SLEEP)
-    DEATH = auto()            # C: ZT_DEATH (WAN_DEATH + SPE_FINGER_OF_DEATH)
-    POLYMORPH = auto()        # C: bhitm WAN_POLYMORPH + SPE_POLYMORPH
-    CANCELLATION = auto()     # C: bhitm WAN_CANCELLATION + SPE_CANCELLATION
-    TELEPORT = auto()         # C: bhitm WAN_TELEPORTATION + SPE_TELEPORT_AWAY
-    UNDEAD_TURNING = auto()   # C: bhitm WAN_UNDEAD_TURNING + SPE_TURN_UNDEAD
+
+    FIRE = auto()  # C: ZT_FIRE (WAN_FIRE; no C spell -- fireball is area)
+    COLD = auto()  # C: ZT_COLD (WAN_COLD + SPE_CONE_OF_COLD)
+    LIGHTNING = auto()  # C: ZT_LIGHTNING (WAN_LIGHTNING + the 3.x lightning spell)
+    MAGIC = auto()  # C: ZT_MAGIC_MISSILE (SPE_MAGIC_MISSILE + WAN_MAGIC_MISSILE)
+    STRIKING = auto()  # C: bhitm WAN_STRIKING -> SPE_FORCE_BOLT (zap_punch, d(2,12))
+    SLEEP = auto()  # C: ZT_SLEEP (WAN_SLEEP + SPE_SLEEP)
+    DEATH = auto()  # C: ZT_DEATH (WAN_DEATH + SPE_FINGER_OF_DEATH)
+    POLYMORPH = auto()  # C: bhitm WAN_POLYMORPH + SPE_POLYMORPH
+    CANCELLATION = auto()  # C: bhitm WAN_CANCELLATION + SPE_CANCELLATION
+    TELEPORT = auto()  # C: bhitm WAN_TELEPORTATION + SPE_TELEPORT_AWAY
+    UNDEAD_TURNING = auto()  # C: bhitm WAN_UNDEAD_TURNING + SPE_TURN_UNDEAD
 
 
 class Direction(Enum):
@@ -235,33 +242,35 @@ class Direction(Enum):
 # and neither owns it.  The C names are kept as module aliases so a call
 # site reads like the C it came from.
 
+
 class MmFlags(IntFlag):
     """Monster-creation / placement flags (C: the MM_* and GP_* bits)."""
-    NO_MINVENT = 0x00000001       # suppress minvent when creating
-    NOWAIT = 0x00000002           # don't set STRAT_WAITMASK flags
-    NOCOUNTBIRTH = 0x00000004     # don't incr the born count (revival)
-    IGNOREWATER = 0x00000008      # ignore water when positioning
-    ADJACENTOK = 0x00000010       # an adjacent square is good enough
-    ANGRY = 0x00000020            # created angry
-    NONAME = 0x00000040           # not christened
-    EGD = 0x00000080              # add egd structure
-    EPRI = 0x00000100             # add epri structure
-    ESHK = 0x00000200             # add eshk structure
-    EMIN = 0x00000400             # add emin structure
-    EDOG = 0x00000800             # add edog structure
-    ASLEEP = 0x00001000           # generated asleep
-    NOGRP = 0x00002000            # suppress monster groups
-    NOTAIL = 0x00004000           # a long worm gets no tail
-    MALE = 0x00008000             # male variation
-    FEMALE = 0x00010000           # female variation
-    NOMSG = 0x00020000            # no appear message
-    NOEXCLAM = 0x00040000         # sedate "appears." message
-    IGNORELAVA = 0x00080000       # ignore lava when positioning
-    MINVIS = 0x00100000           # invisible (wizard mode)
-    ALLOW_XY = 0x00200000         # GP_: enexto() may answer <x,y> itself
-    ALLOW_U = 0x00400000          # GP_: don't reject the hero's square
-    CHECKSCARY = 0x00800000       # GP_: check onscary()
-    AVOID_MONPOS = 0x01000000     # GP_: never share a square with a monster
+
+    NO_MINVENT = 0x00000001  # suppress minvent when creating
+    NOWAIT = 0x00000002  # don't set STRAT_WAITMASK flags
+    NOCOUNTBIRTH = 0x00000004  # don't incr the born count (revival)
+    IGNOREWATER = 0x00000008  # ignore water when positioning
+    ADJACENTOK = 0x00000010  # an adjacent square is good enough
+    ANGRY = 0x00000020  # created angry
+    NONAME = 0x00000040  # not christened
+    EGD = 0x00000080  # add egd structure
+    EPRI = 0x00000100  # add epri structure
+    ESHK = 0x00000200  # add eshk structure
+    EMIN = 0x00000400  # add emin structure
+    EDOG = 0x00000800  # add edog structure
+    ASLEEP = 0x00001000  # generated asleep
+    NOGRP = 0x00002000  # suppress monster groups
+    NOTAIL = 0x00004000  # a long worm gets no tail
+    MALE = 0x00008000  # male variation
+    FEMALE = 0x00010000  # female variation
+    NOMSG = 0x00020000  # no appear message
+    NOEXCLAM = 0x00040000  # sedate "appears." message
+    IGNORELAVA = 0x00080000  # ignore lava when positioning
+    MINVIS = 0x00100000  # invisible (wizard mode)
+    ALLOW_XY = 0x00200000  # GP_: enexto() may answer <x,y> itself
+    ALLOW_U = 0x00400000  # GP_: don't reject the hero's square
+    CHECKSCARY = 0x00800000  # GP_: check onscary()
+    AVOID_MONPOS = 0x01000000  # GP_: never share a square with a monster
 
 
 NO_MM_FLAGS = MmFlags(0)
@@ -306,8 +315,10 @@ GP_AVOID_MONPOS = MmFlags.AVOID_MONPOS
 # be ported onto this same grid.  Until then the demo level is: STONE
 # boundary ring, ROOM floor, a few scattered STONE obstacles.
 
+
 class TerrainType(IntEnum):
     """Level location types (C: levl_typ_types, rm.h)."""
+
     STONE = 0
     VWALL = 1
     HWALL = 2
@@ -352,11 +363,12 @@ class TerrainType(IntEnum):
 
 class DoorMask(IntFlag):
     """Door state bits (C: rm.flags doormask overloads, rm.h)."""
-    BROKEN = 0x1     # D_BROKEN
-    ISOPEN = 0x2     # D_ISOPEN
-    CLOSED = 0x4     # D_CLOSED
-    LOCKED = 0x8     # D_LOCKED
-    TRAPPED = 0x10   # D_TRAPPED
+
+    BROKEN = 0x1  # D_BROKEN
+    ISOPEN = 0x2  # D_ISOPEN
+    CLOSED = 0x4  # D_CLOSED
+    LOCKED = 0x8  # D_LOCKED
+    TRAPPED = 0x10  # D_TRAPPED
 
 
 def is_wall(typ: TerrainType) -> bool:
@@ -434,7 +446,7 @@ def is_lava(typ: TerrainType) -> bool:
 # C: rm.h -- the levl[x][y].ladder mask of a STAIRS tile: which way
 # the staircase goes.  A STAIRS tile with stair_dir == 0 is a bug;
 # worldgen always sets it (PLAN-STAIRS.md decision 1).
-STAIR_UP = 1    # C: LA_UP
+STAIR_UP = 1  # C: LA_UP
 STAIR_DOWN = 2  # C: LA_DOWN
 
 
@@ -449,8 +461,8 @@ STAIR_DOWN = 2  # C: LA_DOWN
 # the 6-bit rm.roomno bitfield), and the three magic values below are
 # the C NO_ROOM / SHARED / ROOMOFFSET exactly as mkroom.h spells them.
 
-NO_ROOM = 0     # C: NO_ROOM -- no room owns this square
-SHARED = 1      # C: SHARED -- a boundary square two rooms share
+NO_ROOM = 0  # C: NO_ROOM -- no room owns this square
+SHARED = 1  # C: SHARED -- a boundary square two rooms share
 ROOMOFFSET = 3  # roomno - ROOMOFFSET == the Map.rooms[] index
 
 MAXNROFROOMS = 40  # C: global.h
@@ -465,21 +477,22 @@ class RoomType(IntEnum):
     shknam.c), which is not ported -- the demo generator never makes
     one (core.mkroom.do_mkroom is a STUB there).
     """
-    OROOM = 0       # ordinary room
-    THEMEROOM = 1   # like OROOM, but never converted to a special room
-    COURT = 2       # contains a throne
-    SWAMP = 3       # contains pools
-    VAULT = 4       # detached room, usually reached by teleport
-    BEEHIVE = 5     # killer bees and royal jelly
-    MORGUE = 6      # corpses, undead, graves
-    BARRACKS = 7    # soldiers and their gear
-    ZOO = 8         # floor covered with treasure and monsters
-    DELPHI = 9      # the Oracle and peripherals
-    TEMPLE = 10     # a shrine (altar attended by a priest[ess])
+
+    OROOM = 0  # ordinary room
+    THEMEROOM = 1  # like OROOM, but never converted to a special room
+    COURT = 2  # contains a throne
+    SWAMP = 3  # contains pools
+    VAULT = 4  # detached room, usually reached by teleport
+    BEEHIVE = 5  # killer bees and royal jelly
+    MORGUE = 6  # corpses, undead, graves
+    BARRACKS = 7  # soldiers and their gear
+    ZOO = 8  # floor covered with treasure and monsters
+    DELPHI = 9  # the Oracle and peripherals
+    TEMPLE = 10  # a shrine (altar attended by a priest[ess])
     LEPREHALL = 11  # leprechaun hall
-    COCKNEST = 12   # cockatrice nest
-    ANTHOLE = 13    # ants
-    SHOPBASE = 14   # everything from here up is a shop
+    COCKNEST = 12  # cockatrice nest
+    ANTHOLE = 13  # ants
+    SHOPBASE = 14  # everything from here up is a shop
     ARMORSHOP = 15
     SCROLLSHOP = 16
     POTIONSHOP = 17
@@ -522,6 +535,7 @@ class Room:
     - ``needfill`` (mkroom.h: a sp_lev special-level flag) is not
       carried: the demo generator fills every OROOM.
     """
+
     lx: int
     ly: int
     hx: int
@@ -562,6 +576,7 @@ class LevelFlags:
     """The level-wide flags of C's ``svl.level.flags`` (struct level_flags,
     decl.h), reduced to the ones the ported generators and systems set.
     """
+
     nfountains: int = 0
     nsinks: int = 0
     has_shop: bool = False
@@ -591,6 +606,7 @@ class Tile:
     for ALTAR tiles (the C `altarmask` overload of the flags field);
     stair_dir only for STAIRS tiles.
     """
+
     typ: TerrainType = TerrainType.ROOM
     door_mask: DoorMask = DoorMask(0)
     # the staircase direction of a STAIRS tile (C: levl[x][y].ladder,
@@ -637,8 +653,9 @@ class Tile:
     def is_door_open(self) -> bool:
         """A door is passable unless closed/locked/trapped (C: the
         doormask tests in does_block() and the movement code)."""
-        return not (self.door_mask
-                    & (DoorMask.CLOSED | DoorMask.LOCKED | DoorMask.TRAPPED))
+        return not (
+            self.door_mask & (DoorMask.CLOSED | DoorMask.LOCKED | DoorMask.TRAPPED)
+        )
 
 
 class Map:
@@ -753,6 +770,7 @@ class Stairway:
     u_traversed, kept for C fidelity: it feeds C's
     stairs_description() branch text, which the demo doesn't have.
     """
+
     pos: Pos
     up: bool
     traversed: bool = False
@@ -761,6 +779,7 @@ class Stairway:
 # ============================================================
 # Items
 # ============================================================
+
 
 @dataclass
 class Item:
@@ -781,6 +800,7 @@ class Item:
     the parent (the reader is core.mkobj.add_to_container, the only
     writer besides delete_contents).
     """
+
     id: str
     otype: ObjectType
     name: str
@@ -793,8 +813,8 @@ class Item:
     invlet: str = ""
     blessed: bool = False
     cursed: bool = False
-    pos: Optional[Pos] = None          # where it lies on the floor, if anywhere
-    carrier: Optional[str] = None      # id of the monster carrying it, if any
+    pos: Optional[Pos] = None  # where it lies on the floor, if anywhere
+    carrier: Optional[str] = None  # id of the monster carrying it, if any
     # the dungeon level the item is on (see Monster.lev); a carried
     # item keeps its carrier's level
     lev: int = 1
@@ -884,16 +904,42 @@ MAXULEV = 30
 
 
 @dataclass
+class Epri:
+    """The temple priest extra (C: struct epri, mextra.h 95-106).
+
+    Allocated by makemon()'s MM_EPRI (the C newepri() half) and filled
+    by core.priest.priestini; every other monster has ``Monster.epri``
+    None.  ``shroom`` is the temple's room number (C stores
+    ``sroom - svr.rooms + ROOMOFFSET``); ``shrlevel`` is the level the
+    shrine stands on (C's d_level reduced to a level number: pyhack
+    has one dungeon).  The message-pacing timers and
+    ``cheapskate_count`` are carried as fields and never ticked
+    (PLAN-SPECIAL-ROOMS.md §5.2: the priest_talk / intemple pacing
+    economy is not ported).
+    """
+
+    shralign: int = A_NEUTRAL  # the alignment of the priest's shrine
+    shroom: int = NO_ROOM  # the temple room's room number
+    shrpos: Pos = (0, 0)  # the shrine (the blessed altar) square
+    shrlevel: int = 1  # the level the shrine stands on
+    cheapskate_count: int = 0  # C: the cheapskate donations
+    intone_time: int = 0  # C: entry-message pacing (never ticked)
+    enter_time: int = 0  # C: entry-message pacing (never ticked)
+    hostile_time: int = 0  # C: forbidding-feeling pacing (never)
+    peaceful_time: int = 0  # C: sense-of-peace pacing (never)
+
+
+@dataclass
 class Monster:
     id: str
     name: str
     pos: Pos
     hp: int
     max_hp: int
-    ac: int                    # BASE (body) armor class (C: mons[].ac).
+    ac: int  # BASE (body) armor class (C: mons[].ac).
     # The effective AC is computed, never cached: core.worn.uac()
     # subtracts the worn gear (the find_ac computation, PLAN-ARMOR.md).
-    damage: int = 2            # melee damage = 1d`damage`
+    damage: int = 2  # melee damage = 1d`damage`
     alive: bool = True
     is_hero: bool = False
     # the dungeon level the actor is on (C: the per-level monster
@@ -905,17 +951,17 @@ class Monster:
     # None for the flat-stat demo monsters (they use the simple melee
     # path); set for monsters that go through the C-port systems
     # (mhitu, ...)
-    m_lev: int = 0             # the monster INSTANCE level (C: mtmp->m_lev):
+    m_lev: int = 0  # the monster INSTANCE level (C: mtmp->m_lev):
     # pinned to mdata.mlevel at spawn (PLAN-EXPERIENCE.md decision 2; the
     # C adj_lev roll lands with the makemon port); the kill-XP formula's
     # 1 + m_lev^2 and the per-m_lev bonuses read it.  0 for the hero and
     # the flat-stat monsters.
-    sleeping: int = 0          # turns of sleep remaining
-    stuck: int = 0             # turns of stuck remaining (web / pit)
-    poisoned: int = 0          # turns of poison remaining
-    confused: int = 0          # turns of confusion remaining
-    blind: int = 0             # turns of blindness remaining
-    hallucinating: int = 0     # turns of hallucinating remaining
+    sleeping: int = 0  # turns of sleep remaining
+    stuck: int = 0  # turns of stuck remaining (web / pit)
+    poisoned: int = 0  # turns of poison remaining
+    confused: int = 0  # turns of confusion remaining
+    blind: int = 0  # turns of blindness remaining
+    hallucinating: int = 0  # turns of hallucinating remaining
     # hunger (C: you.h u.uhunger / u.uhs -- src/eat.c).  The gauge is
     # 0..2000 (start 900, the init_uhunger value; negative = the
     # starving deficit); uhs is the computed HungerState.  fainted is
@@ -935,24 +981,24 @@ class Monster:
     # hero combat state (the demo's weapon subset; see core.uhitm and
     # core.weapon): the hero wields a starting weapon, and its fixed
     # abilities feed the to-hit / damage bonuses
-    wielded: Optional[str] = None    # id of the wielded item (C: uwep)
-    ulevel: int = 1                  # hero level (C: u.ulevel; the XP
+    wielded: Optional[str] = None  # id of the wielded item (C: uwep)
+    ulevel: int = 1  # hero level (C: u.ulevel; the XP
     # system levels it up / losexp() drains it)
-    uexp: int = 0                    # XP toward the next level (C: u.uexp)
-    urexp: int = 0                   # XP for the score (C: u.urexp; the
+    uexp: int = 0  # XP toward the next level (C: u.uexp)
+    urexp: int = 0  # XP for the score (C: u.urexp; the
     # 4*exper + rexp half of more_experienced; no score system yet)
-    ulevelmax: int = 1               # highest level ever reached (C:
+    ulevelmax: int = 1  # highest level ever reached (C:
     # u.ulevelmax; the "back" half of the welcome message)
-    ulevelpeak: int = 1              # highest level (C: u.ulevelpeak)
-    ustr: int = 12                   # strength (fixed; no STR18)
-    ucon: int = 12                   # constitution (C: A_CON base)
-    udex: int = 12                   # dexterity (neutral: no bonus swing)
-    uwis: int = 12                   # wisdom (fixed; C: the A_WIS half of
+    ulevelpeak: int = 1  # highest level (C: u.ulevelpeak)
+    ustr: int = 12  # strength (fixed; no STR18)
+    ucon: int = 12  # constitution (C: A_CON base)
+    udex: int = 12  # dexterity (neutral: no bonus swing)
+    uwis: int = 12  # wisdom (fixed; C: the A_WIS half of
     # newpw() / regen_pw() in core.energy)
-    uint: int = 15                   # intelligence (fixed; C: the A_INT half;
+    uint: int = 15  # intelligence (fixed; C: the A_INT half;
     # the Wizard role's starting INT feeds the spell formulas in
     # core.spells)
-    ucha: int = 12                   # charisma (C: A_CHA base; the
+    ucha: int = 12  # charisma (C: A_CHA base; the
     # RIN_ADORNMENT ring adjusts it -- core.rules.current_ability)
     # NOTE: the abilities a worn ring changes (RIN_GAIN_STRENGTH /
     # RIN_GAIN_CONSTITUTION / RIN_ADORNMENT) are COMPUTED, never cached:
@@ -1006,11 +1052,23 @@ class Monster:
     # potions).  The worn-gear contribution is computed, never stored
     # (core.props.worn_properties / has_property).
     intrinsics: "set[Prop]" = field(default_factory=set)
+    # --- the mextra halves (PLAN-SPECIAL-ROOMS.md §2.1) ---
+    # the priest extra (C: mextra->epri via newepri): allocated by
+    # makemon()'s MM_EPRI and filled by core.priest.priestini; None for
+    # every monster that is not a priest candidate
+    epri: Optional[Epri] = None
+    # C: struct monst's ispriest / isshk booleans -- the flags the
+    # naming, movement and shop code reads.  A monster can carry the
+    # epri extra without being a priest yet: priestini() sets the flag
+    # (C does the same, after the newepri of makemon)
+    ispriest: bool = False
+    isshk: bool = False
 
 
 # ============================================================
 # Traps
 # ============================================================
+
 
 @dataclass
 class Trap:
@@ -1027,6 +1085,7 @@ class Trap:
 # ============================================================
 # World -- the single state object
 # ============================================================
+
 
 @dataclass
 class World:
@@ -1066,7 +1125,8 @@ class World:
     # the description shuffle does NOT perturb a seeded world's layout
     # draw sequence (the demo's pinned draws stay put).
     obj_tables: "ObjTables" = field(
-        default_factory=lambda: ObjTables(Rng(b"pyhack-objtables")))
+        default_factory=lambda: ObjTables(Rng(b"pyhack-objtables"))
+    )
     # the hero's running long-duration task (C: go.occupation +
     # go.occtxt, the set_occupation mechanism): a generator whose
     # frame holds the task state (PLAN-OCCUPATION.md); None when the
@@ -1158,5 +1218,6 @@ class World:
         """Items lying on `pos` on THIS level (C: the
         svl.level.objects[x][y] chain; the lev filter keeps other
         levels' floor items out)."""
-        return [it for it in self.items.values()
-                if it.lev == self.lev and it.pos == pos]
+        return [
+            it for it in self.items.values() if it.lev == self.lev and it.pos == pos
+        ]

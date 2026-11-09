@@ -55,7 +55,8 @@ STUBs (announced where they are, never silently skipped):
     placed.
   - makeniche()'s treasure (the teleportation scroll, the random
     object, the iron bars + corpse, the dungeon branch): no mkobj.
-  - the shop / temple / zoo stocking: see core.mkroom.
+  - the shop / zoo / swamp stocking: see core.mkroom (the temple is in:
+    core.mkroom.mktemple + core.priest, PLAN-SPECIAL-ROOMS.md phase 1).
 
 Simplifications (documented, not bugs):
 
@@ -90,15 +91,34 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from .mkmap import litstate_rnd
-from .mkroom import (do_mkroom, has_dnstairs, has_upstairs, occupied,
-                     somexyspace)
+from .mkroom import do_mkroom, has_dnstairs, has_upstairs, occupied, somexyspace
 from .monst_defs import align2amask
-from .types import (LevelFlags, MAXNROFROOMS, ROOMOFFSET, SHARED, DoorMask,
-                    Map, Pos, Room, RoomType, STAIR_DOWN, STAIR_UP, Stairway,
-                    TerrainType, Tile, Trap, TrapType, World, is_door,
-                    is_furniture, is_lava, is_obstructed, is_pool, is_room,
-                    is_wall)
-
+from .types import (
+    LevelFlags,
+    MAXNROFROOMS,
+    ROOMOFFSET,
+    SHARED,
+    DoorMask,
+    Map,
+    Pos,
+    Room,
+    RoomType,
+    STAIR_DOWN,
+    STAIR_UP,
+    Stairway,
+    TerrainType,
+    Tile,
+    Trap,
+    TrapType,
+    World,
+    is_door,
+    is_furniture,
+    is_lava,
+    is_obstructed,
+    is_pool,
+    is_room,
+    is_wall,
+)
 
 # C: sp_lev.c -- the minimum distance kept between a room and anything
 # else / the level edge, and the alignment codes of create_room().
@@ -127,17 +147,23 @@ _DIR_180 = {DIR_N: DIR_S, DIR_S: DIR_N, DIR_E: DIR_W, DIR_W: DIR_E}
 # The free-rectangle manager (C: src/rect.c)
 # ============================================================
 
+
 @dataclass
 class Rect:
     """C: struct NhRect -- an inclusive rectangle."""
+
     lx: int
     ly: int
     hx: int
     hy: int
 
     def contains(self, other: "Rect") -> bool:
-        return (other.lx >= self.lx and other.ly >= self.ly
-                and other.hx <= self.hx and other.hy <= self.hy)
+        return (
+            other.lx >= self.lx
+            and other.ly >= self.ly
+            and other.hx <= self.hx
+            and other.hy <= self.hy
+        )
 
 
 class RectManager:
@@ -154,8 +180,7 @@ class RectManager:
     def __init__(self, map_: Map):
         self.width = map_.width
         self.height = map_.height
-        self.rects: List[Rect] = [Rect(0, 0, map_.width - 1,
-                                       map_.height - 1)]
+        self.rects: List[Rect] = [Rect(0, 0, map_.width - 1, map_.height - 1)]
 
     def rnd_rect(self, rng) -> Optional[Rect]:
         """C: rect.c#rnd_rect -- some free rectangle, or None when the
@@ -202,17 +227,19 @@ class RectManager:
             inter = _intersect(rect, r2)
             if inter is not None:
                 self.split_rects(rect, inter)
-        if r2.ly - old_r.ly - 1 > (
-                2 * YLIM if old_r.hy < self.height - 1 else YLIM + 1) + 4:
+        if (
+            r2.ly - old_r.ly - 1
+            > (2 * YLIM if old_r.hy < self.height - 1 else YLIM + 1) + 4
+        ):
             self.add_rect(Rect(old_r.lx, old_r.ly, old_r.hx, r2.ly - 2))
-        if r2.lx - old_r.lx - 1 > (
-                2 * XLIM if old_r.hx < self.width - 1 else XLIM + 1) + 4:
+        if (
+            r2.lx - old_r.lx - 1
+            > (2 * XLIM if old_r.hx < self.width - 1 else XLIM + 1) + 4
+        ):
             self.add_rect(Rect(old_r.lx, old_r.ly, r2.lx - 2, old_r.hy))
-        if old_r.hy - r2.hy - 1 > (
-                2 * YLIM if old_r.ly > 0 else YLIM + 1) + 4:
+        if old_r.hy - r2.hy - 1 > (2 * YLIM if old_r.ly > 0 else YLIM + 1) + 4:
             self.add_rect(Rect(old_r.lx, r2.hy + 2, old_r.hx, old_r.hy))
-        if old_r.hx - r2.hx - 1 > (
-                2 * XLIM if old_r.lx > 0 else XLIM + 1) + 4:
+        if old_r.hx - r2.hx - 1 > (2 * XLIM if old_r.lx > 0 else XLIM + 1) + 4:
             self.add_rect(Rect(r2.hx + 2, old_r.ly, old_r.hx, old_r.hy))
 
 
@@ -220,8 +247,9 @@ def _intersect(r1: Rect, r2: Rect) -> Optional[Rect]:
     """C: rect.c#intersect -- the overlap of two rectangles, if any."""
     if r2.lx > r1.hx or r2.ly > r1.hy or r2.hx < r1.lx or r2.hy < r1.ly:
         return None
-    out = Rect(max(r2.lx, r1.lx), max(r2.ly, r1.ly),
-               min(r2.hx, r1.hx), min(r2.hy, r1.hy))
+    out = Rect(
+        max(r2.lx, r1.lx), max(r2.ly, r1.ly), min(r2.hx, r1.hx), min(r2.hy, r1.hy)
+    )
     if out.lx > out.hx or out.ly > out.hy:
         return None
     return out
@@ -231,15 +259,18 @@ def _intersect(r1: Rect, r2: Rect) -> Optional[Rect]:
 # Rooms on the map (C: mklev.c do_room_or_subroom / add_room)
 # ============================================================
 
+
 def blank_map(width: int, height: int) -> Map:
     """A fresh all-STONE level (C: clear_level_structures() -- every
     location is stone, owned by no room, unlit)."""
-    return Map([[Tile(typ=TerrainType.STONE) for _ in range(width)]
-                for _ in range(height)])
+    return Map(
+        [[Tile(typ=TerrainType.STONE) for _ in range(width)] for _ in range(height)]
+    )
 
 
-def _set(map_: Map, x: int, y: int, typ: TerrainType,
-         horizontal: Optional[bool] = None) -> None:
+def _set(
+    map_: Map, x: int, y: int, typ: TerrainType, horizontal: Optional[bool] = None
+) -> None:
     """Write a terrain type, clamped to the level (the generators work
     on rectangles that may touch the edge)."""
     if not map_.in_bounds((x, y)):
@@ -250,9 +281,18 @@ def _set(map_: Map, x: int, y: int, typ: TerrainType,
         tile.horizontal = horizontal
 
 
-def do_room_or_subroom(map_: Map, room: Room, lowx: int, lowy: int,
-                       hix: int, hiy: int, lit: bool, rtype: RoomType,
-                       special: bool, whole_room: bool) -> None:
+def do_room_or_subroom(
+    map_: Map,
+    room: Room,
+    lowx: int,
+    lowy: int,
+    hix: int,
+    hiy: int,
+    lit: bool,
+    rtype: RoomType,
+    special: bool,
+    whole_room: bool,
+) -> None:
     """C: mklev.c#do_room_or_subroom -- record the room and paint it.
 
     `special` rooms are only recorded (their terrain is drawn by the
@@ -312,10 +352,17 @@ def do_room_or_subroom(map_: Map, room: Room, lowx: int, lowy: int,
         wallify_map(map_, lowx - 1, lowy - 1, hix + 1, hiy + 1)
 
 
-def add_room(map_: Map, lowx: int, lowy: int, hix: int, hiy: int,
-             lit: bool, rtype: RoomType = RoomType.OROOM,
-             special: bool = False,
-             smeq: Optional[List[int]] = None) -> Room:
+def add_room(
+    map_: Map,
+    lowx: int,
+    lowy: int,
+    hix: int,
+    hiy: int,
+    lit: bool,
+    rtype: RoomType = RoomType.OROOM,
+    special: bool = False,
+    smeq: Optional[List[int]] = None,
+) -> Room:
     """C: mklev.c#add_room -- append a room to the level.
 
     `smeq` is C's gs.smeq[] ("same corridor component"): an entry per
@@ -325,33 +372,48 @@ def add_room(map_: Map, lowx: int, lowy: int, hix: int, hiy: int,
     room = Room(lx=lowx, ly=lowy, hx=hix, hy=hiy)
     idx = len(map_.rooms)
     map_.rooms.append(room)
-    do_room_or_subroom(map_, room, lowx, lowy, hix, hiy, lit, rtype,
-                       special, True)
+    do_room_or_subroom(map_, room, lowx, lowy, hix, hiy, lit, rtype, special, True)
     room.roomnoidx = idx
     if smeq is not None:
         smeq.append(idx)
     return room
 
 
-def add_subroom(map_: Map, proom: Room, lowx: int, lowy: int, hix: int,
-                hiy: int, lit: bool, rtype: RoomType = RoomType.OROOM,
-                special: bool = False) -> Room:
+def add_subroom(
+    map_: Map,
+    proom: Room,
+    lowx: int,
+    lowy: int,
+    hix: int,
+    hiy: int,
+    lit: bool,
+    rtype: RoomType = RoomType.OROOM,
+    special: bool = False,
+) -> Room:
     """C: mklev.c#add_subroom -- a room inside a room (themed rooms,
     shops with a back room).  Nothing generates one yet; the geometry
     is here so sp_lev can."""
     room = Room(lx=lowx, ly=lowy, hx=hix, hy=hiy)
     idx = len(map_.subrooms)
     map_.subrooms.append(room)
-    do_room_or_subroom(map_, room, lowx, lowy, hix, hiy, lit, rtype,
-                       special, False)
+    do_room_or_subroom(map_, room, lowx, lowy, hix, hiy, lit, rtype, special, False)
     room.roomnoidx = idx
     proom.sbrooms.append(idx)
     return room
 
 
-def create_subroom(map_: Map, proom: Room, rng, depth: int, x: int = -1,
-                   y: int = -1, w: int = -1, h: int = -1,
-                   rtype: int = -1, rlit: int = 1) -> Optional[Room]:
+def create_subroom(
+    map_: Map,
+    proom: Room,
+    rng,
+    depth: int,
+    x: int = -1,
+    y: int = -1,
+    w: int = -1,
+    h: int = -1,
+    rtype: int = -1,
+    rlit: int = 1,
+) -> Optional[Room]:
     """C: sp_lev.c#create_subroom -- a subroom of `proom` with random
     position / size where the arguments are -1."""
     width = proom.hx - proom.lx + 1
@@ -377,9 +439,17 @@ def create_subroom(map_: Map, proom: Room, rng, depth: int, x: int = -1,
     if rtype == -1:
         rtype = int(RoomType.OROOM)
     lit = litstate_rnd(rng, rlit, depth)
-    return add_subroom(map_, proom, proom.lx + x, proom.ly + y,
-                       proom.lx + x + w - 1, proom.ly + y + h - 1,
-                       lit, RoomType(rtype), False)
+    return add_subroom(
+        map_,
+        proom,
+        proom.lx + x,
+        proom.ly + y,
+        proom.lx + x + w - 1,
+        proom.ly + y + h - 1,
+        lit,
+        RoomType(rtype),
+        False,
+    )
 
 
 def sort_rooms(map_: Map) -> None:
@@ -406,8 +476,10 @@ def sort_rooms(map_: Map) -> None:
 # Room placement (C: sp_lev.c check_room / create_room)
 # ============================================================
 
-def check_room(map_: Map, lowx: int, lowy: int, ddx: int, ddy: int,
-               rng) -> Optional[Tuple[int, int, int, int]]:
+
+def check_room(
+    map_: Map, lowx: int, lowy: int, ddx: int, ddy: int, rng
+) -> Optional[Tuple[int, int, int, int]]:
     """C: sp_lev.c#check_room -- is the (lowx, lowy) + (ddx, ddy) box
     clear of everything else?
 
@@ -460,11 +532,21 @@ def check_room(map_: Map, lowx: int, lowy: int, ddx: int, ddy: int,
     return lowx, lowy, hix - lowx, hiy - lowy
 
 
-def create_room(map_: Map, rects: RectManager, rng, depth: int,
-                x: int = -1, y: int = -1, w: int = -1, h: int = -1,
-                xal: int = -1, yal: int = -1, rtype: int = -1,
-                rlit: int = 1,
-                smeq: Optional[List[int]] = None) -> Optional[Room]:
+def create_room(
+    map_: Map,
+    rects: RectManager,
+    rng,
+    depth: int,
+    x: int = -1,
+    y: int = -1,
+    w: int = -1,
+    h: int = -1,
+    xal: int = -1,
+    yal: int = -1,
+    rtype: int = -1,
+    rlit: int = 1,
+    smeq: Optional[List[int]] = None,
+) -> Optional[Room]:
     """C: sp_lev.c#create_room -- make a room, all parameters random
     where they are -1.
 
@@ -497,23 +579,29 @@ def create_room(map_: Map, rects: RectManager, rng, depth: int,
                 dy = 2 + rng.rn2(4)
                 if dx * dy > 50:
                     dy = 50 // dx
-                xborder = 2 * XLIM if (lx > 0 and hx < width - 1) \
-                    else XLIM + 1
-                yborder = 2 * YLIM if (ly > 0 and hy < height - 1) \
-                    else YLIM + 1
+                xborder = 2 * XLIM if (lx > 0 and hx < width - 1) else XLIM + 1
+                yborder = 2 * YLIM if (ly > 0 and hy < height - 1) else YLIM + 1
                 if hx - lx < dx + 3 + xborder or hy - ly < dy + 3 + yborder:
                     cand = None
                 else:
                     xbase = lx if lx > 0 else 3
                     ybase = ly if ly > 0 else 2
-                    xabs = lx + (XLIM if lx > 0 else 3) + rng.rn2(
-                        hx - xbase - dx - xborder + 1)
-                    yabs = ly + (YLIM if ly > 0 else 2) + rng.rn2(
-                        hy - ybase - dy - yborder + 1)
-                    if (ly == 0 and hy >= height - 1
-                            and (not map_.rooms
-                                 or not rng.rn2(len(map_.rooms)))
-                            and yabs + dy > height // 2):
+                    xabs = (
+                        lx
+                        + (XLIM if lx > 0 else 3)
+                        + rng.rn2(hx - xbase - dx - xborder + 1)
+                    )
+                    yabs = (
+                        ly
+                        + (YLIM if ly > 0 else 2)
+                        + rng.rn2(hy - ybase - dy - yborder + 1)
+                    )
+                    if (
+                        ly == 0
+                        and hy >= height - 1
+                        and (not map_.rooms or not rng.rn2(len(map_.rooms)))
+                        and yabs + dy > height // 2
+                    ):
                         yabs = rng.rn1(3, 2)
                         if len(map_.rooms) < 4 and dy > 1:
                             dy -= 1
@@ -524,8 +612,7 @@ def create_room(map_: Map, rects: RectManager, rng, depth: int,
                         xabs, yabs, dx, dy = res
                         wtmp = dx + 1
                         htmp = dy + 1
-                        r2 = Rect(xabs - 1, yabs - 1, xabs + wtmp,
-                                  yabs + htmp)
+                        r2 = Rect(xabs - 1, yabs - 1, xabs + wtmp, yabs + htmp)
                         r1 = cand
         else:
             # only some parameters are random
@@ -559,8 +646,7 @@ def create_room(map_: Map, rects: RectManager, rng, depth: int,
                 yabs = height - htmp - 3
             if yabs < 2:
                 yabs = 2
-            r2 = Rect(xabs - 1, yabs - 1, xabs + wtmp + rndpos,
-                      yabs + htmp + rndpos)
+            r2 = Rect(xabs - 1, yabs - 1, xabs + wtmp + rndpos, yabs + htmp + rndpos)
             cand = rects.get_rect(r2)
             dx, dy = wtmp, htmp
             if cand is not None:
@@ -579,8 +665,17 @@ def create_room(map_: Map, rects: RectManager, rng, depth: int,
         # C: "creation of room failed?"
         return None
     rects.split_rects(r1, r2)
-    room = add_room(map_, xabs, yabs, xabs + wtmp - 1, yabs + htmp - 1,
-                    is_lit, RoomType(rtype), False, smeq)
+    room = add_room(
+        map_,
+        xabs,
+        yabs,
+        xabs + wtmp - 1,
+        yabs + htmp - 1,
+        is_lit,
+        RoomType(rtype),
+        False,
+        smeq,
+    )
     # Number the room now (C: sp_lev.c's lspo_room calls topologize()
     # right after creating a room -- "set roomno"; the classic path
     # only numbers the level in level_finalize_topology(), which runs
@@ -593,8 +688,7 @@ def create_room(map_: Map, rects: RectManager, rng, depth: int,
     return room
 
 
-def makerooms(map_: Map, rects: RectManager, rng, depth: int,
-              smeq: List[int]) -> None:
+def makerooms(map_: Map, rects: RectManager, rng, depth: int, smeq: List[int]) -> None:
     """C: mklev.c#makerooms -- fill the level with rooms.
 
     C first gives the dungeon's Lua themed-room script a chance on every
@@ -602,8 +696,7 @@ def makerooms(map_: Map, rects: RectManager, rng, depth: int,
     neither is ported (see the module docstring), so this is the plain
     `while there is free space: create_room()` loop.
     """
-    while len(map_.rooms) < MAXNROFROOMS - 1 \
-            and rects.rnd_rect(rng) is not None:
+    while len(map_.rooms) < MAXNROFROOMS - 1 and rects.rnd_rect(rng) is not None:
         if create_room(map_, rects, rng, depth, smeq=smeq) is None:
             break
 
@@ -611,6 +704,7 @@ def makerooms(map_: Map, rects: RectManager, rng, depth: int,
 # ============================================================
 # Doors (C: mklev.c bydoor / okdoor / dodoor / dosdoor / add_door)
 # ============================================================
+
 
 def bydoor(map_: Map, x: int, y: int) -> bool:
     """C: mklev.c#bydoor -- a door or secret door on a cardinal
@@ -631,8 +725,7 @@ def okdoor(map_: Map, x: int, y: int) -> bool:
     A vertical or horizontal wall (not a corner), with at least one
     open square next to it and no door already adjacent.
     """
-    if map_.tile_at((x, y)).typ not in (TerrainType.HWALL,
-                                        TerrainType.VWALL):
+    if map_.tile_at((x, y)).typ not in (TerrainType.HWALL, TerrainType.VWALL):
         return False
     if bydoor(map_, x, y):
         return False
@@ -664,8 +757,9 @@ def add_door(map_: Map, x: int, y: int, room: Room) -> None:
     map_.doors.append((x, y))
 
 
-def dosdoor(map_: Map, rng, depth: int, x: int, y: int, room: Room,
-            typ: TerrainType) -> None:
+def dosdoor(
+    map_: Map, rng, depth: int, x: int, y: int, room: Room, typ: TerrainType
+) -> None:
     """C: mklev.c#dosdoor -- make a door (or secret door) at x,y.
 
     The state is C's doormask lottery: 2/3 of doors are plain doorways,
@@ -691,8 +785,12 @@ def dosdoor(map_: Map, rng, depth: int, x: int, y: int, room: Room,
                 mask = DoorMask.LOCKED
             else:
                 mask = DoorMask.CLOSED
-            if mask != DoorMask.ISOPEN and not shdoor and depth >= 5 \
-                    and not rng.rn2(25):
+            if (
+                mask != DoorMask.ISOPEN
+                and not shdoor
+                and depth >= 5
+                and not rng.rn2(25)
+            ):
                 mask |= DoorMask.TRAPPED
         else:
             mask = DoorMask.ISOPEN if shdoor else DoorMask(0)  # D_NODOOR
@@ -717,37 +815,46 @@ def dosdoor(map_: Map, rng, depth: int, x: int, y: int, room: Room,
 
 def dodoor(map_: Map, rng, depth: int, x: int, y: int, room: Room) -> None:
     """C: mklev.c#dodoor -- a door, secret on the deeper levels."""
-    dosdoor(map_, rng, depth, x, y, room,
-            TerrainType.SDOOR if maybe_sdoor(rng, depth, 8)
-            else TerrainType.DOOR)
+    dosdoor(
+        map_,
+        rng,
+        depth,
+        x,
+        y,
+        room,
+        TerrainType.SDOOR if maybe_sdoor(rng, depth, 8) else TerrainType.DOOR,
+    )
 
 
 # ============================================================
 # Corridors (C: mklev.c finddpos / join / makecorridors)
 # ============================================================
 
-def good_rm_wall_doorpos(map_: Map, room: Room, x: int, y: int,
-                         direction: str) -> bool:
+
+def good_rm_wall_doorpos(map_: Map, room: Room, x: int, y: int, direction: str) -> bool:
     """C: mklev.c#good_rm_wall_doorpos -- is x,y a good door into
     `room`, looking *into* the room along `direction`?"""
     if not map_.in_bounds((x, y)) or not room.needjoining:
         return False
     typ = map_.tile_at((x, y)).typ
-    if typ not in (TerrainType.HWALL, TerrainType.VWALL) \
-            and not is_door(typ) and typ != TerrainType.SDOOR:
+    if (
+        typ not in (TerrainType.HWALL, TerrainType.VWALL)
+        and not is_door(typ)
+        and typ != TerrainType.SDOOR
+    ):
         return False
     if bydoor(map_, x, y):
         return False
     dx, dy = _DIR_VEC[direction]
     tx, ty = x + dx, y + dy
-    if not map_.in_bounds((tx, ty)) \
-            or is_obstructed(map_.tile_at((tx, ty)).typ):
+    if not map_.in_bounds((tx, ty)) or is_obstructed(map_.tile_at((tx, ty)).typ):
         return False
     return map_.tile_at((tx, ty)).roomno == map_.room_of(room)
 
 
-def finddpos_shift(map_: Map, room: Room, x: int, y: int,
-                   direction: str) -> Optional[Pos]:
+def finddpos_shift(
+    map_: Map, room: Room, x: int, y: int, direction: str
+) -> Optional[Pos]:
     """C: mklev.c#finddpos_shift -- walk from x,y towards the room until
     a good door spot turns up.
 
@@ -762,23 +869,22 @@ def finddpos_shift(map_: Map, room: Room, x: int, y: int,
     if not room.irregular:
         return None
     rx, ry = x, y
-    while map_.in_bounds((rx, ry)) \
-            and map_.tile_at((rx, ry)).typ in (TerrainType.STONE,
-                                               TerrainType.CORR):
+    while map_.in_bounds((rx, ry)) and map_.tile_at((rx, ry)).typ in (
+        TerrainType.STONE,
+        TerrainType.CORR,
+    ):
         rx += dx
         ry += dy
         if good_rm_wall_doorpos(map_, room, rx, ry, direction):
             return (rx, ry)
-        if map_.tile_at((rx, ry)).typ not in (TerrainType.STONE,
-                                              TerrainType.CORR):
+        if map_.tile_at((rx, ry)).typ not in (TerrainType.STONE, TerrainType.CORR):
             break
         if rx < room.lx or rx > room.hx or ry < room.ly or ry > room.hy:
             break
     return None
 
 
-def finddpos(map_: Map, room: Room, rng,
-             direction: str) -> Optional[Pos]:
+def finddpos(map_: Map, room: Room, rng, direction: str) -> Optional[Pos]:
     """C: mklev.c#finddpos -- a valid door position on the room's
     `direction` edge: 20 random tries, then an exhaustive scan."""
     if direction == DIR_N:
@@ -803,9 +909,16 @@ def finddpos(map_: Map, room: Room, rng,
     return None
 
 
-def dig_corridor(map_: Map, rng, depth: int, org: Pos, dest: Pos,
-                 nxcor: bool, ftyp: TerrainType,
-                 btyp: TerrainType) -> Tuple[bool, int]:
+def dig_corridor(
+    map_: Map,
+    rng,
+    depth: int,
+    org: Pos,
+    dest: Pos,
+    nxcor: bool,
+    ftyp: TerrainType,
+    btyp: TerrainType,
+) -> Tuple[bool, int]:
     """C: sp_lev.c#dig_corridor -- dig an L-shaped corridor from org to
     dest, one step at a time, turning when it has to.
 
@@ -818,9 +931,16 @@ def dig_corridor(map_: Map, rng, depth: int, org: Pos, dest: Pos,
     dx = dy = 0
     xx, yy = org
     tx, ty = dest
-    if (xx <= 0 or yy <= 0 or tx <= 0 or ty <= 0
-            or xx > map_.width - 1 or tx > map_.width - 1
-            or yy > map_.height - 1 or ty > map_.height - 1):
+    if (
+        xx <= 0
+        or yy <= 0
+        or tx <= 0
+        or ty <= 0
+        or xx > map_.width - 1
+        or tx > map_.width - 1
+        or yy > map_.height - 1
+        or ty > map_.height - 1
+    ):
         return False, 0
     if tx > xx:
         dx = 1
@@ -840,8 +960,7 @@ def dig_corridor(map_: Map, rng, depth: int, org: Pos, dest: Pos,
             return False, npoints
         xx += dx
         yy += dy
-        if (xx >= map_.width - 1 or xx <= 0 or yy <= 0
-                or yy >= map_.height - 1):
+        if xx >= map_.width - 1 or xx <= 0 or yy <= 0 or yy >= map_.height - 1:
             return False, npoints  # C: "impossible"
         tile = map_.tile_at((xx, yy))
         if tile.typ == btyp:
@@ -878,8 +997,9 @@ def dig_corridor(map_: Map, rng, depth: int, org: Pos, dest: Pos,
     return True, npoints
 
 
-def join(map_: Map, rng, depth: int, smeq: List[int], a: int, b: int,
-         nxcor: bool) -> None:
+def join(
+    map_: Map, rng, depth: int, smeq: List[int], a: int, b: int, nxcor: bool
+) -> None:
     """C: mklev.c#join -- connect rooms a and b with a corridor.
 
     The direction is decided by the relative position of the rooms, the
@@ -915,9 +1035,15 @@ def join(map_: Map, rng, depth: int, smeq: List[int], a: int, b: int,
     org = (xx + dx, yy + dy)
     dest = (tx, ty)
     dug, npoints = dig_corridor(
-        map_, rng, depth, org, dest, nxcor,
+        map_,
+        rng,
+        depth,
+        org,
+        dest,
+        nxcor,
         TerrainType.ROOM if map_.flags.arboreal else TerrainType.CORR,
-        TerrainType.STONE)
+        TerrainType.STONE,
+    )
     if npoints > 0 and (okdoor(map_, xx, yy) or not nxcor):
         dodoor(map_, rng, depth, xx, yy, croom)
     if not dug:
@@ -969,6 +1095,7 @@ def makecorridors(map_: Map, rng, depth: int, smeq: List[int]) -> None:
 # Niches (C: mklev.c place_niche / makeniche / make_niches)
 # ============================================================
 
+
 def cardinal_nextto_room(map_: Map, room: Room, x: int, y: int) -> bool:
     """C: mklev.c#cardinal_nextto_room -- is a cardinal neighbour
     inside `room` (and not a boundary square)?"""
@@ -1011,8 +1138,14 @@ def place_niche(map_: Map, room: Room, rng) -> Optional[Tuple[int, int, int]]:
     return (dy, xx, yy) if cardinal_nextto_room(map_, room, xx, yy) else None
 
 
-def makeniche(world: World, map_: Map, rng, depth: int, lev: int,
-              trap_type: Optional[TrapType] = None) -> None:
+def makeniche(
+    world: World,
+    map_: Map,
+    rng,
+    depth: int,
+    lev: int,
+    trap_type: Optional[TrapType] = None,
+) -> None:
     """C: mklev.c#makeniche -- an alcove behind a (secret) door in a
     room's wall, sometimes with a trap in it.
 
@@ -1046,9 +1179,15 @@ def makeniche(world: World, map_: Map, rng, depth: int, lev: int,
         else:
             niche.typ = TerrainType.CORR
             if rng.rn2(7):
-                dosdoor(map_, rng, depth, xx, yy, room,
-                        TerrainType.SDOOR if rng.rn2(5)
-                        else TerrainType.DOOR)
+                dosdoor(
+                    map_,
+                    rng,
+                    depth,
+                    xx,
+                    yy,
+                    room,
+                    TerrainType.SDOOR if rng.rn2(5) else TerrainType.DOOR,
+                )
             else:
                 # C: an inaccessible niche with a teleport scroll and
                 # a random object (plus sometimes iron bars and a
@@ -1057,8 +1196,7 @@ def makeniche(world: World, map_: Map, rng, depth: int, lev: int,
         return
 
 
-def make_niches(world: World, map_: Map, rng, depth: int,
-                lev: int) -> None:
+def make_niches(world: World, map_: Map, rng, depth: int, lev: int) -> None:
     """C: mklev.c#make_niches -- a random handful of niches, with the
     level-teleport and trapdoor specials on the deep levels.
 
@@ -1072,8 +1210,7 @@ def make_niches(world: World, map_: Map, rng, depth: int,
         ct -= 1
         if ltptr and not rng.rn2(6):
             ltptr = False
-            makeniche(world, map_, rng, depth, lev,
-                      TrapType.LEVEL_TELEPORTER)
+            makeniche(world, map_, rng, depth, lev, TrapType.LEVEL_TELEPORTER)
         elif vamp and not rng.rn2(6):
             vamp = False
             makeniche(world, map_, rng, depth, lev, TrapType.TRAPDOOR)
@@ -1090,6 +1227,7 @@ def makevtele(world: World, map_: Map, rng, depth: int, lev: int) -> None:
 # ============================================================
 # Level-wide housekeeping (C: mklev.c)
 # ============================================================
+
 
 def set_levltyp(map_: Map, x: int, y: int, newtyp: TerrainType) -> bool:
     """C: mkmaze.c#set_levltyp -- the sanctioned terrain mutator.
@@ -1126,8 +1264,9 @@ def set_levltyp(map_: Map, x: int, y: int, newtyp: TerrainType) -> bool:
     tile.typ = newtyp
     if is_lava(newtyp):
         tile.lit = True  # C: IS_LAVA(newtyp) -> levl[x][y].lit = 1
-    if (oldtyp == TerrainType.FOUNTAIN) != (newtyp == TerrainType.FOUNTAIN) \
-            or (oldtyp == TerrainType.SINK) != (newtyp == TerrainType.SINK):
+    if (oldtyp == TerrainType.FOUNTAIN) != (newtyp == TerrainType.FOUNTAIN) or (
+        oldtyp == TerrainType.SINK
+    ) != (newtyp == TerrainType.SINK):
         count_level_features(map_)
     return True
 
@@ -1203,10 +1342,13 @@ def wallify_map(map_: Map, x1: int, y1: int, x2: int, y2: int) -> None:
                 for xx in range(lo_xx, hi_xx + 1):
                     typ = map_.tiles[yy][xx].typ
                     if is_room(typ) or typ == TerrainType.CROSSWALL:
-                        _set(map_, x, y,
-                             TerrainType.HWALL if yy != y
-                             else TerrainType.VWALL,
-                             horizontal=yy != y)
+                        _set(
+                            map_,
+                            x,
+                            y,
+                            TerrainType.HWALL if yy != y else TerrainType.VWALL,
+                            horizontal=yy != y,
+                        )
                         done = True
                         break
                 if done:
@@ -1271,14 +1413,21 @@ def level_finalize_topology(map_: Map) -> None:
 # core.traps.TRAP_EFFECTS).  C's traptype_rnd() picks from the whole
 # trap.h table by depth; see mktrap().
 DEMO_TRAP_KINDS: Tuple[TrapType, ...] = (
-    TrapType.PIT, TrapType.SPIKED_PIT, TrapType.FIRE_TRAP,
-    TrapType.ARROW_TRAP, TrapType.DART_TRAP, TrapType.SLEEPING_GAS,
-    TrapType.TELEPORTATION, TrapType.WEB, TrapType.ANTI_MAGIC,
+    TrapType.PIT,
+    TrapType.SPIKED_PIT,
+    TrapType.FIRE_TRAP,
+    TrapType.ARROW_TRAP,
+    TrapType.DART_TRAP,
+    TrapType.SLEEPING_GAS,
+    TrapType.TELEPORTATION,
+    TrapType.WEB,
+    TrapType.ANTI_MAGIC,
 )
 
 
-def mktrap(world: World, rng, lev: int, depth: int, pos: Pos,
-           kind: Optional[TrapType] = None) -> Trap:
+def mktrap(
+    world: World, rng, lev: int, depth: int, pos: Pos, kind: Optional[TrapType] = None
+) -> Trap:
     """C: mklev.c#mktrap (the demo subset) -- place a trap.
 
     STUB: C's traptype_rnd() depth table (which trap types are allowed
@@ -1297,8 +1446,9 @@ def mktrap(world: World, rng, lev: int, depth: int, pos: Pos,
     return trap
 
 
-def _spawn_monster(world: World, map_: Map, rng, pos: Pos, lev: int,
-                   asleep: bool) -> None:
+def _spawn_monster(
+    world: World, map_: Map, rng, pos: Pos, lev: int, asleep: bool
+) -> None:
     """C: makemon() -- one monster from the real monster distribution.
 
     This is the call that replaced the three hand-tuned demo kinds
@@ -1320,12 +1470,10 @@ def _spawn_monster(world: World, map_: Map, rng, pos: Pos, lev: int,
         flags |= _Flags.ASLEEP
     # `map_` and not world.map: a lazy level is built while the hero
     # still stands on the previous one (PLAN-MKLEV.md decision 3)
-    makemon(world, rng, None, pos, flags, map_=map_, lev=lev,
-            in_mklev=True)
+    makemon(world, rng, None, pos, flags, map_=map_, lev=lev, in_mklev=True)
 
 
-def find_okay_roompos(map_: Map, traps: List[Trap], room: Room,
-                      rng) -> Optional[Pos]:
+def find_okay_roompos(map_: Map, traps: List[Trap], room: Room, rng) -> Optional[Pos]:
     """C: mklev.c#find_okay_roompos -- a free room square that is not by
     a door, up to 200 tries (the furniture placement point).
 
@@ -1400,8 +1548,9 @@ def make_grave(world: World, map_: Map, traps: List[Trap], pos: Pos) -> None:
     set_levltyp(map_, pos[0], pos[1], TerrainType.GRAVE)
 
 
-def mkgrave(world: World, map_: Map, traps: List[Trap], room: Room,
-            lev: int, rng) -> None:
+def mkgrave(
+    world: World, map_: Map, traps: List[Trap], room: Room, lev: int, rng
+) -> None:
     """C: mklev.c#mkgrave -- a grave in an ordinary room, sometimes with
     a bell and a buried load of cursed loot.
 
@@ -1412,8 +1561,15 @@ def mkgrave(world: World, map_: Map, traps: List[Trap], room: Room,
     amount, the rn2(5) loot loop) is C's.
     """
     from . import rules
-    from .mkobj import (RANDOM_CLASS, curse, mksobj, mksobj_at, mkobj,
-                        place_object, weight)
+    from .mkobj import (
+        RANDOM_CLASS,
+        curse,
+        mksobj,
+        mksobj_at,
+        mkobj,
+        place_object,
+        weight,
+    )
     from .objects import ObjType
 
     dobell = not rng.rn2(10)  # C: rolled before the rtype test
@@ -1436,8 +1592,9 @@ def mkgrave(world: World, map_: Map, traps: List[Trap], room: Room,
         mksobj_at(world, rng, int(ObjType.BELL), pos, lev)
 
 
-def fill_ordinary_room(world: World, map_: Map, rng, room: Room, lev: int,
-                       depth: int) -> None:
+def fill_ordinary_room(
+    world: World, map_: Map, rng, room: Room, lev: int, depth: int
+) -> None:
     """C: mklev.c#fill_ordinary_room -- put things inside a normal room.
 
     Included: the sleeping monster (C: 2/3 of rooms), the trap loop
@@ -1479,8 +1636,9 @@ def fill_ordinary_room(world: World, map_: Map, rng, room: Room, lev: int,
     _fill_room_objects(world, map_, rng, room, lev, depth, traps)
 
 
-def _fill_room_objects(world: World, map_: Map, rng, room: Room, lev: int,
-                       depth: int, traps: List[Trap]) -> None:
+def _fill_room_objects(
+    world: World, map_: Map, rng, room: Room, lev: int, depth: int, traps: List[Trap]
+) -> None:
     """C: the object half of fill_ordinary_room, in C's order.
 
     Included (the object genesis and the terrain writers are in --
@@ -1497,32 +1655,32 @@ def _fill_room_objects(world: World, map_: Map, rng, room: Room, lev: int,
     PLAN-MKLEV.md §2.7 asks a port to make deliberately, with the
     seeded snapshot test as the tripwire.
     """
-    from .mkobj import (RANDOM_CLASS, mkgold, mkobj_at, mkcorpstat)
+    from .mkobj import RANDOM_CLASS, mkgold, mkobj_at, mkcorpstat
     from .objects import ObjType
 
-    if not rng.rn2(3):                      # C: gold
+    if not rng.rn2(3):  # C: gold
         pos = somexyspace(map_, traps, room, rng)
         if pos is not None:
             mkgold(world, rng, 0, pos, lev)
 
-    if not rng.rn2(10):                     # C: a fountain
+    if not rng.rn2(10):  # C: a fountain
         mkfount(map_, traps, room, rng)
-    if not rng.rn2(60):                     # C: a sink
+    if not rng.rn2(60):  # C: a sink
         mksink(map_, traps, room, rng)
-    if not rng.rn2(60):                     # C: an altar
+    if not rng.rn2(60):  # C: an altar
         mkaltar(map_, traps, room, rng)
-    x = 80 - depth * 2                      # C: a grave, rarer the deeper
+    x = 80 - depth * 2  # C: a grave, rarer the deeper
     if x < 2:
         x = 2
     if not rng.rn2(x):
         mkgrave(world, map_, traps, room, lev, rng)
 
-    if not rng.rn2(20):                     # C: a statue
+    if not rng.rn2(20):  # C: a statue
         pos = somexyspace(map_, traps, room, rng)
         if pos is not None:
             mkcorpstat(world, rng, int(ObjType.STATUE), pos=pos, lev=lev)
 
-    if not rng.rn2(3):                      # C: the final object
+    if not rng.rn2(3):  # C: the final object
         pos = somexyspace(map_, traps, room, rng)
         if pos is not None:
             mkobj_at(world, rng, RANDOM_CLASS, pos, lev)
@@ -1532,8 +1690,10 @@ def _fill_room_objects(world: World, map_: Map, rng, room: Room, lev: int,
 # Stairs (C: mklev.c mkstairs / generate_stairs)
 # ============================================================
 
-def mkstairs(map_: Map, stairs: List[Stairway], x: int, y: int,
-             up: bool, force: bool = False) -> Optional[Stairway]:
+
+def mkstairs(
+    map_: Map, stairs: List[Stairway], x: int, y: int, up: bool, force: bool = False
+) -> Optional[Stairway]:
     """C: mklev.c#mkstairs -- a staircase at x,y.
 
     The stairway record is appended to the *generation* list (C:
@@ -1546,8 +1706,7 @@ def mkstairs(map_: Map, stairs: List[Stairway], x: int, y: int,
     tile = map_.tiles[y][x]
     if force:
         tile.typ = TerrainType.ROOM
-    if tile.typ not in (TerrainType.ROOM, TerrainType.CORR,
-                        TerrainType.ICE):
+    if tile.typ not in (TerrainType.ROOM, TerrainType.CORR, TerrainType.ICE):
         return None  # C: impossible("placing stairs on ...")
     stair = Stairway(pos=(x, y), up=up)
     stairs.append(stair)
@@ -1556,19 +1715,29 @@ def mkstairs(map_: Map, stairs: List[Stairway], x: int, y: int,
     return stair
 
 
-def _stairs_room_good(map_: Map, stairs: List[Stairway], room: Room,
-                      phase: int) -> bool:
+def _stairs_room_good(
+    map_: Map, stairs: List[Stairway], room: Room, phase: int
+) -> bool:
     """C: mklev.c#generate_stairs_room_good.
 
     Lower phases relax the criteria: 2 = no relaxing, 1 = a themed room
     will do, 0 = the room may already hold a staircase, -1 = an
     unjoined room will do.
     """
-    return (room.needjoining or phase < 0) \
-        and ((not has_dnstairs(map_, stairs, room)
-              and not has_upstairs(map_, stairs, room)) or phase < 1) \
-        and (room.rtype == RoomType.OROOM
-             or (phase < 2 and room.rtype == RoomType.THEMEROOM))
+    return (
+        (room.needjoining or phase < 0)
+        and (
+            (
+                not has_dnstairs(map_, stairs, room)
+                and not has_upstairs(map_, stairs, room)
+            )
+            or phase < 1
+        )
+        and (
+            room.rtype == RoomType.OROOM
+            or (phase < 2 and room.rtype == RoomType.THEMEROOM)
+        )
+    )
 
 
 def _stairs_find_room(map_: Map, stairs: List[Stairway], rng) -> Optional[Room]:
@@ -1577,15 +1746,19 @@ def _stairs_find_room(map_: Map, stairs: List[Stairway], rng) -> Optional[Room]:
     if not map_.rooms:
         return None
     for phase in (2, 1, 0, -1):
-        picks = [i for i, room in enumerate(map_.rooms)
-                 if _stairs_room_good(map_, stairs, room, phase)]
+        picks = [
+            i
+            for i, room in enumerate(map_.rooms)
+            if _stairs_room_good(map_, stairs, room, phase)
+        ]
         if picks:
             return map_.rooms[picks[rng.rn2(len(picks))]]
     return map_.rooms[rng.rn2(len(map_.rooms))]
 
 
-def generate_stairs(map_: Map, stairs: List[Stairway], rng, lev: int,
-                    max_lev: int) -> None:
+def generate_stairs(
+    map_: Map, stairs: List[Stairway], rng, lev: int, max_lev: int
+) -> None:
     """C: mklev.c#generate_stairs -- up and down, in different rooms
     when the level allows it.
 
@@ -1599,16 +1772,20 @@ def generate_stairs(map_: Map, stairs: List[Stairway], rng, lev: int,
         if room is not None:
             pos = somexyspace(map_, traps, room, rng)
             if pos is None:
-                pos = (rng.rn1(room.hx - room.lx + 1, room.lx),
-                       rng.rn1(room.hy - room.ly + 1, room.ly))
+                pos = (
+                    rng.rn1(room.hx - room.lx + 1, room.lx),
+                    rng.rn1(room.hy - room.ly + 1, room.ly),
+                )
             mkstairs(map_, stairs, pos[0], pos[1], False)
     if lev != 1:
         room = _stairs_find_room(map_, stairs, rng)
         if room is not None:
             pos = somexyspace(map_, traps, room, rng)
             if pos is None:
-                pos = (rng.rn1(room.hx - room.lx + 1, room.lx),
-                       rng.rn1(room.hy - room.ly + 1, room.ly))
+                pos = (
+                    rng.rn1(room.hx - room.lx + 1, room.lx),
+                    rng.rn1(room.hy - room.ly + 1, room.ly),
+                )
             mkstairs(map_, stairs, pos[0], pos[1], True)
 
 
@@ -1616,45 +1793,48 @@ def generate_stairs(map_: Map, stairs: List[Stairway], rng, lev: int,
 # makelevel -- the whole rooms+corridors flow
 # ============================================================
 
-def _roll_special_room(map_: Map, rng, depth: int,
-                       stairs: List[Stairway]) -> None:
+
+def _roll_special_room(
+    world: World, map_: Map, rng, depth: int, stairs: List[Stairway], lev: int
+) -> None:
     """C: the special-room roll of makelevel() -- at most one special
     room per level, its type chosen by depth.
 
-    The odds chain is C's verbatim.  Every handler is a core.mkroom
-    STUB except mkzoo (which only sets the room type), so asking for
-    specials on a level that rolls a shop / temple / swamp raises
-    NotImplementedError -- that is why the demo generator passes
-    specials=False.
+    The odds chain is C's verbatim.  The temple is fully ported
+    (core.mkroom.mktemple -> core.priest.priestini) and the zoo family
+    only sets the room type (mkzoo); the shop and the swamp are
+    core.mkroom STUBs, so asking for specials on a level that rolls
+    one of them still raises NotImplementedError -- that is why the
+    demo generator passes specials=False.
     """
+    traps = [t for t in world.traps.values() if t.lev == lev]
     nrooms = len(map_.rooms)
     threshold = 3
     if depth > 1 and nrooms >= threshold and rng.rn2(depth) < 3:
-        do_mkroom(map_, stairs, [], rng, RoomType.SHOPBASE)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.SHOPBASE)
     elif depth > 4 and not rng.rn2(6):
-        do_mkroom(map_, stairs, [], rng, RoomType.COURT)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.COURT)
     elif depth > 5 and not rng.rn2(8):
-        do_mkroom(map_, stairs, [], rng, RoomType.LEPREHALL)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.LEPREHALL)
     elif depth > 6 and not rng.rn2(7):
-        do_mkroom(map_, stairs, [], rng, RoomType.ZOO)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.ZOO)
     elif depth > 8 and not rng.rn2(5):
-        do_mkroom(map_, stairs, [], rng, RoomType.TEMPLE)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.TEMPLE)
     elif depth > 9 and not rng.rn2(5):
-        do_mkroom(map_, stairs, [], rng, RoomType.BEEHIVE)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.BEEHIVE)
     elif depth > 11 and not rng.rn2(6):
-        do_mkroom(map_, stairs, [], rng, RoomType.MORGUE)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.MORGUE)
     elif depth > 12 and not rng.rn2(8):
-        do_mkroom(map_, stairs, [], rng, RoomType.ANTHOLE)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.ANTHOLE)
     elif depth > 14 and not rng.rn2(4):
-        do_mkroom(map_, stairs, [], rng, RoomType.BARRACKS)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.BARRACKS)
     elif depth > 15 and not rng.rn2(6):
-        do_mkroom(map_, stairs, [], rng, RoomType.SWAMP)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.SWAMP)
     elif depth > 16 and not rng.rn2(8):
-        do_mkroom(map_, stairs, [], rng, RoomType.COCKNEST)
+        do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.COCKNEST)
 
 
-def makelevel(world: World, map_: Map, rng, lev: int,
-              specials: bool = False) -> Map:
+def makelevel(world: World, map_: Map, rng, lev: int, specials: bool = False) -> Map:
     """C: mklev.c#makelevel + mklev() -- generate one rooms+corridors
     level into `map_` (which arrives all STONE).
 
@@ -1665,7 +1845,8 @@ def makelevel(world: World, map_: Map, rng, lev: int,
       3. generate_stairs()-- INSIDE rooms, before the corridors exist
       4. makecorridors()  -- the doors and the corridors between them
       5. make_niches()    -- the alcoves in the outer walls
-      6. [special room]   -- at most one, by depth (STUBs, see above)
+      6. [special room]   -- at most one, by depth (the temple is in;
+                             shop / swamp are STUBs, see _roll_special_room)
       7. fill_ordinary_room() for every room -- monsters and traps
       8. level_finalize_topology() -- stamp the room numbers
 
@@ -1686,7 +1867,7 @@ def makelevel(world: World, map_: Map, rng, lev: int,
     makecorridors(map_, rng, depth, smeq)
     make_niches(world, map_, rng, depth, lev)
     if specials:
-        _roll_special_room(map_, rng, depth, stairs)
+        _roll_special_room(world, map_, rng, depth, stairs, lev)
     for room in list(map_.rooms):
         fill_ordinary_room(world, map_, rng, room, lev, depth)
     level_finalize_topology(map_)
@@ -1694,8 +1875,7 @@ def makelevel(world: World, map_: Map, rng, lev: int,
     return map_
 
 
-def mklev(world: World, map_: Map, rng, lev: int,
-          specials: bool = False) -> Map:
+def mklev(world: World, map_: Map, rng, lev: int, specials: bool = False) -> Map:
     """C: mklev.c#mklev -- the "make a level" entry point (the name the
     C callers use).  Kept as an alias of makelevel so the ported call
     graph reads the same."""
@@ -1703,17 +1883,57 @@ def mklev(world: World, map_: Map, rng, lev: int,
 
 
 __all__ = [
-    "DOORINC", "Rect", "RectManager", "SPLEV_CENTER", "SPLEV_LEFT",
-    "SPLEV_RIGHT", "TOP", "BOTTOM", "XLIM", "YLIM",
-    "add_door", "add_room", "add_subroom", "blank_map", "bydoor",
-    "cardinal_nextto_room", "check_room", "clear_level_structures",
-    "count_level_features", "create_room", "create_subroom", "dig_corridor",
-    "do_room_or_subroom", "dodoor", "dosdoor", "fill_ordinary_room",
-    "find_okay_roompos", "finddpos", "finddpos_shift",
-    "generate_stairs", "good_rm_wall_doorpos",
-    "join", "make_grave", "make_niches", "makecorridors", "makelevel",
-    "makeniche", "makerooms", "makevtele", "maybe_sdoor", "mkaltar",
-    "mkfount", "mkgrave", "mklev", "mksink", "mkstairs", "mktrap",
-    "okdoor", "place_niche", "set_levltyp", "sort_rooms", "topologize",
+    "DOORINC",
+    "Rect",
+    "RectManager",
+    "SPLEV_CENTER",
+    "SPLEV_LEFT",
+    "SPLEV_RIGHT",
+    "TOP",
+    "BOTTOM",
+    "XLIM",
+    "YLIM",
+    "add_door",
+    "add_room",
+    "add_subroom",
+    "blank_map",
+    "bydoor",
+    "cardinal_nextto_room",
+    "check_room",
+    "clear_level_structures",
+    "count_level_features",
+    "create_room",
+    "create_subroom",
+    "dig_corridor",
+    "do_room_or_subroom",
+    "dodoor",
+    "dosdoor",
+    "fill_ordinary_room",
+    "find_okay_roompos",
+    "finddpos",
+    "finddpos_shift",
+    "generate_stairs",
+    "good_rm_wall_doorpos",
+    "join",
+    "make_grave",
+    "make_niches",
+    "makecorridors",
+    "makelevel",
+    "makeniche",
+    "makerooms",
+    "makevtele",
+    "maybe_sdoor",
+    "mkaltar",
+    "mkfount",
+    "mkgrave",
+    "mklev",
+    "mksink",
+    "mkstairs",
+    "mktrap",
+    "okdoor",
+    "place_niche",
+    "set_levltyp",
+    "sort_rooms",
+    "topologize",
     "wallify_map",
 ]

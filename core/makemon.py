@@ -57,9 +57,15 @@ STUBs (announced here, each with the C it waits for):
     ``unmakemon()``: phase F.
   - ``christen_monst()`` and the "A kobold appears!" message: there is
     no monster message layer yet, so MM_NOMSG is effectively always on.
-  - the ``mtmp->cham`` (shapechanger), ``iswiz`` and ``mextra`` halves:
-    no polymorph, no quest, no priests / shopkeepers yet, so MM_EPRI /
-    MM_ESHK / MM_EDOG / MM_EMIN / MM_EGD are accepted and ignored.
+  - the ``mtmp->cham`` (shapechanger) and ``iswiz`` halves: no
+    polymorph, no quest.
+  - the ``mextra`` half: ``MM_EPRI`` allocates the priest extra
+    (``Monster.epri``, the C newepri) and core.priest.priestini fills
+    it (PLAN-SPECIAL-ROOMS.md phase 1); MM_ESHK / MM_EDOG / MM_EMIN /
+    MM_EGD are still accepted and ignored (their systems land with the
+    shop / pet / minion work).  C's "a cleric made without MM_EPRI
+    gets an emin instead" tail (the roaming-priest half) is not
+    ported: pyhack has no emin.
 
 Deliberate divergences (documented, not bugs):
 
@@ -83,21 +89,77 @@ from typing import Dict, List, Optional
 
 from . import rules
 from .hacklib import sgn
-from .mondata import (always_hostile, always_peaceful, is_armed, is_female,
-                      is_male, is_minion, is_neuter, is_placeholder,
-                      is_rider, set_mon_data)
-from .monst import (A_NONE, G_FREQ, G_GENOD, G_GONE, G_HELL, G_NOGEN, G_UNIQ,
-                    LOW_PM, M2_LORD, M2_PRINCE, M3_CLOSE, M3_COVETOUS,
-                    M3_WAITFORU, M3_WAITMASK, MAXMCLASSES, MONS, MS_GUARDIAN,
-                    MS_LEADER, MS_NEMESIS, PM_ERINYS, PM_GRAY_DRAGON,
-                    PM_IRON_GOLEM, PM_NAZGUL, PM_STONE_GOLEM,
-                    PM_WIZARD_OF_YENDOR, S_BAT, S_DEMON, S_EEL, S_ELEMENTAL,
-                    S_JABBERWOCK, S_LEPRECHAUN, S_LICH, S_LIGHT, S_MIMIC,
-                    S_NYMPH, S_ORC, S_SNAKE, S_SPIDER, S_UNICORN, SPECIAL_PM,
-                    PerMonst, is_golem, monname, monsndx)
+from .mondata import (
+    always_hostile,
+    always_peaceful,
+    is_armed,
+    is_female,
+    is_male,
+    is_minion,
+    is_neuter,
+    is_placeholder,
+    is_rider,
+    set_mon_data,
+)
+from .monst import (
+    A_NONE,
+    G_FREQ,
+    G_GENOD,
+    G_GONE,
+    G_HELL,
+    G_NOGEN,
+    G_UNIQ,
+    LOW_PM,
+    M2_LORD,
+    M2_PRINCE,
+    M3_CLOSE,
+    M3_COVETOUS,
+    M3_WAITFORU,
+    M3_WAITMASK,
+    MAXMCLASSES,
+    MONS,
+    MS_GUARDIAN,
+    MS_LEADER,
+    MS_NEMESIS,
+    PM_ERINYS,
+    PM_GRAY_DRAGON,
+    PM_IRON_GOLEM,
+    PM_NAZGUL,
+    PM_STONE_GOLEM,
+    PM_WIZARD_OF_YENDOR,
+    S_BAT,
+    S_DEMON,
+    S_EEL,
+    S_ELEMENTAL,
+    S_JABBERWOCK,
+    S_LEPRECHAUN,
+    S_LICH,
+    S_LIGHT,
+    S_MIMIC,
+    S_NYMPH,
+    S_ORC,
+    S_SNAKE,
+    S_SPIDER,
+    S_UNICORN,
+    SPECIAL_PM,
+    PerMonst,
+    is_golem,
+    monname,
+    monsndx,
+)
 from .place import enexto_core, goodpos
-from .types import (GP_AVOID_MONPOS, GP_CHECKSCARY, MM_IGNOREWATER, Map,
-                    MmFlags, Monster, NO_MM_FLAGS, Pos, World)
+from .types import (
+    Epri,
+    GP_AVOID_MONPOS,
+    GP_CHECKSCARY,
+    MM_IGNOREWATER,
+    Map,
+    MmFlags,
+    Monster,
+    NO_MM_FLAGS,
+    Pos,
+    World,
+)
 
 # C: global.h MAXMONNO -- how many of one species may be born before it
 # goes extinct (see mbirth_limit / MonState.propagate).
@@ -114,6 +176,7 @@ STRAT_APPEARMSG = 0x4
 # ------------------------------------------------------------
 # Small helpers
 # ------------------------------------------------------------
+
 
 def _mons(mndx: int) -> Optional[PerMonst]:
     """mons[mndx], or None for a table row the port has not filled in."""
@@ -141,6 +204,7 @@ def is_home_elemental(ptr: PerMonst) -> bool:
 # ------------------------------------------------------------
 # Which monster: the selection half (C: uncommon .. mkclass_aligned)
 # ------------------------------------------------------------
+
 
 def uncommon(world: World, mndx: int) -> bool:
     """Is this species excluded from random creation (C: uncommon)?
@@ -187,8 +251,7 @@ def rndmonst(world: World, rng) -> Optional[PerMonst]:
     return rndmonst_adj(world, rng, 0, 0)
 
 
-def rndmonst_adj(world: World, rng, minadj: int,
-                 maxadj: int) -> Optional[PerMonst]:
+def rndmonst_adj(world: World, rng, minadj: int, maxadj: int) -> Optional[PerMonst]:
     """A random monster for this level, its difficulty band widened by
     minadj / maxadj (C: makemon.c#rndmonst_adj).
 
@@ -209,15 +272,14 @@ def rndmonst_adj(world: World, rng, minadj: int,
     for mndx in range(LOW_PM, SPECIAL_PM):
         ptr = MONS[mndx]
         if ptr is None:
-            continue                       # a row the port lacks yet
+            continue  # a row the port lacks yet
         if ptr.difficulty < minmlev or ptr.difficulty > maxmlev:
             continue
         if uncommon(world, mndx):
             continue
-        weight = (ptr.geno & G_FREQ) + align_shift(ptr) \
-            + temperature_shift(world, ptr)
+        weight = (ptr.geno & G_FREQ) + align_shift(ptr) + temperature_shift(world, ptr)
         if weight < 0 or weight > 127:
-            weight = 0                     # C: impossible("bad weight")
+            weight = 0  # C: impossible("bad weight")
         if weight > 0:
             totalweight += weight
             if rng.rn2(totalweight) < weight:
@@ -245,12 +307,11 @@ class MongenOrder:
     """
 
     def __init__(self) -> None:
-        order: List[int] = [i for i in range(LOW_PM, SPECIAL_PM)
-                            if MONS[i] is not None]
+        order: List[int] = [i for i in range(LOW_PM, SPECIAL_PM) if MONS[i] is not None]
         maxf = [0] * MAXMCLASSES
         for mndx in order:
             ptr = MONS[mndx]
-            assert ptr is not None      # narrowed by the comprehension
+            assert ptr is not None  # narrowed by the comprehension
             freq = ptr.geno & G_FREQ
             if freq > maxf[ptr.mlet]:
                 maxf[ptr.mlet] = freq
@@ -283,8 +344,7 @@ def mongen_order() -> MongenOrder:
     return _MONGEN_ORDER
 
 
-def gen_ok(world: World, mndx: int, mvflagsmask: int,
-           genomask: int) -> bool:
+def gen_ok(world: World, mndx: int, mvflagsmask: int, genomask: int) -> bool:
     """May mkclass() consider this species (C: mk_gen_ok)?
 
     Rejects the genocided / extinct ones (the mvflags mask), the ones
@@ -311,8 +371,7 @@ def _is_mail_daemon(ptr: PerMonst) -> bool:
     return ptr.pmnames[2] == "mail daemon"
 
 
-def mkclass(world: World, rng, mclass: int,
-            spc: int = 0) -> Optional[PerMonst]:
+def mkclass(world: World, rng, mclass: int, spc: int = 0) -> Optional[PerMonst]:
     """A random species of monster class `mclass` (C: mkclass), or None.
 
     `spc` is C's "special mons[].geno handling": the geno bits to ignore
@@ -322,8 +381,9 @@ def mkclass(world: World, rng, mclass: int,
     return mkclass_aligned(world, rng, mclass, spc, A_NONE)
 
 
-def mkclass_aligned(world: World, rng, mclass: int, spc: int,
-                    atyp: int) -> Optional[PerMonst]:
+def mkclass_aligned(
+    world: World, rng, mclass: int, spc: int, atyp: int
+) -> Optional[PerMonst]:
     """mkclass() with an alignment restriction (C: mkclass_aligned).
 
     C's three assumptions, kept: a class is a contiguous run of the
@@ -338,22 +398,22 @@ def mkclass_aligned(world: World, rng, mclass: int, spc: int,
     mo = mongen_order()
     maxmlev = rules.level_difficulty(world) >> 1
     if mclass < 1 or mclass >= MAXMCLASSES:
-        return None                        # C: impossible("bad class")
+        return None  # C: impossible("bad class")
     zero_freq_for_entire_class = mo.maxf[mclass] == 0
 
     order = mo.order
     first = 0
     while first < len(order):
         row = MONS[order[first]]
-        assert row is not None             # order holds implemented rows
+        assert row is not None  # order holds implemented rows
         if row.mlet == mclass:
             break
         first += 1
     if first == len(order):
-        return None                        # C: no such class implemented
+        return None  # C: no such class implemented
 
     mv_mask: int = int(G_GONE)
-    if spc & 0x8000:                       # C: G_IGNORE
+    if spc & 0x8000:  # C: G_IGNORE
         mv_mask = 0
         spc &= ~0x8000
 
@@ -363,7 +423,7 @@ def mkclass_aligned(world: World, rng, mclass: int, spc: int,
     while last < len(order):
         mndx = order[last]
         ptr = MONS[mndx]
-        assert ptr is not None             # order holds implemented rows
+        assert ptr is not None  # order holds implemented rows
         if ptr.mlet != mclass:
             break
         last += 1
@@ -415,6 +475,7 @@ def mkclass_aligned(world: World, rng, mclass: int, spc: int,
 # How strong: adj_lev / newmonhp / golemhp
 # ------------------------------------------------------------
 
+
 def adj_lev(world: World, ptr: PerMonst) -> int:
     """The monster's *actual* level on this level (C: makemon.c#adj_lev).
 
@@ -428,17 +489,17 @@ def adj_lev(world: World, ptr: PerMonst) -> int:
         tmp = ptr.mlevel + world.mon_state.mvitals[ptr.pmidx].died
         return min(tmp, 49)
     if ptr.mlevel > 49:
-        return 50                      # "special" demons / devils
+        return 50  # "special" demons / devils
     tmp = ptr.mlevel
     tmp2 = rules.level_difficulty(world) - tmp
     if tmp2 < 0:
-        tmp -= 1                       # weaker than the level: drop one
+        tmp -= 1  # weaker than the level: drop one
     else:
-        tmp += tmp2 // 5               # one per five of difference
+        tmp += tmp2 // 5  # one per five of difference
     tmp2 = world.hero_ulevel - ptr.mlevel
     if tmp2 > 0:
-        tmp += tmp2 // 4               # and one per four of hero level
-    tmp2 = (3 * ptr.mlevel) // 2       # crude upper limit
+        tmp += tmp2 // 4  # and one per four of hero level
+    tmp2 = (3 * ptr.mlevel) // 2  # crude upper limit
     if tmp2 > 49:
         tmp2 = 49
     if tmp > tmp2:
@@ -449,16 +510,16 @@ def adj_lev(world: World, ptr: PerMonst) -> int:
 def golemhp(mndx: int) -> int:
     """A golem's fixed hit points (C: makemon.c#golemhp)."""
     table = {
-        249: 20,   # C: PM_STRAW_GOLEM
-        250: 20,   # C: PM_PAPER_GOLEM
-        251: 30,   # C: PM_ROPE_GOLEM
-        252: 60,   # C: PM_GOLD_GOLEM
-        253: 40,   # C: PM_LEATHER_GOLEM
-        254: 50,   # C: PM_WOOD_GOLEM
-        255: 40,   # C: PM_FLESH_GOLEM
-        256: 70,   # C: PM_CLAY_GOLEM
+        249: 20,  # C: PM_STRAW_GOLEM
+        250: 20,  # C: PM_PAPER_GOLEM
+        251: 30,  # C: PM_ROPE_GOLEM
+        252: 60,  # C: PM_GOLD_GOLEM
+        253: 40,  # C: PM_LEATHER_GOLEM
+        254: 50,  # C: PM_WOOD_GOLEM
+        255: 40,  # C: PM_FLESH_GOLEM
+        256: 70,  # C: PM_CLAY_GOLEM
         PM_STONE_GOLEM: 100,
-        258: 80,   # C: PM_GLASS_GOLEM
+        258: 80,  # C: PM_GLASS_GOLEM
         PM_IRON_GOLEM: 120,
     }
     return table.get(mndx, 0)
@@ -474,17 +535,17 @@ def monhp_per_lvl(mon: Monster, rng) -> int:
     """
     ptr = mon.mdata
     assert ptr is not None
-    hp = rng.rnd(8)                    # default is d8
+    hp = rng.rnd(8)  # default is d8
     if is_golem(ptr):
         mlev = ptr.mlevel or 1
         hp = golemhp(monsndx(ptr)) // mlev
     elif ptr.mlevel > 49:
-        hp = 4 + rng.rnd(4)            # 5..8, arbitrary
+        hp = 4 + rng.rnd(4)  # 5..8, arbitrary
     elif ptr.mlet == 30 and monsndx(ptr) >= PM_GRAY_DRAGON:
         # C: S_DRAGON; adult dragons roll 4..8 here
         hp = 4 + rng.rn2(5)
     elif not mon.m_lev:
-        hp = rng.rnd(4)                # level 0 monsters use 1d4
+        hp = rng.rnd(4)  # level 0 monsters use 1d4
     return hp
 
 
@@ -513,17 +574,17 @@ def newmonhp(world: World, rng, mon: Monster, mndx: int) -> None:
         # "special" fixed-HP monster: the hit points are encoded in the
         # mlevel column (2 * (mlevel - 6))
         mon.max_hp = mon.hp = 2 * (ptr.mlevel - 6)
-        mon.m_lev = mon.hp // 4        # approximation
+        mon.m_lev = mon.hp // 4  # approximation
     elif ptr.mlet == 30 and mndx >= PM_GRAY_DRAGON:
         # C: S_DRAGON; adult dragons roll N*(4+d4) (N*8 in the endgame,
         # which is not modelled)
         basehp = mon.m_lev
         mon.max_hp = mon.hp = 4 * basehp + rng.d(basehp, 4)
     elif not mon.m_lev:
-        basehp = 1                     # minimum is 1, raised to 2 below
+        basehp = 1  # minimum is 1, raised to 2 below
         mon.max_hp = mon.hp = rng.rnd(4)
     else:
-        basehp = mon.m_lev             # at least one per level
+        basehp = mon.m_lev  # at least one per level
         mon.max_hp = mon.hp = rng.d(basehp, 8)
         if is_home_elemental(ptr):
             mon.max_hp = mon.hp = mon.hp * 3
@@ -548,6 +609,7 @@ def mbirth_limit(mndx: int) -> int:
 # Mood: peace_minded / set_malign
 # ------------------------------------------------------------
 
+
 def peace_minded(world: World, ptr: PerMonst, rng) -> bool:
     """Is this monster created peaceful?  (C: makemon.c#peace_minded.)
 
@@ -570,7 +632,7 @@ def peace_minded(world: World, ptr: PerMonst, rng) -> bool:
     if ptr.msound == MS_NEMESIS:
         return False
     if ptr.pmidx == PM_ERINYS:
-        return True                    # C: !u.ualign.abuse (no record)
+        return True  # C: !u.ualign.abuse (no record)
 
     # race_peaceful() / race_hostile(): the hero's race is not ported
     # (always the "human" default), so both are False.
@@ -583,7 +645,7 @@ def peace_minded(world: World, ptr: PerMonst, rng) -> bool:
 
     # minions are hostile to heroes that have strayed at all
     if is_minion(ptr):
-        return True                    # C: u.ualign.record >= 0
+        return True  # C: u.ualign.record >= 0
 
     # last case: a chance of a co-aligned monster being hostile, greater
     # if the hero has strayed (no record here) and if the monster is not
@@ -611,25 +673,28 @@ def set_malign(world: World, mon: Monster) -> None:
         mon.malign = 0 if mon.mpeaceful else 20
     elif always_peaceful(ptr):
         absmal = abs(mal)
-        mon.malign = -3 * max(5, absmal) if mon.mpeaceful \
-            else 3 * max(5, absmal)         # renegade
+        mon.malign = (
+            -3 * max(5, absmal) if mon.mpeaceful else 3 * max(5, absmal)
+        )  # renegade
     elif always_hostile(ptr):
         mon.malign = 0 if coaligned else max(5, abs(mal))
     elif coaligned:
         absmal = abs(mal)
-        mon.malign = -3 * max(3, absmal) if mon.mpeaceful \
-            else max(3, absmal)             # renegade
+        mon.malign = (
+            -3 * max(3, absmal) if mon.mpeaceful else max(3, absmal)
+        )  # renegade
     else:
-        mon.malign = abs(mal)               # not coaligned, therefore hostile
+        mon.malign = abs(mal)  # not coaligned, therefore hostile
 
 
 # ------------------------------------------------------------
 # Where: a random legal square (C: makemon_rnd_goodpos)
 # ------------------------------------------------------------
 
-def rnd_goodpos(world: World, rng, map_: Map, lev: int,
-                mdat: Optional[PerMonst],
-                gpflags: int = 0) -> Optional[Pos]:
+
+def rnd_goodpos(
+    world: World, rng, map_: Map, lev: int, mdat: Optional[PerMonst], gpflags: int = 0
+) -> Optional[Pos]:
     """A random good square (C: makemon.c#makemon_rnd_goodpos).
 
     50 random tries, then -- if the level is too full for luck -- one
@@ -648,8 +713,8 @@ def rnd_goodpos(world: World, rng, map_: Map, lev: int,
     tryct = 0
     nx = ny = 0
     while True:
-        nx = rng.rn1(map_.width - 2, 2)      # C: rn1(COLNO - 3, 2)
-        ny = rng.rn2(map_.height)            # C: rn2(ROWNO)
+        nx = rng.rn1(map_.width - 2, 2)  # C: rn1(COLNO - 3, 2)
+        ny = rng.rn2(map_.height)  # C: rn2(ROWNO)
         if goodpos(world, rng, map_, lev, (nx, ny), mdat, gpflags):
             return (nx, ny)
         tryct += 1
@@ -671,6 +736,7 @@ def rnd_goodpos(world: World, rng, map_: Map, lev: int,
 # ------------------------------------------------------------
 # With what: the monster's pocket (C: mongets / mkmonmoney)
 # ------------------------------------------------------------
+
 
 def mongets(world: World, rng, mon: Monster, otyp: int) -> Optional[str]:
     """Give a monster one object of type `otyp` (C: makemon.c#mongets).
@@ -705,6 +771,7 @@ def mkmonmoney(world: World, rng, mon: Monster, amount: int) -> None:
     from .mkobj import mksobj, weight  # local import: mkobj imports this
 
     from .objects import ObjType
+
     if amount <= 0:
         return
     gold = mksobj(world, rng, ObjType.GOLD_PIECE.value, init=False)
@@ -717,10 +784,17 @@ def mkmonmoney(world: World, rng, mon: Monster, amount: int) -> None:
 # makemon -- the funnel
 # ------------------------------------------------------------
 
-def makemon(world: World, rng, ptr: Optional[PerMonst] = None,
-            pos: Pos = (0, 0), mmflags: MmFlags = NO_MM_FLAGS,
-            map_: Optional[Map] = None, lev: Optional[int] = None,
-            in_mklev: bool = False) -> Optional[Monster]:
+
+def makemon(
+    world: World,
+    rng,
+    ptr: Optional[PerMonst] = None,
+    pos: Pos = (0, 0),
+    mmflags: MmFlags = NO_MM_FLAGS,
+    map_: Optional[Map] = None,
+    lev: Optional[int] = None,
+    in_mklev: bool = False,
+) -> Optional[Monster]:
     """Create a monster and put it on the map (C: makemon()).
 
     `ptr` is the type to create, or None for "whatever is appropriate
@@ -767,14 +841,15 @@ def makemon(world: World, rng, ptr: Optional[PerMonst] = None,
         # [u.ux,u.uy] means "near the hero"
         near = enexto_core(world, rng, map_, lev, (x, y), ptr, gpflags)
         if near is None:
-            near = enexto_core(world, rng, map_, lev, (x, y), ptr,
-                               gpflags & ~GP_CHECKSCARY)
+            near = enexto_core(
+                world, rng, map_, lev, (x, y), ptr, gpflags & ~GP_CHECKSCARY
+            )
         if near is None:
             return None
         x, y = near
 
     if not map_.in_bounds((x, y)):
-        return None                    # C: impossible("bad position")
+        return None  # C: impossible("bad position")
 
     # --- does a monster already exist at the position? ---
     if world.monster_at_lev(lev, (x, y)) is not None:
@@ -798,22 +873,36 @@ def makemon(world: World, rng, ptr: Optional[PerMonst] = None,
         while True:
             nxt = rndmonst(world, rng)
             if nxt is None:
-                return None            # no more monsters
+                return None  # no more monsters
             ptr = nxt
             tryct += 1
-            if tryct > 50 or goodpos(world, rng, map_, lev, (x, y), ptr,
-                                     gpflags):
+            if tryct > 50 or goodpos(world, rng, map_, lev, (x, y), ptr, gpflags):
                 break
         mndx = monsndx(ptr)
 
     world.mon_state.propagate(mndx, countbirth, False, mbirth_limit(mndx))
 
-    mon = Monster(id=world.new_id("mon"), name=monname(ptr), pos=(x, y),
-                  hp=0, max_hp=0, ac=ptr.ac, lev=lev,
-                  mdata=ptr, mnum=mndx)
+    mon = Monster(
+        id=world.new_id("mon"),
+        name=monname(ptr),
+        pos=(x, y),
+        hp=0,
+        max_hp=0,
+        ac=ptr.ac,
+        lev=lev,
+        mdata=ptr,
+        mnum=mndx,
+    )
     set_mon_data(mon, ptr, 0)
     # C links the monster into fmon here, before the inventory exists
     world.actors[mon.id] = mon
+    # C: the mextra allocation half of the MM_* flags (the newepri /
+    # neweshk block, makemon.c): MM_EPRI allocates the priest extra
+    # here and priestini() fills it afterwards (PLAN-SPECIAL-ROOMS.md
+    # phase 1); the other extras wait for their systems (module
+    # docstring)
+    if mmflags & MmFlags.EPRI:
+        mon.epri = Epri()
 
     newmonhp(world, rng, mon, mndx)
 
@@ -833,8 +922,9 @@ def makemon(world: World, rng, ptr: Optional[PerMonst] = None,
     if mmflags & MmFlags.ASLEEP:
         mon.sleeping = 1
 
-    mon.mpeaceful = False if (mmflags & MmFlags.ANGRY) \
-        else peace_minded(world, ptr, rng)
+    mon.mpeaceful = (
+        False if (mmflags & MmFlags.ANGRY) else peace_minded(world, ptr, rng)
+    )
 
     # --- per-class fixups (C: the switch on ptr->mlet) ---
     _class_fixups(world, rng, mon, ptr, mndx, lev, x, y, in_mklev)
@@ -871,8 +961,17 @@ def makemon(world: World, rng, ptr: Optional[PerMonst] = None,
     return mon
 
 
-def _class_fixups(world: World, rng, mon: Monster, ptr: PerMonst, mndx: int,
-                  lev: int, x: int, y: int, in_mklev: bool) -> None:
+def _class_fixups(
+    world: World,
+    rng,
+    mon: Monster,
+    ptr: PerMonst,
+    mndx: int,
+    lev: int,
+    x: int,
+    y: int,
+    in_mklev: bool,
+) -> None:
     """The `switch (ptr->mlet)` block of makemon().
 
     Kept as its own function so the funnel reads like the C: a mimic's
@@ -882,19 +981,20 @@ def _class_fixups(world: World, rng, mon: Monster, ptr: PerMonst, mndx: int,
     """
     del mndx
     if ptr.mlet == S_MIMIC:
-        pass                       # STUB: set_mimic_sym (display glyphs)
+        pass  # STUB: set_mimic_sym (display glyphs)
     elif ptr.mlet in (S_SPIDER, S_SNAKE):
         if in_mklev:
             if x and y:
                 from .mkobj import mkobj_at  # local import: cycle
-                mkobj_at(world, rng, 0, (x, y), lev)   # RANDOM_CLASS = 0
+
+                mkobj_at(world, rng, 0, (x, y), lev)  # RANDOM_CLASS = 0
             # C: (void) hideunder(mtmp) -- needs concealment
     elif ptr.mlet in (S_LIGHT, S_ELEMENTAL):
         # C: a stalker / black light is permanently invisible; there is
         # no invisibility in the runtime yet (mhitu docstring)
         pass
     elif ptr.mlet == S_EEL:
-        pass                       # C: hideunder() when in_mklev
+        pass  # C: hideunder() when in_mklev
     elif ptr.mlet == S_LEPRECHAUN:
         mon.sleeping = 1
     elif ptr.mlet in (S_JABBERWOCK, S_NYMPH):
@@ -947,13 +1047,34 @@ def _initinv(world: World, rng, mon: Monster) -> None:
 
 
 __all__ = [
-    "MAXMONNO", "MongenOrder",
-    "STRAT_APPEARMSG", "STRAT_CLOSE", "STRAT_NONE", "STRAT_WAITFORU",
+    "MAXMONNO",
+    "MongenOrder",
+    "STRAT_APPEARMSG",
+    "STRAT_CLOSE",
+    "STRAT_NONE",
+    "STRAT_WAITFORU",
     "STRAT_WAITMASK",
-    "adj_lev", "align_shift", "golemhp", "gen_ok", "is_home_elemental",
-    "makemon", "mbirth_limit", "mkclass", "mkclass_aligned", "mkmonmoney",
-    "monhp_per_lvl", "mongen_order", "mongets", "monmax_difficulty",
-    "monmin_difficulty", "newmonhp", "peace_minded", "rnd_goodpos",
-    "rndmonst", "rndmonst_adj", "set_malign", "temperature_shift",
+    "adj_lev",
+    "align_shift",
+    "golemhp",
+    "gen_ok",
+    "is_home_elemental",
+    "makemon",
+    "mbirth_limit",
+    "mkclass",
+    "mkclass_aligned",
+    "mkmonmoney",
+    "monhp_per_lvl",
+    "mongen_order",
+    "mongets",
+    "monmax_difficulty",
+    "monmin_difficulty",
+    "newmonhp",
+    "peace_minded",
+    "rnd_goodpos",
+    "rndmonst",
+    "rndmonst_adj",
+    "set_malign",
+    "temperature_shift",
     "uncommon",
 ]

@@ -35,6 +35,7 @@ with no cycle, so the C-like integer constants stay unannotated and
 still type-check.  Import core.monst (the public API); import this
 module only from monst.py and monst_data.py.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ from enum import IntEnum, IntFlag
 
 class MonsterClass(IntEnum):
     """Monster class index (C: S_*; defsym.h MONSYM table)."""
+
     ANT = 1
     BLOB = 2
     COCKATRICE = 3
@@ -172,26 +174,72 @@ MAXMCLASSES = 61
 
 # default display character per class (sym.h mon_defchars)
 DEFCHARS: dict[MonsterClass, str] = {
-    S_ANT: 'a', S_BLOB: 'b', S_COCKATRICE: 'c', S_DOG: 'd', S_EYE: 'e',
-    S_FELINE: 'f', S_GREMLIN: 'g', S_HUMANOID: 'h', S_IMP: 'i',
-    S_JELLY: 'j', S_KOBOLD: 'k', S_LEPRECHAUN: 'l', S_MIMIC: 'm',
-    S_NYMPH: 'n', S_ORC: 'o', S_PIERCER: 'p', S_QUADRUPED: 'q',
-    S_RODENT: 'r', S_SPIDER: 's', S_TRAPPER: 't', S_UNICORN: 'u',
-    S_VORTEX: 'v', S_WORM: 'w', S_XAN: 'x', S_LIGHT: 'y', S_ZRUTY: 'z',
-    S_ANGEL: 'A', S_BAT: 'B', S_CENTAUR: 'C', S_DRAGON: 'D',
-    S_ELEMENTAL: 'E', S_FUNGUS: 'F', S_GNOME: 'G', S_GIANT: 'H',
-    S_INVISIBLE: 'I', S_JABBERWOCK: 'J', S_KOP: 'K', S_LICH: 'L',
-    S_MUMMY: 'M', S_NAGA: 'N', S_OGRE: 'O', S_PUDDING: 'P',
-    S_QUANTMECH: 'Q', S_RUSTMONST: 'R', S_SNAKE: 'S', S_TROLL: 'T',
-    S_UMBER: 'U', S_VAMPIRE: 'V', S_WRAITH: 'W', S_XORN: 'X',
-    S_YETI: 'Y', S_ZOMBIE: 'Z', S_HUMAN: '@', S_GHOST: ' ',
-    S_GOLEM: "'", S_DEMON: '&', S_EEL: ';', S_LIZARD: ':',
-    S_WORM_TAIL: '~', S_MIMIC_DEF: ']',
+    S_ANT: "a",
+    S_BLOB: "b",
+    S_COCKATRICE: "c",
+    S_DOG: "d",
+    S_EYE: "e",
+    S_FELINE: "f",
+    S_GREMLIN: "g",
+    S_HUMANOID: "h",
+    S_IMP: "i",
+    S_JELLY: "j",
+    S_KOBOLD: "k",
+    S_LEPRECHAUN: "l",
+    S_MIMIC: "m",
+    S_NYMPH: "n",
+    S_ORC: "o",
+    S_PIERCER: "p",
+    S_QUADRUPED: "q",
+    S_RODENT: "r",
+    S_SPIDER: "s",
+    S_TRAPPER: "t",
+    S_UNICORN: "u",
+    S_VORTEX: "v",
+    S_WORM: "w",
+    S_XAN: "x",
+    S_LIGHT: "y",
+    S_ZRUTY: "z",
+    S_ANGEL: "A",
+    S_BAT: "B",
+    S_CENTAUR: "C",
+    S_DRAGON: "D",
+    S_ELEMENTAL: "E",
+    S_FUNGUS: "F",
+    S_GNOME: "G",
+    S_GIANT: "H",
+    S_INVISIBLE: "I",
+    S_JABBERWOCK: "J",
+    S_KOP: "K",
+    S_LICH: "L",
+    S_MUMMY: "M",
+    S_NAGA: "N",
+    S_OGRE: "O",
+    S_PUDDING: "P",
+    S_QUANTMECH: "Q",
+    S_RUSTMONST: "R",
+    S_SNAKE: "S",
+    S_TROLL: "T",
+    S_UMBER: "U",
+    S_VAMPIRE: "V",
+    S_WRAITH: "W",
+    S_XORN: "X",
+    S_YETI: "Y",
+    S_ZOMBIE: "Z",
+    S_HUMAN: "@",
+    S_GHOST: " ",
+    S_GOLEM: "'",
+    S_DEMON: "&",
+    S_EEL: ";",
+    S_LIZARD: ":",
+    S_WORM_TAIL: "~",
+    S_MIMIC_DEF: "]",
 }
 
 
 class AtkType(IntEnum):
     """Attack type (C: AT_*; monattk.h)."""
+
     ANY = -1
     NONE = 0
     CLAW = 1
@@ -236,6 +284,7 @@ NATTK = 6
 
 class DmgType(IntEnum):
     """Damage type (C: AD_*; monattk.h)."""
+
     ANY = -1
     PHYS = 0
     MAGM = 1
@@ -351,8 +400,10 @@ def distance_atk_type(atyp: AtkType) -> bool:
 # mons[].mconveys (conveyed by eating).
 # ------------------------------------------------------------
 
+
 class MR(IntFlag):
     """Resistance/conveyance bits (C: MR_* resists, MR2_* conveys)."""
+
     FIRE = 0x01
     COLD = 0x02
     SLEEP = 0x04
@@ -389,6 +440,7 @@ MR2_FUMBLING = MR.FUMBLING
 
 class M1(IntFlag):
     """mflags1 bits (C: M1_*)."""
+
     FLY = 0x00000001
     SWIM = 0x00000002
     AMORPHOUS = 0x00000004
@@ -461,6 +513,7 @@ M1_METALLIVORE = M1.METALLIVORE
 
 class M2(IntFlag):
     """mflags2 bits (C: M2_*)."""
+
     NOPOLY = 0x00000001
     UNDEAD = 0x00000002
     WERE = 0x00000004
@@ -529,6 +582,7 @@ M2_MAGIC = M2.MAGIC
 
 class M3(IntFlag):
     """mflags3 bits (C: M3_*)."""
+
     WANTSAMUL = 0x0001
     WANTSBELL = 0x0002
     WANTSBOOK = 0x0004
@@ -537,7 +591,7 @@ class M3(IntFlag):
     WANTSALL = WANTSAMUL | WANTSBELL | WANTSBOOK | WANTSCAND | WANTSARTI
     WAITFORU = 0x0040
     CLOSE = 0x0080
-    COVETOUS = 0x001f  # == WANTSALL (C defines the same value twice)
+    COVETOUS = 0x001F  # == WANTSALL (C defines the same value twice)
     WAITMASK = WAITFORU | CLOSE
     INFRAVISION = 0x0100
     INFRAVISIBLE = 0x0200
@@ -561,6 +615,7 @@ M3_DISPLACES = M3.DISPLACES
 
 class MSize(IntEnum):
     """Physical size (C: MZ_*; permonst.msize is 3 bits)."""
+
     TINY = 0
     SMALL = 1
     MEDIUM = 2
@@ -581,6 +636,7 @@ MZ_GIGANTIC = MSize.GIGANTIC
 
 class MSound(IntEnum):
     """Sound made (C: enum ms_sounds; permonst.msound is 6 bits)."""
+
     SILENT = 0
     BARK = 1
     MEW = 2
@@ -684,11 +740,11 @@ MS_FERRY = MSound.FERRY
 CLR_BLACK = 0
 CLR_RED = 1
 CLR_GREEN = 2
-CLR_BROWN = 3          # on IBM, low-intensity yellow is brown
+CLR_BROWN = 3  # on IBM, low-intensity yellow is brown
 CLR_BLUE = 4
 CLR_MAGENTA = 5
 CLR_CYAN = 6
-CLR_GRAY = 7           # low-intensity white
+CLR_GRAY = 7  # low-intensity white
 NO_COLOR = 8
 CLR_ORANGE = 9
 CLR_BRIGHT_GREEN = 10
@@ -703,9 +759,9 @@ CLR_MAX = 16
 BRIGHT = 8
 
 # colour aliases (color.h; monsters.h uses the HI_* ones)
-HI_DOMESTIC = CLR_WHITE       # for player + pets
-HI_LORD = CLR_MAGENTA         # for high-end monsters
-HI_OVERLORD = CLR_BRIGHT_MAGENTA   # for few uniques
+HI_DOMESTIC = CLR_WHITE  # for player + pets
+HI_LORD = CLR_MAGENTA  # for high-end monsters
+HI_OVERLORD = CLR_BRIGHT_MAGENTA  # for few uniques
 HI_OBJ = CLR_MAGENTA
 HI_METAL = CLR_CYAN
 HI_COPPER = CLR_YELLOW
@@ -776,6 +832,7 @@ NORMAL_SPEED = 12
 
 class MGender(IntEnum):
     """Name gender (C: enum mgender)."""
+
     MALE = 0
     FEMALE = 1
     NEUTRAL = 2
@@ -796,6 +853,7 @@ MH_ORC = M2.ORC
 
 class Geno(IntFlag):
     """mons[].geno bits (C: G_*, the constant part)."""
+
     UNIQ = 0x1000
     NOHELL = 0x0800
     HELL = 0x0400
@@ -821,6 +879,7 @@ G_FREQ = 0x0007  # creation frequency mask, not a flag
 
 class MvitalsFlag(IntFlag):
     """mvitals[].mvflags bits (C: G_KNOWN & friends, monflag.h)."""
+
     EXTINCT = 0x01
     GENOD = 0x02
     KNOWN = 0x04
@@ -839,17 +898,19 @@ MV_KNOWS_EGG = MvitalsFlag.KNOWS_EGG
 # ------------------------------------------------------------
 
 NON_PM = -1
-LOW_PM = NON_PM + 1          # 0
-LEAVESTATUE = NON_PM - 1     # -2
+LOW_PM = NON_PM + 1  # 0
+LEAVESTATUE = NON_PM - 1  # -2
 
 
 # ------------------------------------------------------------
 # Structures (permonst.h)
 # ------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Attack:
     """One attack form (C: struct attack)."""
+
     aatyp: AtkType
     adtyp: DmgType
     damn: int
@@ -866,9 +927,10 @@ class PerMonst:
     values like -7 and 4), so a plain int.
     geno: Geno bits | G_FREQ (C: unsigned short).
     """
+
     pmnames: tuple[str | None, str | None, str]
     pmidx: int
-    mlet: MonsterClass        # S_* class index (5.0)
+    mlet: MonsterClass  # S_* class index (5.0)
     mlevel: int
     mmove: int
     ac: int
@@ -898,16 +960,40 @@ def _nam(name: str) -> tuple[str | None, str | None, str]:
     return (None, None, name)
 
 
-def _nams(male: str, female: str,
-          neutral: str) -> tuple[str | None, str | None, str]:
+def _nams(male: str, female: str, neutral: str) -> tuple[str | None, str | None, str]:
     """C: NAMS() -- the male / female / neutral names of one type
     (C stores three columns; monname() picks one by gender)."""
     return (male, female, neutral)
 
 
-def _mon(pmidx, mlet, name, lvl, mov, ac, mr, aln, geno,
-         a1, a2, a3, a4, a5, a6, wt, nut, snd, siz, res, conv,
-         f1, f2, f3, diff, col) -> PerMonst:
+def _mon(
+    pmidx,
+    mlet,
+    name,
+    lvl,
+    mov,
+    ac,
+    mr,
+    aln,
+    geno,
+    a1,
+    a2,
+    a3,
+    a4,
+    a5,
+    a6,
+    wt,
+    nut,
+    snd,
+    siz,
+    res,
+    conv,
+    f1,
+    f2,
+    f3,
+    diff,
+    col,
+) -> PerMonst:
     """C: the MON() macro -- one mons[] row.
 
     ``name`` is either a plain string (C: NAM()) or a ``_nams(...)``
@@ -915,9 +1001,27 @@ def _mon(pmidx, mlet, name, lvl, mov, ac, mr, aln, geno,
     """
     pmnames = _nam(name) if isinstance(name, str) else name
     return PerMonst(
-        pmnames, pmidx, mlet, lvl, mov, ac, mr, aln, geno,
-        (a1, a2, a3, a4, a5, a6), wt, nut, snd, siz, res, conv,
-        f1, f2, f3, diff, col,
+        pmnames,
+        pmidx,
+        mlet,
+        lvl,
+        mov,
+        ac,
+        mr,
+        aln,
+        geno,
+        (a1, a2, a3, a4, a5, a6),
+        wt,
+        nut,
+        snd,
+        siz,
+        res,
+        conv,
+        f1,
+        f2,
+        f3,
+        diff,
+        col,
     )
 
 
@@ -1031,6 +1135,7 @@ PM_CLAY_GOLEM = 256
 PM_GLASS_GOLEM = 258
 PM_IRON_GOLEM = 259
 PM_HUMAN = 260
+PM_ALIGNED_CLERIC = 275
 PM_HIGH_CLERIC = 276
 PM_WIZARD_OF_YENDOR = 285
 PM_ERINYS = 292

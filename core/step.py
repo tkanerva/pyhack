@@ -6,14 +6,28 @@ This is the ONLY entry point for gameplay.  State may only change
 through this function (which delegates to the systems in this package).
 There is no broadcast bus, no global state, and no I/O.
 """
+
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-from .commands import (CastCommand, CloseCommand, Command, EatCommand,
-                       ListCommand, MoveCommand, PickupCommand,
-                       QuaffCommand, ReadCommand, StairsCommand,
-                       TakeOffCommand, WearCommand, ZapCommand)
+from .commands import (
+    CastCommand,
+    CloseCommand,
+    Command,
+    EatCommand,
+    ListCommand,
+    MoveCommand,
+    OfferCommand,
+    PickupCommand,
+    PrayCommand,
+    QuaffCommand,
+    ReadCommand,
+    StairsCommand,
+    TakeOffCommand,
+    WearCommand,
+    ZapCommand,
+)
 from .doors import close_door, open_door
 from .energy import tick_energy
 from .events import Event, GameOverEvent, MessageEvent
@@ -23,14 +37,15 @@ from .mhitu import mattacku
 from .occupation import run_occupation
 from .pickup import pickup
 from .potions import quaff
+from .priest import do_offer, do_pray, intemple
 from .rings import tick_rings
 from .scrolls import read_scroll
 from .stairs import go_stairs
 from .uhitm import uhitm
-from .rules import (apply_damage, melee_attack, process_events, tick_actor)
+from .rules import apply_damage, melee_attack, process_events, tick_actor
 from .spells import cast_spell
 from .traps import check_traps
-from .types import DamageType, Monster, Pos, World, is_door
+from .types import DamageType, Monster, Pos, RoomType, World, is_door
 from .vision import m_can_see_u, vision_recalc
 from .worn import dotakeoff, dowear
 from .zap import use_wand
@@ -105,8 +120,13 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
         elif isinstance(cmd, StairsCommand):
             events += go_stairs(world, cmd.up, rng)
         elif isinstance(cmd, CloseCommand):
-            events += close_door(world, (world.hero.pos[0] + cmd.dx,
-                                         world.hero.pos[1] + cmd.dy), rng)
+            events += close_door(
+                world, (world.hero.pos[0] + cmd.dx, world.hero.pos[1] + cmd.dy), rng
+            )
+        elif isinstance(cmd, PrayCommand):
+            events += do_pray(world)
+        elif isinstance(cmd, OfferCommand):
+            events += do_offer(world)
         # WaitCommand: a deliberate pass (no trap re-roll, unlike the old demo)
 
     # --- monster turns ---
@@ -143,10 +163,14 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
 
 def _do_move(world: World, actor_id: str, dx: int, dy: int, rng) -> List[Event]:
     actor = world.actors[actor_id]
+    oldpos = actor.pos
     dest = (actor.pos[0] + dx, actor.pos[1] + dy)
     if not world.map.is_walkable(dest):
-        if actor.is_hero and world.map.in_bounds(dest) and is_door(
-                world.map.tile_at(dest).typ):
+        if (
+            actor.is_hero
+            and world.map.in_bounds(dest)
+            and is_door(world.map.tile_at(dest).typ)
+        ):
             # C: domove() -- walking into a closed door opens it instead
             # of moving (the doopen() case; a locked one still refuses)
             return open_door(world, dest, rng)
@@ -160,7 +184,35 @@ def _do_move(world: World, actor_id: str, dx: int, dy: int, rng) -> List[Event]:
         # bumping a monster attacks it (NetHack behaviour)
         return _melee_combat(world, actor_id, target.id, rng)
     actor.pos = dest
-    return check_traps(world, actor_id, rng)
+    events = check_traps(world, actor_id, rng)
+    if actor.is_hero:
+        # C: the spoteffects() -> check_special_room() half of a hero
+        # move (hack.c) -- the special-room entry message
+        events += _room_entry(world, oldpos, dest, rng)
+    return events
+
+
+def _room_entry(world: World, oldpos: Pos, newpos: Pos, rng) -> List[Event]:
+    """C: check_special_room() (hack.c) -- the special-room entry
+    message of a hero move.
+
+    Phase 1 (PLAN-SPECIAL-ROOMS.md): only the TEMPLE branch is live
+    (priest.intemple); the zoo / swamp / court / ... messages land
+    with their phases, and a level entry through the stairs does not
+    re-fire the hook (C's move_update(newlev) half is not ported).
+    Crossing the room boundary is what stands in for C's u.urooms /
+    u.uentered bookkeeping: moving inside the room (or staying in it)
+    never re-enters it.
+    """
+    old_room = world.map.room_at(oldpos)
+    new_room = world.map.room_at(newpos)
+    if (
+        new_room is not None
+        and new_room.rtype == RoomType.TEMPLE
+        and old_room is not new_room
+    ):
+        return intemple(world, new_room, rng)
+    return []
 
 
 def _melee_combat(world: World, attacker_id: str, defender_id: str, rng) -> List[Event]:
@@ -173,8 +225,7 @@ def _melee_combat(world: World, attacker_id: str, defender_id: str, rng) -> List
     # -- and process_events (the pure core) applies them through the
     # state-mutation choke points.  Flat-stat demo monsters (mdata is
     # None) fall through to the simple path below.
-    if (not attacker.is_hero and defender.is_hero
-            and attacker.mdata is not None):
+    if not attacker.is_hero and defender.is_hero and attacker.mdata is not None:
         # monster hits hero (port of src/mhitu.c): producer + processor
         return process_events(world, mattacku(world, attacker_id, rng), rng)
     if attacker.is_hero and defender.mdata is not None:
@@ -194,8 +245,9 @@ def _melee_combat(world: World, attacker_id: str, defender_id: str, rng) -> List
     else:
         flavor = f"⚔️ {attacker.name} hits {defender.name} for {dmg} damage."
     events: List[Event] = [MessageEvent(flavor)]
-    events += apply_damage(world, defender_id, dmg, DamageType.MELEE,
-                           attacker_id, message=False)
+    events += apply_damage(
+        world, defender_id, dmg, DamageType.MELEE, attacker_id, message=False
+    )
     return events
 
 
@@ -233,8 +285,9 @@ def _monster_turn(world: World, mon_id: str, rng) -> List[Event]:
     return []
 
 
-def _step_toward(world: World, mon: Monster, target: Pos,
-                 rng) -> Optional[Tuple[int, int]]:
+def _step_toward(
+    world: World, mon: Monster, target: Pos, rng
+) -> Optional[Tuple[int, int]]:
     """Pick a direction (8-way -- C: monsters may move diagonally) that
     brings the monster one tile closer to `target`, onto a walkable and
     unoccupied tile.  Returns the (dx, dy) delta, or None if no such
@@ -247,9 +300,11 @@ def _step_toward(world: World, mon: Monster, target: Pos,
             if dx == 0 and dy == 0:
                 continue
             dest = (x + dx, y + dy)
-            if (distmin(dest, target) < now
-                    and world.map.is_walkable(dest)
-                    and world.monster_at(dest) is None):
+            if (
+                distmin(dest, target) < now
+                and world.map.is_walkable(dest)
+                and world.monster_at(dest) is None
+            ):
                 options.append((dx, dy))
     if not options:
         return None
@@ -265,6 +320,7 @@ def _finish(world: World, events: List[Event]) -> List[Event]:
             monsters = [m for m in world.actors.values() if not m.is_hero]
             if monsters and not any(m.alive for m in monsters):
                 world.over = True
-                events.append(GameOverEvent(victory=True,
-                                            reason="All monsters cleared!"))
+                events.append(
+                    GameOverEvent(victory=True, reason="All monsters cleared!")
+                )
     return events

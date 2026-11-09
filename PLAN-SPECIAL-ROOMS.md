@@ -1,10 +1,18 @@
 # Plan: Wave 5 — special rooms (temple → zoo family → shops)
 
-**Status: proposed, nothing implemented.** Table.txt row 4, the `L`
-end of the `M→L` range: temples and the zoo family are "room + a few
-lines" once PLAN-MAKEMON.md and PLAN-MKOBJ.md exist; **shops are the
-expensive one**, because a shop is billing (`src/shk.c`, 6,147 lines,
-55.7k tokens — 21 % of a context window) before it is anything else.
+**Status: phase 0's terrain half + phase 1 (temple) LANDED; phases 2-5
+proposed.**  Phase 1 landed as core/priest.py (induced_align, priestini,
+has_shrine / findpriest, the reduced intemple, the #pray / #offer
+refusals), core.mkroom.mktemple (the C-ordered room pick + shrine altar
++ AM_SHRINE + flags.has_temple), the `Epri` extra on Monster (MM_EPRI in
+makemon now allocates it), and the TEMPLE half of the room-entry hook in
+core.step (C's check_special_room).  Phase 0's engraving half
+(`make_engr_at` / `del_engr_at`) is still out — it blocks mkswamp and
+the shop door sign.  Table.txt row 4, the `L` end of the `M→L` range:
+temples and the zoo family are "room + a few lines" once PLAN-MAKEMON.md
+and PLAN-MKOBJ.md exist; **shops are the expensive one**, because a shop
+is billing (`src/shk.c`, 6,147 lines, 55.7k tokens — 21 % of a context
+window) before it is anything else.
 
 **Goal:** `do_mkroom()` earns its keep. A generated level can contain a
 temple with a shrine and a priest, a zoo / barracks / morgue / beehive /
@@ -174,29 +182,54 @@ Not this plan's work, but this plan cannot test anything without them:
    minimal `Tile.engr` + text model.
 4. `Tile.altarmask`.
 
-### Phase 1 — temple (~2 sessions, first because it is the cheapest complete one)
+### Phase 1 — temple (LANDED) — landed as described, with these notes
 
-1. `Tile.altarmask`, `Align2amask`/`Amask2align`, `dungeon.induced_align`
-   (`world.lev` alignment is `A_NONE` until the dungeon exists, so the
-   roll is `rn2(3) - 1` — the C temperate-dungeon path).
-2. `Epri` + `Monster.isshk/ispriest`; `MM_EPRI` in `makemon`.
-3. `priest.priestini`: the 1-square ring search (`xdir/ydir` order from
-   `rn2(N_DIRS)`), `makemon(PM_ALIGNED_CLERIC, …, MM_EPRI)`, the
-   `epri` fields, `mpeaceful = True`, `set_malign`, the goodies
-   (mace/dagger/robe by alignment — `priestini`'s tail).
+1. `Tile.altarmask` + the align.h block landed with the terrain writers
+   (queue item 1, core.monst_defs); `induced_align` lives in
+   core/priest.py (C: dungeon.c — the temple is its only live caller,
+   and pyhack has no dungeon module), always the temperate-dungeon
+   roll: `rn2(3) - 1` -> `align2amask`.
+2. `Epri` (core.types, the C struct epri with the pacing timers carried
+   and never ticked) + `Monster.ispriest`/`isshk`; `MM_EPRI` in makemon
+   allocates the extra (the C newepri block); MM_ESHK & friends still
+   accepted-and-ignored until their systems.
+3. `priest.priestini`: the 1-square ring search in C's xdir/ydir order
+   (decl.c), `si = rn2(N_DIRS)`, the `pm_good_location` test reduced to
+   in-bounds + `SPACE_POS` (C's DRY half, sp_lev.c — faithfully
+   including the furniture next to the shrine), the rloc() insurance
+   (enexto), `makemon(PM_ALIGNED_CLERIC, MM_EPRI, in_mklev=True)`, the
+   epri fields, `mpeaceful = True`, `set_malign`, the 2-4 spellbooks
+   (`rn1(3, 2)`, mkobj's `SPBOOK_no_NOVEL` + the addinv single
+   writer).  The robe tail (m_initweap / which_armor W_ARMC + its
+   rn2(2)) waits for PLAN-MAKEMON.md phase E — its roll is not taken.
 4. `mkroom.mktemple`: `pick_room(TRUE)` → `rtype = TEMPLE` →
-   `shrine_pos` → `ALTAR` + `altarmask = induced_align(80) | AM_SHRINE`
-   → `priestini` → `flags.has_temple`.
-5. `priest.intemple` (the "you are in a temple" / peace messages) and a
-   **refusal** for `#pray`/`#offer`: "You feel you should not do that
-   here." with `pray.c`'s provenance in the docstring.
-6. Rendering: `_` for an altar (C `S_altar`), the priest as a human
-   glyph; the console legend line gains both.
-7. Tests: exactly one altar at the shrine position; it carries
-   `AM_SHRINE` and a legal alignment; the priest is peaceful, of the
-   altar's alignment, standing on or adjacent to the shrine, and knows
-   the room; a second `mktemple` on a one-room level does not crash
-   (returns `None`).
+   `shrine_pos` → `ALTAR` (through `set_levltyp`; C writes levl[]
+   directly, the mutator has no side effect on an ALTAR destination) →
+   `altarmask = induced_align(80)` → `priestini` → `altarmask |=
+   AM_SHRINE` → `flags.has_temple` — the C order, priestini reading the
+   mask before AM_SHRINE is set.  A shrine_pos that gives up (a room
+   with no standable square) keeps the rtype, altar and priest unmade —
+   C's shrine_pos never answers NULL, so it is the named refusal.
+5. `priest.intemple` (the "Pilgrim, you enter a sacred/desecrated
+   place!" + the peace / forbidding feeling, the untended eerie lines
+   and the 1-in-5 hostile ghost — the nomul(-3) is a named skip) and
+   the **refusals** `do_pray` / `do_offer`: "You feel you should not do
+   that here." (C's own misaligned-altar line), with `pray.c`'s
+   provenance in the docstrings; the commands are PrayCommand /
+   OfferCommand (`#pray` / `#offer` in the console, C do_extcmd) and a
+   turn is spent.  The room-entry hook is `_room_entry` in core.step
+   (C: the spoteffects -> check_special_room half of a hero move, the
+   TEMPLE branch only; moving inside the room never re-fires it).
+6. Rendering: the altar already drew as `_` (C `S_altar`, the display
+   port had the branch); the priest draws as the human glyph `@` (C
+   S_HUMAN, defsym.h — the same character as the hero; the console
+   legend line says "@ = Hero (or Priest)" and gained the altar).
+7. Tests: tests/test_priest.py — all of the plan's list (the one altar
+   + AM_SHRINE + legal alignment, the peaceful co-aligned priest on the
+   shrine's ring who knows the room, the second-mktemple None, the
+   tended / desecrated / untended intemple halves, the refusals, the
+   entry hook firing once per crossing) + the ring fallback and the
+   induced_align three-way.
 
 ### Phase 2 — the zoo family (~3 sessions)
 
@@ -363,9 +396,10 @@ adds only prices).
 
 ## 8. Definition of done
 
-- [ ] `Altarmask` on tiles; `induced_align`; one live `shrine_pos` caller
-- [ ] a temple: shrine altar with alignment + a peaceful aligned priest
-      who knows the room, `flags.has_temple`
+- [x] `Altarmask` on tiles; `induced_align`; one live `shrine_pos` caller
+- [x] a temple: shrine altar with alignment + a peaceful aligned priest
+      who knows the room, `flags.has_temple` (+ the intemple message,
+      the #pray / #offer refusals, tests/test_priest.py)
 - [ ] `fill_zoo` for all eight zoo-family types, `fill_special_room`
       dispatching (including the vault's gold), the `_roll_special_room`
       conditions complete

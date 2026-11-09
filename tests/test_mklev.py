@@ -8,17 +8,35 @@ hold is what makes a level playable -- every room reachable, every room
 entered through a door, the stairs standing on free floor, and the whole
 thing reproducible from a seed.
 """
+
 from typing import Set, Tuple
 
 import pytest
 
 from core import mklev as M
-from core.mklev import (Rect, RectManager, add_room, blank_map,
-                        check_room, dig_corridor, makelevel, sort_rooms,
-                        topologize)
+from core.mklev import (
+    Rect,
+    RectManager,
+    add_room,
+    blank_map,
+    check_room,
+    dig_corridor,
+    makelevel,
+    sort_rooms,
+    topologize,
+)
 from core.rnd import Rng
-from core.types import (DoorMask, Map, ROOMOFFSET, RoomType, SHARED,
-                        STAIR_DOWN, STAIR_UP, TerrainType, World)
+from core.types import (
+    DoorMask,
+    Map,
+    ROOMOFFSET,
+    RoomType,
+    SHARED,
+    STAIR_DOWN,
+    STAIR_UP,
+    TerrainType,
+    World,
+)
 from conftest import make_hero
 
 W, H = 40, 20
@@ -49,8 +67,7 @@ def _passable(map_: Map, pos: Tuple[int, int]) -> bool:
     return map_.is_walkable(pos)
 
 
-_DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1),
-         (1, 1), (1, -1), (-1, 1), (-1, -1))
+_DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
 
 
 def _reachable(map_: Map, start: Tuple[int, int]) -> Set[Tuple[int, int]]:
@@ -76,6 +93,7 @@ def _reachable(map_: Map, start: Tuple[int, int]) -> Set[Tuple[int, int]]:
 # the building blocks
 # ------------------------------------------------------------
 
+
 def test_blank_map_is_all_stone():
     m = blank_map(10, 6)
     assert m.width == 10 and m.height == 6
@@ -91,10 +109,10 @@ def test_add_room_paints_walls_corners_and_floor():
     assert m.rooms == [room]
     assert (room.lx, room.ly, room.hx, room.hy) == (5, 4, 10, 8)
     assert room.rlit is True
-    assert m.tile_at((5, 3)).typ == TerrainType.HWALL      # top wall
-    assert m.tile_at((5, 9)).typ == TerrainType.HWALL      # bottom wall
-    assert m.tile_at((4, 5)).typ == TerrainType.VWALL      # left wall
-    assert m.tile_at((11, 5)).typ == TerrainType.VWALL     # right wall
+    assert m.tile_at((5, 3)).typ == TerrainType.HWALL  # top wall
+    assert m.tile_at((5, 9)).typ == TerrainType.HWALL  # bottom wall
+    assert m.tile_at((4, 5)).typ == TerrainType.VWALL  # left wall
+    assert m.tile_at((11, 5)).typ == TerrainType.VWALL  # right wall
     assert m.tile_at((4, 3)).typ == TerrainType.TLCORNER
     assert m.tile_at((11, 3)).typ == TerrainType.TRCORNER
     assert m.tile_at((4, 9)).typ == TerrainType.BLCORNER
@@ -172,8 +190,9 @@ def test_check_room_accepts_free_rock():
 
 def test_dig_corridor_connects_two_points():
     m = blank_map(W, H)
-    ok, npoints = dig_corridor(m, _rng(), 3, (3, 3), (12, 8), False,
-                               TerrainType.CORR, TerrainType.STONE)
+    ok, npoints = dig_corridor(
+        m, _rng(), 3, (3, 3), (12, 8), False, TerrainType.CORR, TerrainType.STONE
+    )
     assert ok and npoints > 0
     # the corridor is a connected run of dug squares from org to dest
     # (C digs an L and turns whenever the two axis distances balance)
@@ -209,6 +228,7 @@ def test_rect_manager_splits_a_room_out_of_the_level():
 # the finished level
 # ------------------------------------------------------------
 
+
 @pytest.mark.parametrize("seed", [1, 2, 3, 42, 1337])
 def test_makelevel_builds_rooms_and_corridors(seed):
     world, m = _gen(seed)
@@ -222,13 +242,20 @@ def test_makelevel_builds_rooms_and_corridors(seed):
         # somexyspace() over the whole room rectangle, corners included
         # (C: rnd_loc); a wall there would be a bug, a fountain is not
         assert m.tile_at((room.lx, room.ly)).typ in (
-            TerrainType.ROOM, TerrainType.FOUNTAIN, TerrainType.SINK,
-            TerrainType.ALTAR, TerrainType.GRAVE)
+            TerrainType.ROOM,
+            TerrainType.FOUNTAIN,
+            TerrainType.SINK,
+            TerrainType.ALTAR,
+            TerrainType.GRAVE,
+        )
         assert room.hx > room.lx and room.hy > room.ly
     # and the level is not a solid block: corridors exist
-    corrs = [(x, y) for y in range(m.height) for x in range(m.width)
-             if m.tile_at((x, y)).typ in (TerrainType.CORR,
-                                          TerrainType.SCORR)]
+    corrs = [
+        (x, y)
+        for y in range(m.height)
+        for x in range(m.width)
+        if m.tile_at((x, y)).typ in (TerrainType.CORR, TerrainType.SCORR)
+    ]
     assert corrs, "makecorridors() must dig at least one corridor"
 
 
@@ -236,15 +263,23 @@ def test_makelevel_builds_rooms_and_corridors(seed):
 def test_every_room_is_reachable_from_the_hero_side(seed):
     """The whole point of makecorridors(): no room may be sealed off."""
     world, m = _gen(seed)
-    stairs = [(x, y) for y in range(m.height) for x in range(m.width)
-              if m.tile_at((x, y)).typ == TerrainType.STAIRS]
+    stairs = [
+        (x, y)
+        for y in range(m.height)
+        for x in range(m.width)
+        if m.tile_at((x, y)).typ == TerrainType.STAIRS
+    ]
     assert stairs, "the level must have staircases"
     reach = _reachable(m, stairs[0])
     for room in m.rooms:
-        inside = [(x, y) for x in range(room.lx, room.hx + 1)
-                  for y in range(room.ly, room.hy + 1)]
-        assert any(pos in reach for pos in inside), \
-            f"room {room.lx},{room.ly} is walled off"
+        inside = [
+            (x, y)
+            for x in range(room.lx, room.hx + 1)
+            for y in range(room.ly, room.hy + 1)
+        ]
+        assert any(
+            pos in reach for pos in inside
+        ), f"room {room.lx},{room.ly} is walled off"
 
 
 @pytest.mark.parametrize("seed", [1, 2, 3, 42, 1337])
@@ -254,8 +289,7 @@ def test_every_room_is_entered_through_a_door(seed):
     for room in m.rooms:
         assert room.doorct >= 1, f"room {room.lx},{room.ly} has no door"
         for door in room.doors:
-            assert m.tile_at(door).typ in (TerrainType.DOOR,
-                                           TerrainType.SDOOR)
+            assert m.tile_at(door).typ in (TerrainType.DOOR, TerrainType.SDOOR)
     # doors are level-wide bookkeeping too (C: svd.doors[])
     assert len(m.doors) >= len(m.rooms)
 
@@ -268,9 +302,13 @@ def test_doors_carry_a_valid_state(seed):
             tile = m.tiles[y][x]
             if tile.typ == TerrainType.DOOR:
                 assert tile.door_mask in (
-                    DoorMask(0), DoorMask.ISOPEN, DoorMask.CLOSED,
-                    DoorMask.LOCKED, DoorMask.CLOSED | DoorMask.TRAPPED,
-                    DoorMask.LOCKED | DoorMask.TRAPPED)
+                    DoorMask(0),
+                    DoorMask.ISOPEN,
+                    DoorMask.CLOSED,
+                    DoorMask.LOCKED,
+                    DoorMask.CLOSED | DoorMask.TRAPPED,
+                    DoorMask.LOCKED | DoorMask.TRAPPED,
+                )
             elif tile.typ == TerrainType.SDOOR:
                 # a secret door is part of the wall until it is found
                 assert tile.door_mask & (DoorMask.CLOSED | DoorMask.LOCKED)
@@ -280,23 +318,37 @@ def test_level_has_a_down_stair_and_an_up_stair():
     """C: generate_stairs -- the down staircase first, then the up one;
     level 1 gets no upstairs, the bottom level no downstairs."""
     world, m = _gen(1, lev=2, max_lev=5)
-    downs = [(x, y) for y in range(m.height) for x in range(m.width)
-             if m.tile_at((x, y)).typ == TerrainType.STAIRS
-             and m.tile_at((x, y)).stair_dir == STAIR_DOWN]
-    ups = [(x, y) for y in range(m.height) for x in range(m.width)
-           if m.tile_at((x, y)).typ == TerrainType.STAIRS
-           and m.tile_at((x, y)).stair_dir == STAIR_UP]
+    downs = [
+        (x, y)
+        for y in range(m.height)
+        for x in range(m.width)
+        if m.tile_at((x, y)).typ == TerrainType.STAIRS
+        and m.tile_at((x, y)).stair_dir == STAIR_DOWN
+    ]
+    ups = [
+        (x, y)
+        for y in range(m.height)
+        for x in range(m.width)
+        if m.tile_at((x, y)).typ == TerrainType.STAIRS
+        and m.tile_at((x, y)).stair_dir == STAIR_UP
+    ]
     assert len(downs) == 1 and len(ups) == 1
 
     world, m = _gen(1, lev=1, max_lev=5)
-    assert not any(m.tile_at((x, y)).stair_dir == STAIR_UP
-                   for y in range(m.height) for x in range(m.width)
-                   if m.tile_at((x, y)).typ == TerrainType.STAIRS)
+    assert not any(
+        m.tile_at((x, y)).stair_dir == STAIR_UP
+        for y in range(m.height)
+        for x in range(m.width)
+        if m.tile_at((x, y)).typ == TerrainType.STAIRS
+    )
 
     world, m = _gen(1, lev=5, max_lev=5)
-    assert not any(m.tile_at((x, y)).stair_dir == STAIR_DOWN
-                   for y in range(m.height) for x in range(m.width)
-                   if m.tile_at((x, y)).typ == TerrainType.STAIRS)
+    assert not any(
+        m.tile_at((x, y)).stair_dir == STAIR_DOWN
+        for y in range(m.height)
+        for x in range(m.width)
+        if m.tile_at((x, y)).typ == TerrainType.STAIRS
+    )
 
 
 def test_stairs_stand_on_free_room_floor():
@@ -315,14 +367,17 @@ def test_same_seed_same_level():
     depth) -- only the injected rng drives it."""
     _, a = _gen(99)
     _, b = _gen(99)
-    assert [[t.typ for t in row] for row in a.tiles] == \
-        [[t.typ for t in row] for row in b.tiles]
-    assert [(r.lx, r.ly, r.hx, r.hy) for r in a.rooms] == \
-        [(r.lx, r.ly, r.hx, r.hy) for r in b.rooms]
+    assert [[t.typ for t in row] for row in a.tiles] == [
+        [t.typ for t in row] for row in b.tiles
+    ]
+    assert [(r.lx, r.ly, r.hx, r.hy) for r in a.rooms] == [
+        (r.lx, r.ly, r.hx, r.hy) for r in b.rooms
+    ]
     assert a.doors == b.doors
     _, c = _gen(100)
-    assert [[t.typ for t in row] for row in a.tiles] != \
-        [[t.typ for t in row] for row in c.tiles]
+    assert [[t.typ for t in row] for row in a.tiles] != [
+        [t.typ for t in row] for row in c.tiles
+    ]
 
 
 def test_the_generator_stocks_the_level():
@@ -366,8 +421,12 @@ def test_level_size_comes_from_the_map():
     m = makelevel(w, w.map, rng, 2)
     assert m.width == 24 and m.height == 12
     assert m.rooms
-    for x, y in [(x, y) for room in m.rooms for x in (room.lx, room.hx)
-                 for y in (room.ly, room.hy)]:
+    for x, y in [
+        (x, y)
+        for room in m.rooms
+        for x in (room.lx, room.hx)
+        for y in (room.ly, room.hy)
+    ]:
         assert 0 < x < 24 and 0 < y < 12
 
 
@@ -388,18 +447,20 @@ def test_makelevel_is_idempotent_over_an_existing_level():
 # the special-room hooks (STUBs, deliberately)
 # ------------------------------------------------------------
 
+
 def test_special_room_handlers_are_stubs():
-    """The stocking half needs the object / monster port; each STUB
-    names the C it waits for instead of silently doing nothing."""
+    """The zoo / shop / swamp stocking half needs its machinery; each
+    STUB names the C it waits for instead of silently doing nothing.
+    (The temple is in: core.mkroom.mktemple + core.priest,
+    PLAN-SPECIAL-ROOMS.md phase 1 -- tests/test_priest.py.)"""
     from core import mkroom
+
     m = blank_map(W, H)
     add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
     with pytest.raises(NotImplementedError):
         mkroom.fill_zoo(m, [], m.rooms[0], _rng())
     with pytest.raises(NotImplementedError):
         mkroom.mkshop(m, [], _rng())
-    with pytest.raises(NotImplementedError):
-        mkroom.mktemple(m, [], [], _rng())
     with pytest.raises(NotImplementedError):
         mkroom.mkswamp(m, [], _rng())
 
@@ -412,6 +473,7 @@ def test_mkzoo_only_records_the_room_type():
     so the room gets its door first.
     """
     from core import mkroom
+
     m = blank_map(W, H)
     room = add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
     M.add_door(m, 5, 3, room)

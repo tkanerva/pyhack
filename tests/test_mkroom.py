@@ -5,20 +5,45 @@ module is what everybody else asks about them.  The interesting
 behaviour is the geometry: which square is "free" inside a room, which
 room a square belongs to, and the shop-shape rejection.
 """
+
 from typing import List
 
 import pytest
 
 from core import mkroom
 from core.mklev import add_room, add_subroom, blank_map, topologize
-from core.mkroom import (ANY_SHOP, ANY_TYPE, courtmon, has_dnstairs,
-                         has_upstairs, inside_room, invalid_shop_shape,
-                         isbig, nexttodoor, occupied, pick_room,
-                         search_special, shrine_pos, somex, somexy,
-                         somexyspace, somey)
+from core.mkroom import (
+    ANY_SHOP,
+    ANY_TYPE,
+    courtmon,
+    has_dnstairs,
+    has_upstairs,
+    inside_room,
+    invalid_shop_shape,
+    isbig,
+    nexttodoor,
+    occupied,
+    pick_room,
+    search_special,
+    shrine_pos,
+    somex,
+    somexy,
+    somexyspace,
+    somey,
+)
 from core.rnd import Rng
-from core.types import (DoorMask, Pos, Room, RoomType, Stairway,
-                        TerrainType, Tile, Trap, TrapType)
+from core.types import (
+    DoorMask,
+    Pos,
+    Room,
+    RoomType,
+    Stairway,
+    TerrainType,
+    Tile,
+    Trap,
+    TrapType,
+    World,
+)
 
 W, H = 40, 20
 
@@ -38,8 +63,8 @@ def _door(m, pos: Pos, room: Room) -> None:
     """Write a door tile and register it (the tests write the terrain
     themselves, so this only does the bookkeeping)."""
     from core.mklev import add_door
-    m.tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.DOOR,
-                                   door_mask=DoorMask.CLOSED)
+
+    m.tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.DOOR, door_mask=DoorMask.CLOSED)
     add_door(m, pos[0], pos[1], room)
 
 
@@ -47,11 +72,12 @@ def _door(m, pos: Pos, room: Room) -> None:
 # geometry
 # ------------------------------------------------------------
 
+
 def test_isbig_is_the_c_area_test():
     m = blank_map(W, H)
-    small = add_room(m, 2, 2, 7, 6, False)      # 6x5 = 30 > 20
-    big = add_room(m, 14, 2, 30, 12, False)     # 17x11
-    tiny = add_room(m, 2, 10, 5, 13, False)     # 4x4 = 16
+    small = add_room(m, 2, 2, 7, 6, False)  # 6x5 = 30 > 20
+    big = add_room(m, 14, 2, 30, 12, False)  # 17x11
+    tiny = add_room(m, 2, 10, 5, 13, False)  # 4x4 = 16
     assert not isbig(tiny)
     assert isbig(small) and isbig(big)
 
@@ -72,7 +98,7 @@ def test_inside_room_includes_the_wall_ring():
     room" for the stair generator."""
     m, room = _room_map()
     assert inside_room(m, room, (7, 6))
-    assert inside_room(m, room, (4, 3))    # a corner of the wall ring
+    assert inside_room(m, room, (4, 3))  # a corner of the wall ring
     assert not inside_room(m, room, (1, 1))
     assert not inside_room(m, room, (40, 20))
 
@@ -94,8 +120,9 @@ def test_somexy_skips_subrooms():
     for _ in range(50):
         pos = somexy(m, room, rng)
         assert pos is not None
-        assert not (sub.lx - 1 <= pos[0] <= sub.hx + 1
-                    and sub.ly - 1 <= pos[1] <= sub.hy + 1)
+        assert not (
+            sub.lx - 1 <= pos[0] <= sub.hx + 1 and sub.ly - 1 <= pos[1] <= sub.hy + 1
+        )
 
 
 def test_somexy_for_an_irregular_room_uses_the_room_number():
@@ -109,7 +136,7 @@ def test_somexy_for_an_irregular_room_uses_the_room_number():
         for y in range(4, 9):
             m.tiles[y][x].typ = TerrainType.ROOM
             m.tiles[y][x].roomno = roomno
-    m.tiles[4][5].edge = True   # one edge square must never be picked
+    m.tiles[4][5].edge = True  # one edge square must never be picked
     rng = _rng()
     for _ in range(50):
         pos = somexy(m, room, rng)
@@ -120,10 +147,11 @@ def test_somexy_for_an_irregular_room_uses_the_room_number():
 
 def test_somexyspace_avoids_occupied_squares():
     """C: somexyspace = somexy filtered by !occupied and ROOM/CORR/ICE."""
-    m, room = _room_map(5, 4, 7, 6)   # a 3x3 room, one free square left
+    m, room = _room_map(5, 4, 7, 6)  # a 3x3 room, one free square left
     traps: List[Trap] = []
-    for i, pos in enumerate([(5, 4), (6, 4), (7, 4), (5, 5), (7, 5),
-                             (5, 6), (6, 6), (7, 6)]):
+    for i, pos in enumerate(
+        [(5, 4), (6, 4), (7, 4), (5, 5), (7, 5), (5, 6), (6, 6), (7, 6)]
+    ):
         traps.append(Trap(id=f"t{i}", trap_type=TrapType.PIT, pos=pos))
     rng = _rng()
     pos = somexyspace(m, traps, room, rng)
@@ -162,6 +190,7 @@ def test_has_stairs_asks_the_stairway_list():
 # ------------------------------------------------------------
 # room lookup
 # ------------------------------------------------------------
+
 
 def test_pick_room_prefers_an_unused_ordinary_room():
     m = blank_map(W, H)
@@ -225,8 +254,9 @@ def test_room_of_stair_resolves_through_the_room_number():
 # shapes and shrine placement
 # ------------------------------------------------------------
 
+
 def test_shrine_pos_is_the_room_center_when_it_is_free():
-    m, room = _room_map(5, 4, 11, 8)   # 7x5 -> odd, exact center 8,6
+    m, room = _room_map(5, 4, 11, 8)  # 7x5 -> odd, exact center 8,6
     pos = shrine_pos(m, [], room, _rng())
     assert pos == (8, 6)
 
@@ -275,24 +305,29 @@ def test_invalid_shop_shape_needs_a_door():
 # the special-room dispatch
 # ------------------------------------------------------------
 
+
 def test_do_mkroom_routes_the_zoo_family_and_refuses_the_rest():
     m = blank_map(W, H)
     room = add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
     topologize(m, room)
     _door(m, (5, 3), room)
-    claimed = mkroom.do_mkroom(m, [], [], _rng(), RoomType.COURT)
+    w = World(map=m)
+    claimed = mkroom.do_mkroom(w, m, [], [], _rng(), 1, RoomType.COURT)
     assert claimed is room and room.rtype == RoomType.COURT
     with pytest.raises(ValueError):
-        mkroom.do_mkroom(m, [], [], _rng(), RoomType.DELPHI)
+        mkroom.do_mkroom(w, m, [], [], _rng(), 1, RoomType.DELPHI)
 
 
 def test_monster_producing_handlers_are_stubs():
     """courtmon / squadmon / morguemon / antholemon / mkundead all need
     mkclass() or the monster tables; each names the C it waits for."""
-    for call in (lambda: courtmon(_rng()), lambda: mkroom.squadmon(_rng()),
-                 lambda: mkroom.morguemon(_rng()),
-                 lambda: mkroom.antholemon(_rng()),
-                 lambda: mkroom.mkundead((3, 3), _rng()),
-                 lambda: mkroom.mk_zoo_thronemon((3, 3), _rng())):
+    for call in (
+        lambda: courtmon(_rng()),
+        lambda: mkroom.squadmon(_rng()),
+        lambda: mkroom.morguemon(_rng()),
+        lambda: mkroom.antholemon(_rng()),
+        lambda: mkroom.mkundead((3, 3), _rng()),
+        lambda: mkroom.mk_zoo_thronemon((3, 3), _rng()),
+    ):
         with pytest.raises(NotImplementedError):
             call()

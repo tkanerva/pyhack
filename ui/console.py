@@ -4,16 +4,30 @@ render() turns World + log lines into text; read_command() turns a key
 press into a Command.  Nothing in core/ imports anything from ui/ --
 the dependency points one way only.
 """
+
 from __future__ import annotations
 
 from typing import List, Optional
 
 from core import display, invent
-from core.commands import (CastCommand, CloseCommand, Command, EatCommand,
-                           ListCommand, MoveCommand, PickupCommand,
-                           QuaffCommand, ReadCommand, StairsCommand,
-                           TakeOffCommand, WaitCommand, WearCommand,
-                           ZapCommand)
+from core.commands import (
+    CastCommand,
+    CloseCommand,
+    Command,
+    EatCommand,
+    ListCommand,
+    MoveCommand,
+    OfferCommand,
+    PickupCommand,
+    PrayCommand,
+    QuaffCommand,
+    ReadCommand,
+    StairsCommand,
+    TakeOffCommand,
+    WaitCommand,
+    WearCommand,
+    ZapCommand,
+)
 from core.hunger import HU_STAT
 from core.items import wielded_of
 from core.objects import DEF_OC_SYMS, ObjClass
@@ -25,16 +39,25 @@ from core.worn import W_ACCESSORY, W_ARMOR, uac
 # The old code lower-cased the key before comparing against "\x1b[A",
 # so arrow keys never matched.  Compare lowercase consistently now.
 ARROWS = {
-    "w": (0, -1), "\x1b[a": (0, -1),
-    "s": (0, 1), "\x1b[b": (0, 1),
-    "a": (-1, 0), "\x1b[d": (-1, 0),
-    "d": (1, 0), "\x1b[c": (1, 0),
+    "w": (0, -1),
+    "\x1b[a": (0, -1),
+    "s": (0, 1),
+    "\x1b[b": (0, 1),
+    "a": (-1, 0),
+    "\x1b[d": (-1, 0),
+    "d": (1, 0),
+    "\x1b[c": (1, 0),
 }
 
 # The zap direction prompt (C: getdir for the ray wands / spells)
 DIRECTIONS = {
-    "n": Direction.N, "s": Direction.S, "e": Direction.E, "w": Direction.W,
-    "ne": Direction.NE, "nw": Direction.NW, "se": Direction.SE,
+    "n": Direction.N,
+    "s": Direction.S,
+    "e": Direction.E,
+    "w": Direction.W,
+    "ne": Direction.NE,
+    "nw": Direction.NW,
+    "se": Direction.SE,
     "sw": Direction.SW,
 }
 
@@ -82,7 +105,9 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     line), `i` for the whole inventory list (+ `)` `[` `"` `=` `(` for
     one class, `*` for what is worn / wielded, `$` for the wallet --
     listings, so they cost no turn), `>` to go down the stairs / `<` to
-    climb up (C: the '>' / '<' commands); anything else is a wait.
+    climb up (C: the '>' / '<' commands), `#pray` / `#offer` for the
+    shrine commands (C: the extended commands, src/cmd.c do_extcmd --
+    both refuse until src/pray.c lands); anything else is a wait.
     """
     if world.occupation is not None:
         # C: while an occupation runs the bottom line shows the
@@ -108,12 +133,18 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
         return StairsCommand(up=False)
     if key == "<":
         return StairsCommand(up=True)
+    # the extended commands (C: do_extcmd, src/cmd.c): the two the
+    # temple answers -- core.step spends the turn and refuses (C's
+    # misaligned-altar line) until src/pray.c lands
+    if key == "#pray":
+        return PrayCommand()
+    if key == "#offer":
+        return OfferCommand()
     # the close command (C: doclose, one step in a direction): 'x' +
     # an axis letter ('c' already casts, so close moved to 'x'); a
     # lone 'x' is a wait, like a lone 'q'
     if key.startswith("x") and len(key) == 2 and key[1] in "nsew":
-        dx, dy = {"n": (0, -1), "s": (0, 1),
-                  "e": (1, 0), "w": (-1, 0)}[key[1]]
+        dx, dy = {"n": (0, -1), "s": (0, 1), "e": (1, 0), "w": (-1, 0)}[key[1]]
         return CloseCommand(dx, dy)
     if len(key) == 2 and key[1].isalpha():
         item_id = _item_by_letter(world, key[1])
@@ -126,25 +157,22 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
                 return ReadCommand(item_id)
             if key[0] == "z":
                 item = world.items[item_id]
-                if (item.otype == ObjectType.WAND
-                        and item.wand_type is not None):
+                if item.otype == ObjectType.WAND and item.wand_type is not None:
                     return ZapCommand(item.wand_type, _ask_direction())
                 return WaitCommand()
             if key[0] == "c":
                 item = world.items[item_id]
-                if (item.otype == ObjectType.BOOK
-                        and item.spell_type is not None):
-                    direction = (_ask_direction()
-                                 if item.spell_type in SPELL_ZAPS
-                                 else None)
+                if item.otype == ObjectType.BOOK and item.spell_type is not None:
+                    direction = (
+                        _ask_direction() if item.spell_type in SPELL_ZAPS else None
+                    )
                     return CastCommand(item_id, direction)
                 return WaitCommand()
             if key[0] == "e":
                 return EatCommand(item_id)
             if key[0] == "q":
                 item = world.items[item_id]
-                if (item.otype == ObjectType.POTION
-                        and item.potion_type is not None):
+                if item.otype == ObjectType.POTION and item.potion_type is not None:
                     return QuaffCommand(item_id)
                 return WaitCommand()
             return WaitCommand()
@@ -208,37 +236,58 @@ def render(world: World, log: List[str]) -> str:
     # and '-' are the walls, '#' a corridor, '+' a closed door ('|' and
     # '-' again for an open one), '.' a lit floor, and a blank an
     # unexplored square
-    lines.append("   @ = Hero | M = Monster | ^ = Seen Trap | X = Triggered Trap | | - = Wall or open door | # = Corridor | + = Closed door | . = Lit floor | > = Stairs down | < = Stairs up | blank = Unexplored")
+    lines.append(
+        "   @ = Hero (or Priest) | M = Monster | _ = Altar | ^ = Seen Trap | X = Triggered Trap | | - = Wall or open door | # = Corridor | + = Closed door | . = Lit floor | > = Stairs down | < = Stairs up | blank = Unexplored"
+    )
     # the floor-glyph legend: the glyphs come from the same defsym.h
     # table the map uses (def_oc_syms, core.objects); the labels are
     # the classes the demo floor carries
-    lines.append("   " + " | ".join(
-        f"{DEF_OC_SYMS[oc].sym} = {label}"
-        for oc, label in ((ObjClass.SCROLL, "Scroll"),
-                          (ObjClass.WEAPON, "Weapon"),
-                          (ObjClass.ARMOR, "Armour"),
-                          (ObjClass.SPBOOK, "Spell Book"),
-                          (ObjClass.WAND, "Wand"),
-                          (ObjClass.FOOD, "Food"),
-                          (ObjClass.POTION, "Potion"))))
+    lines.append(
+        "   "
+        + " | ".join(
+            f"{DEF_OC_SYMS[oc].sym} = {label}"
+            for oc, label in (
+                (ObjClass.SCROLL, "Scroll"),
+                (ObjClass.WEAPON, "Weapon"),
+                (ObjClass.ARMOR, "Armour"),
+                (ObjClass.SPBOOK, "Spell Book"),
+                (ObjClass.WAND, "Wand"),
+                (ObjClass.FOOD, "Food"),
+                (ObjClass.POTION, "Potion"),
+            )
+        )
+    )
     lines.append("")
 
     hero_pos = world.hero.pos
     # monsters are drawn live, on top of the memory (C: see_monsters()
-    # floats them above the map; they are never part of levl[].glyph)
-    monster_pos = {m.pos for m in world.actors.values()
-                   if not m.is_hero and display.mon_visible(world, m)}
+    # floats them above the map; they are never part of levl[].glyph).
+    # the priest wears the human glyph (C: S_HUMAN is '@', defsym.h --
+    # the same character as the hero; the legend says so)
+    priest_pos = {
+        m.pos
+        for m in world.actors.values()
+        if not m.is_hero and m.ispriest and display.mon_visible(world, m)
+    }
+    monster_pos = {
+        m.pos
+        for m in world.actors.values()
+        if not m.is_hero and not m.ispriest and display.mon_visible(world, m)
+    }
     # a trap going off is a transient effect, so it is drawn live too --
     # a *known* trap is part of the memory ('^', written by
     # display.map_trap)
-    triggered = {t.pos for t in world.traps.values()
-                 if t.triggered and t.lev == world.lev}
+    triggered = {
+        t.pos for t in world.traps.values() if t.triggered and t.lev == world.lev
+    }
 
     for y in range(world.map.height):
         row = []
         for x in range(world.map.width):
             pos = (x, y)
             if pos == hero_pos:
+                row.append("@")
+            elif pos in priest_pos:
                 row.append("@")
             elif pos in monster_pos:
                 row.append("M")
@@ -248,8 +297,7 @@ def render(world: World, log: List[str]) -> str:
                 # the hero's memory of the square: the terrain, a
                 # remembered object, a known trap -- or blank when the
                 # square has never been seen
-                row.append(display.glyph_to_char(
-                    world.map.tile_at(pos).glyph))
+                row.append(display.glyph_to_char(world.map.tile_at(pos).glyph))
         lines.append("".join(row))
 
     hero = world.hero
@@ -257,16 +305,20 @@ def render(world: World, log: List[str]) -> str:
     weapon_name = weapon.name if weapon is not None else "bare hands"
     # the hunger text on the bottom line (C: the hu_stat[] table of
     # eat.c, printed by botl.c when uhs != NOT_HUNGRY)
-    hu = (" | 🍖 " + HU_STAT[int(hero.uhs)].strip()
-          if hero.uhs != HungerState.NOT_HUNGRY else "")
+    hu = (
+        " | 🍖 " + HU_STAT[int(hero.uhs)].strip()
+        if hero.uhs != HungerState.NOT_HUNGRY
+        else ""
+    )
     # the running occupation text (C: the go.occtxt bottom line)
-    occ = (" | 🍽️ " + world.occupation.text
-           if world.occupation is not None else "")
+    occ = " | 🍽️ " + world.occupation.text if world.occupation is not None else ""
     # the effective AC is the computed core.worn.uac (base - worn gear);
     # the experience level + XP (C: the botl u.uexp / the level in the
     # hero name field -- the demo shows both, always on, like the rest of
     # the status line; PLAN-EXPERIENCE.md decision 8)
-    lines.append(f"🩸 HP: {hero.hp}/{hero.max_hp} | ⭐ Lvl: {hero.ulevel} | 📈 XP: {hero.uexp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}{hu}{occ}")
+    lines.append(
+        f"🩸 HP: {hero.hp}/{hero.max_hp} | ⭐ Lvl: {hero.ulevel} | 📈 XP: {hero.uexp} | ⚡ Pw: {hero.uen}/{hero.uenmax} | 🛡️ AC: {uac(world, hero)} | ⚔️ {weapon_name} | 💥 Damage Taken: {hero.max_hp - hero.hp}{hu}{occ}"
+    )
     lines.append(_inventory_line(world))
     lines.append("")
     lines.append("📜 Log:")

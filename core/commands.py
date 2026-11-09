@@ -1,4 +1,5 @@
 """Player commands: the only input the simulation accepts."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -33,7 +34,9 @@ class QuaffCommand:
 @dataclass(frozen=True)
 class CastCommand:
     book_id: str
-    direction: Optional[Direction] = None  # None = self (C: 'C' / 'c' -- the zapyourself
+    direction: Optional[Direction] = (
+        None  # None = self (C: 'C' / 'c' -- the zapyourself
+    )
     # path -- a directional spell cast without a direction hits the
     # caster; the self effects (healing, teleport, cancellation) need
     # no direction at all)
@@ -42,12 +45,14 @@ class CastCommand:
 @dataclass(frozen=True)
 class ReadCommand:
     """Read a scroll (C: 'R' / 'r' -- doread)."""
+
     item_id: str
 
 
 @dataclass(frozen=True)
 class EatCommand:
     """Eat a carried food (C: 'e' -- doeat)."""
+
     item_id: str
 
 
@@ -56,6 +61,7 @@ class WearCommand:
     """Wear / put on an armor, ring or amulet (C: 'W' and 'P' both
     funnel into accessory_or_armor_on -- one command pair, PLAN-ARMOR.md
     decision 5)."""
+
     item_id: str
 
 
@@ -63,6 +69,7 @@ class WearCommand:
 class TakeOffCommand:
     """Take off / remove an armor, ring or amulet (C: 'T' and 'R' both
     funnel into armor_or_accessory_off)."""
+
     item_id: str
 
 
@@ -86,6 +93,7 @@ class ListCommand:
     events and no state change, and the console draws it through
     core.invent's formatters -- the core has no window to write to.
     """
+
     what: str
 
 
@@ -95,6 +103,7 @@ class StairsCommand:
     doup -- two C functions with one shared skeleton, collapsed into
     one command; PLAN-STAIRS.md decision 2).  ``up`` is True for the
     '<' command."""
+
     up: bool
 
 
@@ -105,11 +114,39 @@ class CloseCommand:
     closed door opens it (C: the domove() case), so 'o' would be
     redundant.  The demo front-end binds this to 'x' because 'c'
     already casts a spell."""
+
     dx: int
     dy: int
 
 
-Command = Union[MoveCommand, WaitCommand, ZapCommand, QuaffCommand,
-                CastCommand, ReadCommand, EatCommand, WearCommand,
-                TakeOffCommand, PickupCommand, ListCommand,
-                StairsCommand, CloseCommand]
+@dataclass(frozen=True)
+class PrayCommand:
+    """Pray at the shrine (C: '#pray' -> dopray, src/pray.c).  The
+    prayer system is not ported (PLAN-SPECIAL-ROOMS.md §2.6), so
+    core.step answers the turn with the refusal line (core.priest).
+    A turn is spent, as C's command does."""
+
+
+@dataclass(frozen=True)
+class OfferCommand:
+    """Offer to the shrine (C: '#offer' -> doffer, src/pray.c).  The
+    refusal, as PrayCommand; a turn is spent."""
+
+
+Command = Union[
+    MoveCommand,
+    WaitCommand,
+    ZapCommand,
+    QuaffCommand,
+    CastCommand,
+    ReadCommand,
+    EatCommand,
+    WearCommand,
+    TakeOffCommand,
+    PickupCommand,
+    ListCommand,
+    StairsCommand,
+    CloseCommand,
+    PrayCommand,
+    OfferCommand,
+]

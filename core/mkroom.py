@@ -25,32 +25,35 @@ Included (the parts that need nothing beyond the ported terrain):
   isbig, pick_room, do_mkroom dispatch, mkzoo (the room *selection*
   and the rtype bookkeeping -- C: "the shop used to be stocked here
   ... all we do is set its rtype, and it gets stocked at the end of
-  makelevel()"), somex/somey/somexy/somexyspace, inside_room,
-  nexttodoor, has_dnstairs, has_upstairs, search_special, occupied,
-  shrine_pos, invalid_shop_shape, room_of_stair.
+  makelevel()"), mktemple (the room pick, the shrine altar with its
+  induced alignment and the priest, through core.priest.priestini --
+  PLAN-SPECIAL-ROOMS.md phase 1), somex/somey/somexy/somexyspace,
+  inside_room, nexttodoor, has_dnstairs, has_upstairs, search_special,
+  occupied, shrine_pos, invalid_shop_shape, room_of_stair.
 
 STUBs (raise NotImplementedError, each with the machinery it waits for):
 
   - mkshop(): needs the shknam.c shop-type table (shtypes[]) and then
     the shk.c stock_room() billing side.
-  - mktemple(): needs the altar altarmask *and* priest.c (priestini())
-    -- the shrine square itself is the ported part (shrine_pos).
-  - mkswamp(): needs the sanctioned terrain mutator (set_levltyp), the
-    engraving removal and eel/fungus generation.
+  - mkswamp(): needs the engraving removal (C: del_engr_at) and the
+    eel / fungus stocking; set_levltyp and makemon are in.
   - fill_zoo() (COURT / ZOO / BEEHIVE / MORGUE / BARRACKS / LEPREHALL /
-    COCKNEST / ANTHOLE): needs makemon()/mksobj()/mkgold()/make_grave()
-    -- i.e. the monster and object distribution, the same machinery
-    the worldgen docstring documents as deferred (PLAN-STAIRS.md §5).
+    COCKNEST / ANTHOLE): needs the monster / object pickers below
+    (courtmon / squadmon / morguemon / antholemon / mkundead /
+    mk_zoo_thronemon), which need mkclass() + ndemon() -- phase 2 of
+    PLAN-SPECIAL-ROOMS.md.
   - courtmon()/squadmon()/morguemon()/antholemon()/mkundead(): need
     mkclass() and the monster-generation tables.
   - cmap_to_type(): needs the display symbol table (S_* -> terrain).
 
 Simplifications (documented, not bugs):
 
-  - the room *contents* of a special room are not stocked at all: the
-    level generator only records the room type, so a ZOO is a room
-    that knows it is a zoo.  Every handler states its C provenance so
-    the stocking half can land later without re-reading the C.
+  - the room *contents* of a special room are not stocked except for
+    the temple (which C stocks in mktemple() itself: altar + priest,
+    no needfill) -- the level generator only records the room type for
+    the zoo family, so a ZOO is a room that knows it is a zoo.  Every
+    handler states its C provenance so the stocking half can land
+    later without re-reading the C.
   - do_mkroom is only reached when the generator is asked for special
     rooms (core.mklev.makelevel(specials=True)); the demo level has
     none, and the default level generator passes specials=False.
@@ -65,14 +68,28 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional
 
-from .types import (ANY_SHOP, ANY_TYPE, Map, Pos, Room, RoomType, Stairway,
-                    TerrainType, is_door, is_furniture, is_pool, is_sdoor,
-                    is_wall)
-
+from .priest import induced_align, priestini
+from .types import (
+    ANY_SHOP,
+    ANY_TYPE,
+    Map,
+    Pos,
+    Room,
+    RoomType,
+    Stairway,
+    TerrainType,
+    World,
+    is_door,
+    is_furniture,
+    is_pool,
+    is_sdoor,
+    is_wall,
+)
 
 # ============================================================
 # Small predicates
 # ============================================================
+
 
 def isbig(room: Room) -> bool:
     """C: mkroom.c#isbig -- more than 20 squares makes a "big" room
@@ -124,6 +141,7 @@ def has_upstairs(map_: Map, stairs: Iterable[Stairway], room: Room) -> bool:
 # Room geometry
 # ============================================================
 
+
 def somex(room: Room, rng) -> int:
     """C: mkroom.c#somex -- a random column inside the room."""
     return rng.rn1(room.hx - room.lx + 1, room.lx)
@@ -148,8 +166,7 @@ def inside_room(map_: Map, room: Room, pos: Pos) -> bool:
     if room.irregular:
         tile = map_.tile_at(pos)
         return not tile.edge and tile.roomno == map_.room_of(room)
-    return (room.lx - 1 <= x <= room.hx + 1
-            and room.ly - 1 <= y <= room.hy + 1)
+    return room.lx - 1 <= x <= room.hx + 1 and room.ly - 1 <= y <= room.hy + 1
 
 
 def somexy(map_: Map, room: Room, rng) -> Optional[Pos]:
@@ -181,17 +198,17 @@ def somexy(map_: Map, room: Room, rng) -> Optional[Pos]:
         pos = (somex(room, rng), somey(room, rng))
         if is_wall(map_.tile_at(pos).typ):
             continue
-        in_sub = any(sl.lx - 1 <= pos[0] <= sl.hx + 1
-                     and sl.ly - 1 <= pos[1] <= sl.hy + 1
-                     for sl in (map_.subrooms[i] for i in room.sbrooms))
+        in_sub = any(
+            sl.lx - 1 <= pos[0] <= sl.hx + 1 and sl.ly - 1 <= pos[1] <= sl.hy + 1
+            for sl in (map_.subrooms[i] for i in room.sbrooms)
+        )
         if in_sub:
             continue
         return pos
     return None
 
 
-def somexyspace(map_: Map, traps: Iterable, room: Room,
-                rng) -> Optional[Pos]:
+def somexyspace(map_: Map, traps: Iterable, room: Room, rng) -> Optional[Pos]:
     """C: mkroom.c#somexyspace -- a *free, standable* square inside the
     room (somexy's answer filtered by "not occupied and ROOM/CORR/ICE").
 
@@ -202,17 +219,17 @@ def somexyspace(map_: Map, traps: Iterable, room: Room,
     pos: Optional[Pos] = None
     for _ in range(101):
         pos = somexy(map_, room, rng)
-        if pos is not None \
-                and not occupied(map_, traps, pos) \
-                and map_.tile_at(pos).typ in (TerrainType.ROOM,
-                                              TerrainType.CORR,
-                                              TerrainType.ICE):
+        if (
+            pos is not None
+            and not occupied(map_, traps, pos)
+            and map_.tile_at(pos).typ
+            in (TerrainType.ROOM, TerrainType.CORR, TerrainType.ICE)
+        ):
             return pos
     return pos
 
 
-def shrine_pos(map_: Map, traps: Iterable, room: Room,
-               rng) -> Optional[Pos]:
+def shrine_pos(map_: Map, traps: Iterable, room: Room, rng) -> Optional[Pos]:
     """C: mkroom.c#shrine_pos -- the center of the room, or a random
     free square when the center is blocked (the temple shrine spot).
 
@@ -229,9 +246,11 @@ def shrine_pos(map_: Map, traps: Iterable, room: Room,
         y += 1
     pos = (x, y)
     tile = map_.tile_at(pos) if map_.in_bounds(pos) else None
-    if (tile is None or tile.roomno != map_.room_of(room)
-            or tile.typ not in (TerrainType.ROOM, TerrainType.ICE,
-                                TerrainType.CLOUD)):
+    if (
+        tile is None
+        or tile.roomno != map_.room_of(room)
+        or tile.typ not in (TerrainType.ROOM, TerrainType.ICE, TerrainType.CLOUD)
+    ):
         return somexyspace(map_, traps, room, rng)
     return pos
 
@@ -259,10 +278,10 @@ def invalid_shop_shape(map_: Map, room: Room) -> bool:
     insidex, insidey = inside[0]
     count = 0
     for x in range(max(insidex - 1, room.lx), min(insidex + 1, room.hx) + 1):
-        for y in range(max(insidey - 1, room.ly),
-                       min(insidey + 1, room.hy) + 1):
-            if (x, y) != (insidex, insidey) \
-                    and map_.tile_at((x, y)).typ == TerrainType.ROOM:
+        for y in range(max(insidey - 1, room.ly), min(insidey + 1, room.hy) + 1):
+            if (x, y) != (insidex, insidey) and map_.tile_at(
+                (x, y)
+            ).typ == TerrainType.ROOM:
                 count += 1
     return count == 1
 
@@ -271,8 +290,10 @@ def invalid_shop_shape(map_: Map, room: Room) -> bool:
 # Room lookup
 # ============================================================
 
-def pick_room(map_: Map, stairs: Iterable[Stairway], rng,
-              strict: bool) -> Optional[Room]:
+
+def pick_room(
+    map_: Map, stairs: Iterable[Stairway], rng, strict: bool
+) -> Optional[Room]:
     """C: mkroom.c#pick_room -- an unused ORDINARY room, preferring one
     with a single door.
 
@@ -290,11 +311,11 @@ def pick_room(map_: Map, stairs: Iterable[Stairway], rng,
         if room.rtype != RoomType.OROOM:
             continue
         if not strict:
-            if has_upstairs(map_, stairs, room) \
-                    or (has_dnstairs(map_, stairs, room) and rng.rn2(3)):
+            if has_upstairs(map_, stairs, room) or (
+                has_dnstairs(map_, stairs, room) and rng.rn2(3)
+            ):
                 continue
-        elif has_upstairs(map_, stairs, room) \
-                or has_dnstairs(map_, stairs, room):
+        elif has_upstairs(map_, stairs, room) or has_dnstairs(map_, stairs, room):
             continue
         if room.doorct == 1 or not rng.rn2(5):
             return room
@@ -310,15 +331,16 @@ def search_special(map_: Map, rtype: int) -> Optional[Room]:
     lists are searched here too.
     """
     for room in list(map_.rooms) + list(map_.subrooms):
-        if (rtype == ANY_TYPE and room.rtype != RoomType.OROOM) \
-                or (rtype == ANY_SHOP and room.rtype >= RoomType.SHOPBASE) \
-                or room.rtype == rtype:
+        if (
+            (rtype == ANY_TYPE and room.rtype != RoomType.OROOM)
+            or (rtype == ANY_SHOP and room.rtype >= RoomType.SHOPBASE)
+            or room.rtype == rtype
+        ):
             return room
     return None
 
 
-def room_of_stair(map_: Map, stairs: Iterable[Stairway],
-                  up: bool) -> Optional[Room]:
+def room_of_stair(map_: Map, stairs: Iterable[Stairway], up: bool) -> Optional[Room]:
     """The room the first staircase of the given direction stands in,
     if any (the demo helper behind "don't make a special room out of
     the room the stairs are in")."""
@@ -332,33 +354,54 @@ def room_of_stair(map_: Map, stairs: Iterable[Stairway],
 # Special rooms (C: mkroom.c do_mkroom and the mk* handlers)
 # ============================================================
 
-def do_mkroom(map_: Map, stairs: Iterable[Stairway], traps: Iterable,
-              rng, roomtype: RoomType) -> Optional[Room]:
+
+def do_mkroom(
+    world: World,
+    map_: Map,
+    stairs: Iterable[Stairway],
+    traps: Iterable,
+    rng,
+    lev: int,
+    roomtype: RoomType,
+) -> Optional[Room]:
     """C: mkroom.c#do_mkroom -- make and stock a room of the given type.
 
     Returns the room that was claimed, or None when no eligible room
     was found (C returns void and leaves the level alone).
 
-    Only the room *selection* is ported (see mkzoo); the stocking
-    handlers are STUBs, so a shop / temple / swamp raises
-    NotImplementedError naming the C it waits for.
+    `world` / `lev` say which level is being stocked (a lazily
+    generated level is built while the hero stands on another one,
+    PLAN-MKLEV.md decision 3); `traps` is that level's traps (the
+    temple's shrine keeps off trapped squares through them).
+
+    The zoo family is the room *selection* only (see mkzoo) and the
+    temple is fully stocked here (mktemple); the shop and the swamp
+    are STUBs, so asking for one raises NotImplementedError naming the
+    C it waits for.
     """
     if roomtype >= RoomType.SHOPBASE:
         return mkshop(map_, stairs, rng)
     if roomtype == RoomType.TEMPLE:
-        return mktemple(map_, stairs, traps, rng)
+        return mktemple(world, map_, stairs, traps, rng, lev)
     if roomtype == RoomType.SWAMP:
         return mkswamp(map_, stairs, rng)
-    if roomtype in (RoomType.COURT, RoomType.ZOO, RoomType.BEEHIVE,
-                    RoomType.MORGUE, RoomType.BARRACKS,
-                    RoomType.LEPREHALL, RoomType.COCKNEST,
-                    RoomType.ANTHOLE):
+    if roomtype in (
+        RoomType.COURT,
+        RoomType.ZOO,
+        RoomType.BEEHIVE,
+        RoomType.MORGUE,
+        RoomType.BARRACKS,
+        RoomType.LEPREHALL,
+        RoomType.COCKNEST,
+        RoomType.ANTHOLE,
+    ):
         return mkzoo(map_, stairs, rng, roomtype)
     raise ValueError(f"Tried to make a room of type {roomtype}.")
 
 
-def mkzoo(map_: Map, stairs: Iterable[Stairway], rng,
-          rtype: RoomType) -> Optional[Room]:
+def mkzoo(
+    map_: Map, stairs: Iterable[Stairway], rng, rtype: RoomType
+) -> Optional[Room]:
     """C: mkroom.c#mkzoo -- claim a random room for a zoo-like special
     room (COURT / ZOO / BEEHIVE / MORGUE / BARRACKS / LEPREHALL /
     COCKNEST / ANTHOLE).
@@ -388,11 +431,11 @@ def fill_zoo(map_: Map, traps: Iterable, room: Room, rng) -> None:
     """
     raise NotImplementedError(
         "special-room stocking needs makemon/mksobj/mkgold (C: "
-        "src/mkroom.c fill_zoo())")
+        "src/mkroom.c fill_zoo())"
+    )
 
 
-def mkshop(map_: Map, stairs: Iterable[Stairway],
-           rng) -> Optional[Room]:
+def mkshop(map_: Map, stairs: Iterable[Stairway], rng) -> Optional[Room]:
     """C: mkroom.c#mkshop -- turn an unused one-door room into a shop.
 
     STUB: the shop *type* comes from the shknam.c shtypes[] table
@@ -404,36 +447,65 @@ def mkshop(map_: Map, stairs: Iterable[Stairway],
     """
     raise NotImplementedError(
         "shops need the shknam.c shop-type table and shk.c stock_room() "
-        "(C: src/mkroom.c mkshop())")
+        "(C: src/mkroom.c mkshop())"
+    )
 
 
-def mktemple(map_: Map, stairs: Iterable[Stairway], traps: Iterable,
-             rng) -> Optional[Room]:
+def mktemple(
+    world: World, map_: Map, stairs: Iterable[Stairway], traps: Iterable, rng, lev: int
+) -> Optional[Room]:
     """C: mkroom.c#mktemple -- a temple: a shrine (blessed altar) in
-    the room's center and a priest standing on it.
+    the room's center and a priest standing next to it.
 
-    STUB: the altar needs the ALTAR altarmask (not ported) and the
-    priest needs src/priest.c priestini(); shrine_pos() above is the
-    ported half (it picks the square).
+    The order is C's, draw for draw: the strict room pick, the rtype,
+    the shrine square (shrine_pos), the altar write (C writes levl[]
+    directly; here it is the sanctioned set_levltyp, which has no side
+    effect on an ALTAR destination), the induced_align(80) mask,
+    priestini (which reads the mask *before* AM_SHRINE is set), the
+    AM_SHRINE bit and the level flag.
+
+    Unlike the zoo family and the shop, the temple is fully stocked
+    here -- C's mktemple() sets no needfill, so fill_special_room()
+    only carries its flag when it lands (phase 2).  A room with no
+    standable square at all (shrine_pos gives up) keeps the rtype but
+    the altar and the priest stay unmade: C's shrine_pos() never
+    answers NULL, so the branch is the pyhack refusal for a level edge
+    case.
     """
-    raise NotImplementedError(
-        "temples need the altar altarmask and priest.c priestini() "
-        "(C: src/mkroom.c mktemple())")
+    from .mklev import set_levltyp  # local import: mklev imports this module
+    from .monst_defs import AM_SHRINE
+
+    room = pick_room(map_, stairs, rng, True)
+    if room is None:
+        return None
+    room.rtype = RoomType.TEMPLE
+    # In temples, shrines are blessed altars located in the center of
+    # the room (C's comment)
+    pos = shrine_pos(map_, traps, room, rng)
+    if pos is None:
+        return room
+    if not set_levltyp(map_, pos[0], pos[1], TerrainType.ALTAR):
+        return room
+    map_.tile_at(pos).altarmask = induced_align(rng)
+    priestini(world, map_, room, pos, False, lev, rng)
+    map_.tile_at(pos).altarmask |= AM_SHRINE
+    map_.flags.has_temple = True
+    return room
 
 
-def mkswamp(map_: Map, stairs: Iterable[Stairway],
-            rng) -> Optional[Room]:
+def mkswamp(map_: Map, stairs: Iterable[Stairway], rng) -> Optional[Room]:
     """C: mkroom.c#mkswamp -- flood up to five rooms with pools.
 
-    STUB: the sanctioned terrain mutator (C: set_levltyp) has landed in
-    core.mklev; what is still needed is the engraving removal (C:
-    del_engr_at) and monster generation for the eels / fungus.  The
+    STUB: the sanctioned terrain mutator (C: set_levltyp) and the
+    monster generation (makemon) have landed; what is still needed is
+    the engraving removal (C: del_engr_at) the pools run over.  The
     checkerboard rule ((sx+sy) % 2) and the nexttodoor() guard are the
     ported part of the shape.
     """
     raise NotImplementedError(
         "swamps need engraving removal and eel / fungus monster "
-        "generation (C: src/mkroom.c mkswamp())")
+        "generation (C: src/mkroom.c mkswamp())"
+    )
 
 
 def courtmon(rng) -> None:
@@ -444,7 +516,8 @@ def courtmon(rng) -> None:
     STUB: needs mkclass() and the monster tables.
     """
     raise NotImplementedError(
-        "court monsters need mkclass() (C: src/mkroom.c courtmon())")
+        "court monsters need mkclass() (C: src/mkroom.c courtmon())"
+    )
 
 
 def squadmon(rng) -> None:
@@ -455,8 +528,8 @@ def squadmon(rng) -> None:
     (svm.mvitals).
     """
     raise NotImplementedError(
-        "squad monsters need mkclass()/mvitals (C: src/mkroom.c "
-        "squadmon())")
+        "squad monsters need mkclass()/mvitals (C: src/mkroom.c " "squadmon())"
+    )
 
 
 def morguemon(rng) -> None:
@@ -466,8 +539,8 @@ def morguemon(rng) -> None:
     STUB: needs mkclass() and ndemon().
     """
     raise NotImplementedError(
-        "morgue monsters need mkclass()/ndemon() (C: src/mkroom.c "
-        "morguemon())")
+        "morgue monsters need mkclass()/ndemon() (C: src/mkroom.c " "morguemon())"
+    )
 
 
 def antholemon(rng) -> None:
@@ -479,8 +552,8 @@ def antholemon(rng) -> None:
     PM_GIANT_ANT) and the genocide vitals.
     """
     raise NotImplementedError(
-        "ant-hill monsters need the monster tables (C: src/mkroom.c "
-        "antholemon())")
+        "ant-hill monsters need the monster tables (C: src/mkroom.c " "antholemon())"
+    )
 
 
 def mkundead(pos: Pos, rng) -> None:
@@ -491,8 +564,8 @@ def mkundead(pos: Pos, rng) -> None:
     STUB: needs morguemon(), enexto() and makemon().
     """
     raise NotImplementedError(
-        "undead swarms need morguemon()/makemon() (C: src/mkroom.c "
-        "mkundead())")
+        "undead swarms need morguemon()/makemon() (C: src/mkroom.c " "mkundead())"
+    )
 
 
 def mk_zoo_thronemon(pos: Pos, rng) -> None:
@@ -503,17 +576,39 @@ def mk_zoo_thronemon(pos: Pos, rng) -> None:
     STUB: needs makemon() / mongets().
     """
     raise NotImplementedError(
-        "the throne monarch needs makemon() (C: src/mkroom.c "
-        "mk_zoo_thronemon())")
+        "the throne monarch needs makemon() (C: src/mkroom.c " "mk_zoo_thronemon())"
+    )
 
 
 # The public surface, kept explicit so the STUBs announce themselves.
 __all__ = [
-    "ANY_SHOP", "ANY_TYPE",
-    "antholemon", "courtmon", "do_mkroom", "fill_zoo", "has_dnstairs",
-    "has_upstairs", "inside_room", "invalid_shop_shape", "isbig",
-    "mk_zoo_thronemon", "mkshop", "mkswamp", "mktemple", "mkundead",
-    "mkzoo", "morguemon", "nexttodoor", "occupied", "pick_room",
-    "room_of_stair", "search_special", "shrine_pos", "somex", "somexy",
-    "somexyspace", "somey", "squadmon",
+    "ANY_SHOP",
+    "ANY_TYPE",
+    "antholemon",
+    "courtmon",
+    "do_mkroom",
+    "fill_zoo",
+    "has_dnstairs",
+    "has_upstairs",
+    "inside_room",
+    "invalid_shop_shape",
+    "isbig",
+    "mk_zoo_thronemon",
+    "mkshop",
+    "mkswamp",
+    "mktemple",
+    "mkundead",
+    "mkzoo",
+    "morguemon",
+    "nexttodoor",
+    "occupied",
+    "pick_room",
+    "room_of_stair",
+    "search_special",
+    "shrine_pos",
+    "somex",
+    "somexy",
+    "somexyspace",
+    "somey",
+    "squadmon",
 ]
