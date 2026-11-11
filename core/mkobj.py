@@ -822,6 +822,16 @@ def gold_at(world: World, lev: int, pos: Pos) -> Optional[Item]:
     return None
 
 
+def sobj_at(world: World, otyp: int, lev: int, pos: Pos) -> Optional[Item]:
+    """The first floor object of exact type `otyp` at `pos` on level
+    `lev`, if any (C: invent.c#sobj_at -- the stack walk with the
+    `otmp->otyp == otyp` test)."""
+    for item in world.items.values():
+        if item.lev == lev and item.pos == pos and item.otyp == otyp:
+            return item
+    return None
+
+
 def mkgold(world: World, rng, amount: int, pos: Pos, lev: int) -> Item:
     """A pile of `amount` gold pieces on `pos`, or a random amount when
     amount <= 0 (C: mkobj.c#mkgold).
@@ -954,6 +964,7 @@ __all__ = [
     "is_ismnum", "is_multigen", "may_generate_eroded", "mkbox_cnts",
     "mkcorpstat", "mkgold", "mkobj", "mkobj_at", "mkobj_erosions",
     "mksobj", "mksobj_at", "mksobj_init", "place_object", "rnd_class",
-    "rndmonnum", "rndmonnum_adj", "set_corpsenm", "unbless", "uncurse",
+    "rndmonnum", "rndmonnum_adj", "set_corpsenm", "sobj_at",
+    "unbless", "uncurse",
     "unknow_object", "weight",
 ]

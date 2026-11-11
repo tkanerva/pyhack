@@ -5,6 +5,91 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The zoo family: fill_zoo and the end-of-level dispatcher (Wave 5, phase 2)
+
+**Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 2): the
+temple proved the makemon + terrain + alignment machinery; this
+session makes the other special rooms *mean* something -- a court
+with a throne and a monarch, a morgue with corpses and graves, a
+beehive with a queen, a barracks with a squad, and the ZOO / LEPREHALL
+gold -- all through the C end-of-level model: the room picker only
+claims (rtype + needfill), fill_special_room stocks at the end of
+makelevel.
+
+**The choices:**
+
+1. **The needfill model is C's** (core.types.Room.needfill; C:
+   mkroom.h FILL_NONE = 0 / FILL_NORMAL = 1): mkzoo sets FILL_NORMAL
+   ("the room does not get stocked at this time -- it will get stocked
+   at the end of makelevel()"), do_room_or_subroom resets it (trap 2:
+   a room object is re-used on regeneration; a stale FILL_NORMAL would
+   re-stock a stale room), and the temple sets none (C's mktemple
+   stocks inline, so fill_special_room only carries its flag).
+   makelevel's new step 8 is C's "Fill all special rooms now" loop
+   (the traps list rebuilt first, so the zoo fill sees the ordinary
+   rooms' traps).
+2. **fill_zoo is C's, in C's order** (core.mkroom; C: mkroom.c
+   275-453): the per-type setup (the court's throne square by
+   somexyspace -- the maze-level pre-placed-THRONE scan is a named
+   no-op, pyhack has no maze levels; the beehive's queen = the room
+   centre with the irregular fallback; the ZOO / LEPREHALL
+   goldlim = 500 * level_difficulty()), the per-square pass (C's skip
+   conditions, the picker, makemon(MM_ASLEEP | MM_NOGRP,
+   in_mklev=True), the court's mpeaceful -> hostile flip, the per-type
+   objects), the post-processing (the court's THRONE write + the royal
+   coffers -- rn1(50 * depth, 10) gold in a spe = 2 chest, the level
+   flags).  The gold budget is verbatim: per square i = the squared
+   dist2 to the first door (i = goldlim when the room has no door),
+   the flat 5 * depth once i >= goldlim, mkgold(rn1(i, 10)),
+   goldlim -= i -- the budget can go negative and the flat value keeps
+   the far squares stocked.  A picker that answers None (antholemon
+   all-gone; courtmon's out-of-band rung) takes C's makemon anymon
+   path (pyhack's makemon(ptr=None) is it) -- a ZOO room is a random
+   monster per square.
+3. **The pickers are mkclass + makemon fill-ins** (core.mkroom; C:
+   mkroom.c): courtmon (the i = rn2(60) + rn2(3*depth) depth ladder,
+   bugbear / hobgoblin the two fixed rows), squadmon (the squadprob[]
+   table kept as data, the cumulative cpro > sel_prob walk, the G_GONE
+   test answers None), morguemon (the depth ladder; the Inhell /
+   In_endgame mkclass(S_DEMON) half a named no-op -- pyhack has no
+   hell -- so the ndemon(A_NONE) half, and a failed draw drops to the
+   ladder, C's comment), antholemon (World.birth % 3 + depth, draw-
+   free, the genocide rotation, all-gone answers None),
+   mk_zoo_thronemon (the four rulers by rnd(depth), asleep + hostile +
+   the mace), and mkundead with the **correct** C signature (coord,
+   revive_corpses, mm_flags) -- S32's (pos, rng) was wrong; the
+   revive() half is a named skip (a corpse on the square counts as
+   revived).  ndemon (C: minion.c) landed in core.makemon (which owns
+   mkclass_aligned): one draw, the lords / princes rejected, no retry.
+   The four ruler rows + anchors joined the table (core.monst_defs /
+   core.monst); sobj_at (C: invent.c -- the mkundead revive half) in
+   core.mkobj; World.birth in core.types (main.py samples getnow() once
+   at game start, the midnight pattern; the tests keep the 0 default
+   so seeded worlds keep their draw sequences).
+4. **fill_special_room is in mkroom.py, and the docstring says why**
+   (C: sp_lev.c 2732 -- **not mkroom.c**, trap 1; PLAN-SPLEV.md will
+   call the same function for des.room({type="zoo"})): the subroom
+   recursion, the OROOM / THEMEROOM / FILL_NONE refusal (before the
+   flag switch, so an unclaimed room carries no flag either), the
+   FILL_NORMAL stocking (the shop branch first -- _stock_room STUB,
+   unreachable while mkshop is a STUB; the VAULT gold-per-square --
+   the vault room type is useful before vault.c; the zoo family), the
+   trailing flag switch (no case for the anthole / cocknest /
+   leprehall, C's).
+5. **_roll_special_room gained the two missing conditions**
+   (decision 10): the shop roll's medusa cap faked as
+   world.max_lev - 5 until the dungeon topology exists, and the G_GONE
+   pre-checks on the leprechaun / killer bee / soldier / cockatrice
+   rolls (plus C's draw-free antholemon() pre-check on the ant roll).
+   The draw order otherwise stays C's.
+
+mypy clean over 96 files, flake8 clean, 1249 tests green (19 new in
+tests/test_zoo.py; the shop and the swamp are the two STUBs left,
+named in tests/test_mklev.py / tests/test_mkroom.py); the demo's
+pinned seeds, layouts and messages are unchanged (the demo generator
+never calls makelevel with specials=True, and the new step 8 stocks
+nothing on a level with no claimed rooms).
+
 ## The temple: the priest system and the shrine (Wave 5, phase 1)
 
 **Why:** queue item 1 (PLAN-SPECIAL-ROOMS.md, staging "temple first

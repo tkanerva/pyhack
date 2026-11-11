@@ -15,7 +15,6 @@ from core.mklev import add_room, add_subroom, blank_map, topologize
 from core.mkroom import (
     ANY_SHOP,
     ANY_TYPE,
-    courtmon,
     has_dnstairs,
     has_upstairs,
     inside_room,
@@ -307,6 +306,9 @@ def test_invalid_shop_shape_needs_a_door():
 
 
 def test_do_mkroom_routes_the_zoo_family_and_refuses_the_rest():
+    """The zoo family claims the room only (rtype + needfill, the
+    stocking is the end-of-level fill_special_room --
+    tests/test_zoo.py); the shop and the swamp still raise."""
     m = blank_map(W, H)
     room = add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
     topologize(m, room)
@@ -316,18 +318,3 @@ def test_do_mkroom_routes_the_zoo_family_and_refuses_the_rest():
     assert claimed is room and room.rtype == RoomType.COURT
     with pytest.raises(ValueError):
         mkroom.do_mkroom(w, m, [], [], _rng(), 1, RoomType.DELPHI)
-
-
-def test_monster_producing_handlers_are_stubs():
-    """courtmon / squadmon / morguemon / antholemon / mkundead all need
-    mkclass() or the monster tables; each names the C it waits for."""
-    for call in (
-        lambda: courtmon(_rng()),
-        lambda: mkroom.squadmon(_rng()),
-        lambda: mkroom.morguemon(_rng()),
-        lambda: mkroom.antholemon(_rng()),
-        lambda: mkroom.mkundead((3, 3), _rng()),
-        lambda: mkroom.mk_zoo_thronemon((3, 3), _rng()),
-    ):
-        with pytest.raises(NotImplementedError):
-            call()

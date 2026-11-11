@@ -91,9 +91,19 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from .mkmap import litstate_rnd
-from .mkroom import do_mkroom, has_dnstairs, has_upstairs, occupied, somexyspace
+from .mkroom import (
+    antholemon,
+    do_mkroom,
+    fill_special_room,
+    has_dnstairs,
+    has_upstairs,
+    occupied,
+    somexyspace,
+)
+from .monst import G_GONE, PM_COCKATRICE, PM_KILLER_BEE, PM_LEPRECHAUN, PM_SOLDIER
 from .monst_defs import align2amask
 from .types import (
+    FILL_NONE,
     LevelFlags,
     MAXNROFROOMS,
     ROOMOFFSET,
@@ -330,6 +340,9 @@ def do_room_or_subroom(
     room.doors = []
     room.irregular = False
     room.sbrooms = []
+    # the room object is re-used on regeneration: a stale FILL_NORMAL
+    # would re-stock a stale room (PLAN-SPECIAL-ROOMS.md trap 2)
+    room.needfill = FILL_NONE
     if special:
         return
 
@@ -1794,43 +1807,64 @@ def generate_stairs(
 # ============================================================
 
 
+def _gone(world: World, mndx: int) -> bool:
+    """C: `svm.mvitals[mndx].mvflags & G_GONE` -- the species is
+    genocided or extinct (the special-room roll's pre-checks)."""
+    return (world.mon_state.mvitals[mndx].mvflags & G_GONE) != 0
+
+
 def _roll_special_room(
     world: World, map_: Map, rng, depth: int, stairs: List[Stairway], lev: int
 ) -> None:
     """C: the special-room roll of makelevel() -- at most one special
     room per level, its type chosen by depth.
 
-    The odds chain is C's verbatim.  The temple is fully ported
-    (core.mkroom.mktemple -> core.priest.priestini) and the zoo family
-    only sets the room type (mkzoo); the shop and the swamp are
-    core.mkroom STUBs, so asking for specials on a level that rolls
-    one of them still raises NotImplementedError -- that is why the
-    demo generator passes specials=False.
+    The odds chain is C's verbatim, including the two conditions the
+    earlier port was missing (PLAN-SPECIAL-ROOMS.md decision 10): the
+    shop roll's `u_depth < depth(&medusa_level)` cap -- faked as
+    world.max_lev - 5 until the dungeon topology exists -- and the
+    G_GONE pre-checks on the leprechaun / killer bee / soldier /
+    cockatrice rolls (plus C's antholemon() pre-check on the ant
+    roll, which is draw-free).  The temple is fully ported (core.
+    mkroom.mktemple -> core.priest.priestini) and the zoo family is
+    stocked by the end-of-level fill_special_room loop; the shop and
+    the swamp are core.mkroom STUBs, so asking for specials on a
+    level that rolls one of them still raises NotImplementedError --
+    that is why the demo generator passes specials=False.
     """
     traps = [t for t in world.traps.values() if t.lev == lev]
     nrooms = len(map_.rooms)
     threshold = 3
-    if depth > 1 and nrooms >= threshold and rng.rn2(depth) < 3:
+    # C: `u_depth < depth(&medusa_level)` -- the shop only rolls above
+    # the medusa level.  pyhack has no dungeon branches, so the cap is
+    # faked as world.max_lev - 5 (PLAN-SPECIAL-ROOMS.md decision 10).
+    medusa_cap = world.max_lev - 5
+    if (depth > 1 and depth < medusa_cap and nrooms >= threshold
+            and rng.rn2(depth) < 3):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.SHOPBASE)
     elif depth > 4 and not rng.rn2(6):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.COURT)
-    elif depth > 5 and not rng.rn2(8):
+    elif (depth > 5 and not rng.rn2(8)
+            and not _gone(world, PM_LEPRECHAUN)):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.LEPREHALL)
     elif depth > 6 and not rng.rn2(7):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.ZOO)
     elif depth > 8 and not rng.rn2(5):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.TEMPLE)
-    elif depth > 9 and not rng.rn2(5):
+    elif (depth > 9 and not rng.rn2(5)
+            and not _gone(world, PM_KILLER_BEE)):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.BEEHIVE)
     elif depth > 11 and not rng.rn2(6):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.MORGUE)
-    elif depth > 12 and not rng.rn2(8):
+    elif depth > 12 and not rng.rn2(8) and antholemon(world) is not None:
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.ANTHOLE)
-    elif depth > 14 and not rng.rn2(4):
+    elif (depth > 14 and not rng.rn2(4)
+            and not _gone(world, PM_SOLDIER)):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.BARRACKS)
     elif depth > 15 and not rng.rn2(6):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.SWAMP)
-    elif depth > 16 and not rng.rn2(8):
+    elif (depth > 16 and not rng.rn2(8)
+            and not _gone(world, PM_COCKATRICE)):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.COCKNEST)
 
 
@@ -1845,10 +1879,14 @@ def makelevel(world: World, map_: Map, rng, lev: int, specials: bool = False) ->
       3. generate_stairs()-- INSIDE rooms, before the corridors exist
       4. makecorridors()  -- the doors and the corridors between them
       5. make_niches()    -- the alcoves in the outer walls
-      6. [special room]   -- at most one, by depth (the temple is in;
-                             shop / swamp are STUBs, see _roll_special_room)
+      6. [special room]   -- at most one, by depth (the temple and the
+                             zoo family are in; shop / swamp are STUBs,
+                             see _roll_special_room)
       7. fill_ordinary_room() for every room -- monsters and traps
-      8. level_finalize_topology() -- stamp the room numbers
+      8. fill_special_room() for every room -- the end-of-level
+         stocking loop (C: "Fill all special rooms now"): the vault's
+         gold-per-square, the zoo family through fill_zoo, the flags
+      9. level_finalize_topology() -- stamp the room numbers
 
     Steps 7 and 8 are in that order only because C splits them between
     makelevel() and mklev(); filling does not need the room numbers.
@@ -1870,6 +1908,12 @@ def makelevel(world: World, map_: Map, rng, lev: int, specials: bool = False) ->
         _roll_special_room(world, map_, rng, depth, stairs, lev)
     for room in list(map_.rooms):
         fill_ordinary_room(world, map_, rng, room, lev, depth)
+    # C: "Fill all special rooms now, regardless of whether this is a
+    # special level, proto level, or ordinary level."  The traps list
+    # is rebuilt here so the zoo fill sees the ordinary rooms' traps.
+    traps = [t for t in world.traps.values() if t.lev == lev]
+    for room in list(map_.rooms):
+        fill_special_room(world, rng, map_, traps, room, lev)
     level_finalize_topology(map_)
     count_level_features(map_)
     return map_

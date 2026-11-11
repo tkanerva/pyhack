@@ -28,6 +28,7 @@ from core.mklev import (
 from core.rnd import Rng
 from core.types import (
     DoorMask,
+    FILL_NORMAL,
     Map,
     ROOMOFFSET,
     RoomType,
@@ -448,26 +449,27 @@ def test_makelevel_is_idempotent_over_an_existing_level():
 # ------------------------------------------------------------
 
 
-def test_special_room_handlers_are_stubs():
-    """The zoo / shop / swamp stocking half needs its machinery; each
-    STUB names the C it waits for instead of silently doing nothing.
-    (The temple is in: core.mkroom.mktemple + core.priest,
-    PLAN-SPECIAL-ROOMS.md phase 1 -- tests/test_priest.py.)"""
+def test_shop_and_swamp_handlers_are_stubs():
+    """The shop and the swamp are the two unstocked special rooms left
+    (PLAN-SPECIAL-ROOMS.md phase 3 / 4); each STUB names the C it
+    waits for instead of silently doing nothing.  (The temple and the
+    zoo family are in: core.mkroom.mktemple / fill_zoo + fill_
+    special_room -- tests/test_priest.py and tests/test_zoo.py.)"""
     from core import mkroom
 
     m = blank_map(W, H)
     add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
-    with pytest.raises(NotImplementedError):
-        mkroom.fill_zoo(m, [], m.rooms[0], _rng())
     with pytest.raises(NotImplementedError):
         mkroom.mkshop(m, [], _rng())
     with pytest.raises(NotImplementedError):
         mkroom.mkswamp(m, [], _rng())
 
 
-def test_mkzoo_only_records_the_room_type():
-    """mkzoo is the one special-room handler that needs no stocking: it
-    picks a room and sets its type (C sets needfill and stocks later).
+def test_mkzoo_records_the_room_type_and_needfill():
+    """mkzoo is the zoo-family handler that needs no stocking at call
+    time: it picks a room and sets its type + needfill (C: mkroom.c
+    mkzoo -- "the room does not get stocked at this time -- it will get
+    stocked at the end of makelevel()").
 
     pick_room() wants a single-door room (C: `doorct == 1 || !rn2(5)`),
     so the room gets its door first.
@@ -480,3 +482,4 @@ def test_mkzoo_only_records_the_room_type():
     claimed = mkroom.mkzoo(m, [], _rng(), RoomType.ZOO)
     assert claimed is room
     assert room.rtype == RoomType.ZOO
+    assert room.needfill == FILL_NORMAL

@@ -471,6 +471,22 @@ def mkclass_aligned(
     return MONS[order[first]]
 
 
+def ndemon(world: World, rng, atyp: int) -> Optional[int]:
+    """A random major demon, as a mons[] index (C: minion.c#ndemon),
+    or None (C: NON_PM).  `atyp` is the alignment restriction; A_NONE
+    means any alignment.
+
+    C's one-try contract, kept: mkclass_aligned() picks the species in
+    one draw and is_ndemon() rejects the lords and princes -- a failed
+    pick answers None, it does not retry (the C comment: the old 20-try
+    loop is gone).
+    """
+    ptr = mkclass_aligned(world, rng, S_DEMON, 0, atyp)
+    if ptr is not None and _is_ndemon(ptr):
+        return monsndx(ptr)
+    return None
+
+
 # ------------------------------------------------------------
 # How strong: adj_lev / newmonhp / golemhp
 # ------------------------------------------------------------
@@ -1069,6 +1085,7 @@ __all__ = [
     "mongets",
     "monmax_difficulty",
     "monmin_difficulty",
+    "ndemon",
     "newmonhp",
     "peace_minded",
     "rnd_goodpos",

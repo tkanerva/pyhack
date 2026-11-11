@@ -408,6 +408,7 @@ from .monst_defs import (
 # into PM_NAMES, not part of the C header's own API.
 from .monst_defs import (  # noqa: F401
     PM_COCKATRICE,
+    PM_DWARF_RULER,
     PM_IMP,
     PM_QUASIT,
     PM_KOBOLD,
@@ -432,8 +433,10 @@ from .monst_defs import (  # noqa: F401
     PM_BLACK_DRAGON,
     PM_YELLOW_DRAGON,
     PM_FIRE_ELEMENTAL,
+    PM_GNOME_RULER,
     PM_HILL_GIANT,
     PM_OGRE,
+    PM_OGRE_TYRANT,
     PM_GARTER_SNAKE,
     PM_SNAKE,
     PM_TROLL,
@@ -446,6 +449,7 @@ from .monst_defs import (  # noqa: F401
     PM_SKELETON,
     PM_FLESH_GOLEM,
     PM_STONE_GOLEM,
+    PM_ELVEN_MONARCH,
     PM_GHOST,
     PM_MAIL_DAEMON,
     PM_LONG_WORM_TAIL,
@@ -583,6 +587,10 @@ def _validate() -> None:
     # PM_ constants agree with the recorded ordering
     anchors = {
         PM_COCKATRICE: "cockatrice",
+        PM_DWARF_RULER: "dwarf ruler",
+        PM_GNOME_RULER: "gnome ruler",
+        PM_OGRE_TYRANT: "ogre tyrant",
+        PM_ELVEN_MONARCH: "elven monarch",
         PM_BAT: "bat",
         PM_GRAY_DRAGON: "gray dragon",
         PM_BLACK_DRAGON: "black dragon",

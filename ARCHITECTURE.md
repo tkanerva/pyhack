@@ -379,19 +379,19 @@ the writer Wave 5's `mkswamp` and the temple altar needed; the
 temple itself has landed with it, queue item 1):
 
 1. **Wave 5: special rooms** (PLAN-SPECIAL-ROOMS.md), in the plan's
-   own staging: the temple is LANDED (core/priest.py + mktemple +
-   Epri + the #pray / #offer refusals + the entry hook; phase 1 of the
-   plan is the record of what landed and why); next is the zoo family
-   (`fill_zoo` in C order with the gold budget, `courtmon` /
-   `squadmon` / `morguemon` / `antholemon` / `mkundead` /
-   `mk_zoo_thronemon` become `mkclass` + `makemon` fill-ins, the
+   own staging: the temple (phase 1: core/priest.py + mktemple +
+   Epri + the #pray / #offer refusals + the entry hook) and the zoo
+   family (phase 2: `fill_zoo` in C order with the gold budget, the
+   pickers as `mkclass` + `makemon` fill-ins, the
    `fill_special_room` dispatcher in mkroom (C: sp_lev.c -- the trap
-   about its home is in the plan), `Room.needfill`, and the two
+   about its home is in the plan) with the VAULT gold branch,
+   `Room.needfill` + the do_room_or_subroom reset, and the two
    missing `_roll_special_room` conditions: the medusa cap faked as
-   `world.max_lev - 5` + the `G_GONE` pre-checks), then the swamp
-   (blocked on the engraving half of phase 0: `make_engr_at` /
-   `del_engr_at`), the shops last (shk.c is billing before it is a
-   room).
+   `world.max_lev - 5` + the `G_GONE` pre-checks) are LANDED (tests/
+   test_zoo.py); next is the swamp (one STUB from done: set_levltyp
+   and makemon are in -- blocked on the engraving half of phase 0:
+   `make_engr_at` / `del_engr_at` + the eel / fungus stocking), the
+   shops last (shk.c is billing before it is a room).
 2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),

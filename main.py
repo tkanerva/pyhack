@@ -12,7 +12,7 @@ import sys
 from typing import List, Union
 
 from core import GameOverEvent, ListCommand, MessageEvent, step
-from core.calendar import midnight
+from core.calendar import getnow, midnight
 from core.rnd import Rng
 from core.worldgen import CAVERN, DEMO, MKLEV, new_world
 from ui import inventory_lines, read_command, render
@@ -49,9 +49,11 @@ def main() -> None:
     generator = MKLEV if "--mklev" in sys.argv else (
         CAVERN if "--cavern" in sys.argv else DEMO)
     rng = make_rng(generator)
-    # the wall clock enters the game exactly here (C: midnight());
-    # World.midnight stays fixed for the whole game (deterministic step)
+    # the wall clock enters the game exactly here (C: midnight() /
+    # ubirthday); World.midnight and World.birth stay fixed for the
+    # whole game (deterministic step)
     world = new_world(rng, midnight=midnight(), generator=generator)
+    world.birth = getnow()
     log: List[str] = []
 
     print("🎮 PyHack — functional core, events out")

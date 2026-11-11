@@ -510,6 +510,10 @@ class RoomType(IntEnum):
 ANY_TYPE = -1
 ANY_SHOP = -2
 
+# C: mkroom.h -- the needfill values (struct mkroom.needfill).
+FILL_NONE = 0  # do not fill this room with anything
+FILL_NORMAL = 1  # fill it normally (see fill_special_room / fill_ordinary_room)
+
 
 @dataclass(eq=False)
 class Room:
@@ -532,8 +536,13 @@ class Room:
       remain available as read-only readings of it.
     - ``sbrooms`` holds *indices* into ``Map.subrooms`` instead of
       pointers (the pyhack rule: no object graphs inside the World).
-    - ``needfill`` (mkroom.h: a sp_lev special-level flag) is not
-      carried: the demo generator fills every OROOM.
+    - ``needfill`` (mkroom.h) is carried, per PLAN-SPECIAL-ROOMS.md
+      phase 2: ``mkzoo`` (and later the shop and the vault) set
+      FILL_NORMAL so ``fill_special_room`` stocks the room at the end
+      of makelevel; the temple sets none (C's mktemple stocks inline,
+      so fill_special_room only carries its flag).  do_room_or_subroom
+      resets it, because a room object is re-used on regeneration and
+      a stale FILL_NORMAL would re-stock a stale room.
     """
 
     lx: int
@@ -551,6 +560,7 @@ class Room:
     roomnoidx: int = 0
     doors: List[Pos] = field(default_factory=list)
     sbrooms: List[int] = field(default_factory=list)
+    needfill: int = FILL_NONE
 
     # --- C-compatible readings of the door bookkeeping ---
     @property
@@ -1107,6 +1117,13 @@ class World:
     # game (the deterministic rule); mattacku's undead double damage
     # reads it (C: hitmu)
     midnight: bool = False
+    # the game's birth time in epoch seconds (C: ubirthday, the hero's
+    # birth time): antholemon() reads % 3 of it for the per-level ant
+    # species (same species on a level, different ones between levels
+    # and between games).  main.py samples getnow() once at game start
+    # (the midnight pattern); tests leave the 0 default, so seeded
+    # worlds keep their draw sequences.
+    birth: int = 0
     # the CURRENT level's stairways (C: gs.stairs); rebuilt on every
     # level entry by core.stairs.rebuild_stairs
     stairs: "list[Stairway]" = field(default_factory=list)
