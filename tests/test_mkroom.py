@@ -308,7 +308,9 @@ def test_invalid_shop_shape_needs_a_door():
 def test_do_mkroom_routes_the_zoo_family_and_refuses_the_rest():
     """The zoo family claims the room only (rtype + needfill, the
     stocking is the end-of-level fill_special_room --
-    tests/test_zoo.py); the shop and the swamp still raise."""
+    tests/test_zoo.py); an unknown room type raises ValueError.  (The
+    shop STUB and the swamp are covered in tests/test_mklev.py and
+    tests/test_swamp.py.)"""
     m = blank_map(W, H)
     room = add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
     topologize(m, room)

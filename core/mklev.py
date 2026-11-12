@@ -47,8 +47,8 @@ STUBs (announced where they are, never silently skipped):
     object half places gold, a fountain, a sink, an altar, a grave, a
     statue and a final random object (core.mkobj + the mkfount / mksink /
     mkaltar / mkgrave terrain writers below); the bonus item, the chest
-    and the engravings (make_engr_at) are the remaining STUBs, their
-    rolls not taken (see _fill_room_objects).
+    and the engravings (make_engr_at is now in core.engrave) are the
+    remaining STUBs, their rolls not taken (see _fill_room_objects).
   - mktrap(): C's traptype_rnd() depth table, the dead adventurer
     (mktrap_victim), the rolling-boulder launch path and the
     once/impossible flags.  The trap types the demo implements are
@@ -1549,9 +1549,10 @@ def make_grave(world: World, map_: Map, traps: List[Trap], pos: Pos) -> None:
     """C: engrave.c#make_grave -- a grave on a ROOM (or GRAVE) square
     with no trap there.
 
-    STUB: the headstone engraving (C: del_engr_at + make_engr_at HEADSTONE
-    and get_rnd_text(EPITAPHFILE)) needs the engraving system, so the
-    epitaph roll is not taken.
+    STUB: the headstone engraving (C: del_engr_at + make_engr_at
+    HEADSTONE and get_rnd_text(EPITAPHFILE)) has the engraving system
+    now (core.engrave), but the random epitaph (get_rnd_text over the
+    epitaph file) is not ported, so the engraving is still not written.
     """
     tile = map_.tile_at(pos)
     if tile.typ not in (TerrainType.ROOM, TerrainType.GRAVE):
@@ -1826,11 +1827,13 @@ def _roll_special_room(
     G_GONE pre-checks on the leprechaun / killer bee / soldier /
     cockatrice rolls (plus C's antholemon() pre-check on the ant
     roll, which is draw-free).  The temple is fully ported (core.
-    mkroom.mktemple -> core.priest.priestini) and the zoo family is
-    stocked by the end-of-level fill_special_room loop; the shop and
-    the swamp are core.mkroom STUBs, so asking for specials on a
-    level that rolls one of them still raises NotImplementedError --
-    that is why the demo generator passes specials=False.
+    mkroom.mktemple -> core.priest.priestini), the zoo family is
+    stocked by the end-of-level fill_special_room loop, and the swamp
+    is fully ported (core.mkroom.mkswamp -- the pools + eels / fungus,
+    PLAN-SPECIAL-ROOMS.md phase 3).  The shop is the one remaining
+    core.mkroom STUB, so asking for specials on a level that rolls a
+    shop still raises NotImplementedError -- that is why the demo
+    generator passes specials=False.
     """
     traps = [t for t in world.traps.values() if t.lev == lev]
     nrooms = len(map_.rooms)

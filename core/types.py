@@ -607,6 +607,25 @@ class LevelFlags:
 
 
 @dataclass
+class Engraving:
+    """One floor engraving (C: struct engr, reduced to the minimal model).
+
+    C keeps a level-wide linked list (head_engr) of engravings keyed by
+    (engr_x, engr_y), each carrying three text copies (actual /
+    remembered / pristine), a tool type, a time, and read / erased
+    state.  This minimal model keeps the text and the tool type on the
+    Tile itself (the (engr_x, engr_y) key becomes the Tile); the
+    remembered / pristine copies, the time-based wear, and the Elbereth
+    guard are not ported (PLAN-SPECIAL-ROOMS.md phase 0).
+    """
+
+    text: str
+    # C: engr_type (E_PLAIN, E_PEN, E_SABER, E_STYLUS, E_HEADSTONE,
+    # E_RUNIC, E_MAGICAL -- the constants in core.engrave)
+    type: int = 0
+
+
+@dataclass
 class Tile:
     """One level location (C: struct rm, reduced).
 
@@ -659,6 +678,9 @@ class Tile:
     # altar generators (core.mklev.mkaltar / the temple work); 0 for
     # every non-altar tile.
     altarmask: int = 0
+    # the floor engraving on this square, if any (C: the engr linked
+    # list keyed by (x, y); see Engraving).  Written by core.engrave.
+    engr: Optional[Engraving] = None
 
     def is_door_open(self) -> bool:
         """A door is passable unless closed/locked/trapped (C: the

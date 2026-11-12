@@ -388,10 +388,11 @@ temple itself has landed with it, queue item 1):
    `Room.needfill` + the do_room_or_subroom reset, and the two
    missing `_roll_special_room` conditions: the medusa cap faked as
    `world.max_lev - 5` + the `G_GONE` pre-checks) are LANDED (tests/
-   test_zoo.py); next is the swamp (one STUB from done: set_levltyp
-   and makemon are in -- blocked on the engraving half of phase 0:
-   `make_engr_at` / `del_engr_at` + the eel / fungus stocking), the
-   shops last (shk.c is billing before it is a room).
+   test_zoo.py), and so is the swamp (phase 3: the engraving half of
+   phase 0 in core.engrave + `mkswamp` -- the pools on the (sx+sy)%2
+   squares through set_levltyp, the eels / fungus, tests/test_swamp.py
+   + tests/test_engrave.py); next is the shops, last
+   (shk.c is billing before it is a room).
 2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),

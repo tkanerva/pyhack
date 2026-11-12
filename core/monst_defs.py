@@ -1143,4 +1143,9 @@ PM_ALIGNED_CLERIC = 275
 PM_HIGH_CLERIC = 276
 PM_WIZARD_OF_YENDOR = 285
 PM_ERINYS = 292
+# the swamp's water dwellers (C: enum monnums, the S_EEL rows); the
+# indices are the rows in core.monst_data (piranha 317, shark 318,
+# giant eel 319, electric eel 320, kraken 321).
+PM_PIRANHA = 317
 PM_GIANT_EEL = 319
+PM_ELECTRIC_EEL = 320

@@ -449,20 +449,19 @@ def test_makelevel_is_idempotent_over_an_existing_level():
 # ------------------------------------------------------------
 
 
-def test_shop_and_swamp_handlers_are_stubs():
-    """The shop and the swamp are the two unstocked special rooms left
-    (PLAN-SPECIAL-ROOMS.md phase 3 / 4); each STUB names the C it
-    waits for instead of silently doing nothing.  (The temple and the
-    zoo family are in: core.mkroom.mktemple / fill_zoo + fill_
-    special_room -- tests/test_priest.py and tests/test_zoo.py.)"""
+def test_shop_handler_is_a_stub():
+    """The shop is the one unstocked special room left (PLAN-SPECIAL-
+    ROOMS.md phase 4); the STUB names the C it waits for instead of
+    silently doing nothing.  (The temple, the zoo family, and the
+    swamp are in: core.mkroom.mktemple / fill_zoo + fill_special_room /
+    mkswamp -- tests/test_priest.py, tests/test_zoo.py, and
+    tests/test_swamp.py.)"""
     from core import mkroom
 
     m = blank_map(W, H)
     add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
     with pytest.raises(NotImplementedError):
         mkroom.mkshop(m, [], _rng())
-    with pytest.raises(NotImplementedError):
-        mkroom.mkswamp(m, [], _rng())
 
 
 def test_mkzoo_records_the_room_type_and_needfill():

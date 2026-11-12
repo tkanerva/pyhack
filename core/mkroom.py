@@ -42,8 +42,12 @@ Included (the parts that need nothing beyond the ported terrain):
   square branch, the zoo family, the trailing flag switch),
   mktemple (the room pick, the shrine altar with its
   induced alignment and the priest, through core.priest.priestini --
-  PLAN-SPECIAL-ROOMS.md phase 1), the zoo pickers (courtmon /
-  squadmon / morguemon / antholemon / mk_zoo_thronemon / mkundead),
+  PLAN-SPECIAL-ROOMS.md phase 1), mkswamp (the pools on the
+  (sx+sy) % 2 squares through set_levltyp, the nexttodoor guard, the
+  del_engr_at, the eel / piranha pick and the S_FUNGUS branch,
+  flags.has_swamp -- PLAN-SPECIAL-ROOMS.md phase 3), the zoo pickers
+  (courtmon / squadmon / morguemon / antholemon / mk_zoo_thronemon /
+  mkundead),
   somex/somey/somexy/somexyspace, inside_room, nexttodoor,
   has_dnstairs, has_upstairs, search_special, occupied, shrine_pos,
   invalid_shop_shape, room_of_stair.
@@ -55,20 +59,19 @@ STUBs (raise NotImplementedError, each with the machinery it waits for):
   - fill_special_room's shop branch (C: stock_room): the same
     stock_room(); the branch is unreachable while mkshop is a STUB
     (no shop room can exist), and phase 4 replaces the body.
-  - mkswamp(): needs the engraving removal (C: del_engr_at) and the
-    eel / fungus stocking (phase 3); set_levltyp and makemon are in.
   - cmap_to_type(): needs the display symbol table (S_* -> terrain).
 
 Simplifications (documented, not bugs):
 
-  - the temple is the only special room C stocks in its mk* handler
-    (mktemple: altar + priest, no needfill) -- fill_special_room
-    only carries its flag.  The zoo family is stocked by fill_zoo
+  - the temple and the swamp are the special rooms C stocks in their
+    mk* handlers (mktemple: altar + priest; mkswamp: pools + eels /
+    fungus) -- neither sets a needfill, so fill_special_room only
+    carries their flag.  The zoo family is stocked by fill_zoo
     through the needfill model (mkzoo sets FILL_NORMAL, the
     end-of-level fill_special_room loop stocks it); the shop (phase
-    4) and the swamp (phase 3) are the two unstocked rooms left.
-    Every handler states its C provenance so the next phase can land
-    without re-reading the C.
+    4) is the one unstocked room left (a STUB).  Every handler states
+    its C provenance so the next phase can land without re-reading the
+    C.
   - do_mkroom is only reached when the generator is asked for special
     rooms (core.mklev.makelevel(specials=True)); the demo level has
     none, and the default level generator passes specials=False.
@@ -83,6 +86,7 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional, Tuple
 
+from .engrave import del_engr_at
 from .hacklib import dist2, distmin
 from .makemon import makemon, mkclass, mongets, ndemon, set_malign
 from .mkobj import (
@@ -102,16 +106,19 @@ from .monst import (
     PM_CAPTAIN,
     PM_COCKATRICE,
     PM_DWARF_RULER,
+    PM_ELECTRIC_EEL,
     PM_ELVEN_MONARCH,
     PM_FIRE_ANT,
     PM_GHOST,
     PM_GIANT_ANT,
+    PM_GIANT_EEL,
     PM_GNOME_RULER,
     PM_HOBGOBLIN,
     PM_KILLER_BEE,
     PM_LEPRECHAUN,
     PM_LIEUTENANT,
     PM_OGRE_TYRANT,
+    PM_PIRANHA,
     PM_QUEEN_BEE,
     PM_SERGEANT,
     PM_SOLDIER,
@@ -124,6 +131,7 @@ from .monst_defs import (
     G_GONE,
     S_CENTAUR,
     S_DRAGON,
+    S_FUNGUS,
     S_GIANT,
     S_GNOME,
     S_KOBOLD,
@@ -449,17 +457,18 @@ def do_mkroom(
     PLAN-MKLEV.md decision 3); `traps` is that level's traps (the
     temple's shrine keeps off trapped squares through them).
 
-    The zoo family is the room *selection* only (see mkzoo) and the
-    temple is fully stocked here (mktemple); the shop and the swamp
-    are STUBs, so asking for one raises NotImplementedError naming the
-    C it waits for.
+    The zoo family is the room *selection* only (see mkzoo), the
+    temple is fully stocked here (mktemple), and the swamp is fully
+    stocked here (mkswamp -- the pools and the eels / fungus, PLAN-
+    SPECIAL-ROOMS.md phase 3); the shop is a STUB, so asking for one
+    raises NotImplementedError naming the C it waits for.
     """
     if roomtype >= RoomType.SHOPBASE:
         return mkshop(map_, stairs, rng)
     if roomtype == RoomType.TEMPLE:
         return mktemple(world, map_, stairs, traps, rng, lev)
     if roomtype == RoomType.SWAMP:
-        return mkswamp(map_, stairs, rng)
+        return mkswamp(world, map_, stairs, traps, rng, lev)
     if roomtype in (
         RoomType.COURT,
         RoomType.ZOO,
@@ -826,19 +835,100 @@ def mktemple(
     return room
 
 
-def mkswamp(map_: Map, stairs: Iterable[Stairway], rng) -> Optional[Room]:
+def mkswamp(
+    world: World,
+    map_: Map,
+    stairs: Iterable[Stairway],
+    traps: Iterable,
+    rng,
+    lev: int,
+) -> Optional[Room]:
     """C: mkroom.c#mkswamp -- flood up to five rooms with pools.
 
-    STUB: the sanctioned terrain mutator (C: set_levltyp) and the
-    monster generation (makemon) have landed; what is still needed is
-    the engraving removal (C: del_engr_at) the pools run over.  The
-    checkerboard rule ((sx+sy) % 2) and the nexttodoor() guard are the
-    ported part of the shape.
+    The order is C's, draw for draw: up to five passes, each a random
+    room (C: `svr.rooms[rn2(svn.nroom)]` -- a plain random room, NOT
+    pick_room's single-door preference); a room is taken only if it is
+    an OROOM with no stairs (C: the `hx < 0` empty-slot test is a no-op
+    -- pyhack's `map_.rooms` holds only real rooms).  A taken room is
+    set to SWAMP and stocked *inline* (the swamp, like the temple, is
+    stocked in its mk* handler, so it sets no needfill and the
+    end-of-level fill_special_room() loop only carries its flag --
+    which is already set here).
+
+    Per square of the room (C's rectangle, C's order): the square must
+    be a floor-type square (C: IS_ROOM = `typ >= ROOM`, not a wall /
+    rock) belonging to this room, and it must be free -- no object, no
+    monster, no trap, and not next to a door (nexttodoor).  On the
+    (sx+sy) % 2 checkerboard squares the engraving is removed (the
+    pools run over it) and the square becomes a POOL (through the
+    sanctioned set_levltyp); a pool square gets an eel when it is the
+    first (eelct == 0) or by a 1-in-4 roll, the species by C's
+    conditional draws (rn2(5) giant eel, else rn2(2) piranha, else
+    electric eel -- mkclass() "won't do, as we might get kraken").
+    The other squares get a S_FUNGUS monster by a 1-in-4 roll ("swamps
+    tend to be moldy").
+
+    C sets `svl.level.flags.has_swamp` after each swampy room (so the
+    flag is set iff at least one room was swamped); the return is the
+    last room made swampy, or None when none was (C returns void).
     """
-    raise NotImplementedError(
-        "swamps need engraving removal and eel / fungus monster "
-        "generation (C: src/mkroom.c mkswamp())"
-    )
+    from .mklev import set_levltyp  # local import: mklev imports this module
+
+    if not map_.rooms:
+        return None  # the pyhack refusal: no rooms to swamp
+
+    last: Optional[Room] = None
+    eelct = 0  # C: eels placed so far (across all the swampy rooms)
+    for _ in range(5):  # C: turn up to 5 rooms swampy
+        room = map_.rooms[rng.rn2(len(map_.rooms))]
+        if (
+            room.rtype != RoomType.OROOM
+            or has_upstairs(map_, stairs, room)
+            or has_dnstairs(map_, stairs, room)
+        ):
+            continue
+        rmno = map_.room_of(room)
+        room.rtype = RoomType.SWAMP
+        for sx in range(room.lx, room.hx + 1):
+            for sy in range(room.ly, room.hy + 1):
+                pos = (sx, sy)
+                tile = map_.tile_at(pos)
+                if tile.typ < TerrainType.ROOM or tile.roomno != rmno:
+                    continue
+                if (
+                    nexttodoor(map_, sx, sy)
+                    or world.monster_at_lev(lev, pos) is not None
+                    or any(t.pos == pos and not t.disarmed for t in traps)
+                    or any(
+                        it.lev == lev and it.pos == pos
+                        for it in world.items.values()
+                    )
+                ):
+                    continue
+                if (sx + sy) % 2:
+                    del_engr_at(map_, sx, sy)
+                    if not set_levltyp(map_, sx, sy, TerrainType.POOL):
+                        continue  # refused (shouldn't happen on a room floor)
+                    if not eelct or not rng.rn2(4):
+                        # C: mkclass() won't do, as we might get kraken
+                        pm = (
+                            _mons_row(PM_GIANT_EEL) if rng.rn2(5)
+                            else _mons_row(PM_PIRANHA) if rng.rn2(2)
+                            else _mons_row(PM_ELECTRIC_EEL)
+                        )
+                        makemon(
+                            world, rng, pm, pos, NO_MM_FLAGS,
+                            map_, lev, in_mklev=True,
+                        )
+                        eelct += 1
+                elif not rng.rn2(4):  # C: swamps tend to be moldy
+                    makemon(
+                        world, rng, mkclass(world, rng, S_FUNGUS, 0),
+                        pos, NO_MM_FLAGS, map_, lev, in_mklev=True,
+                    )
+        map_.flags.has_swamp = True
+        last = room
+    return last
 
 
 def courtmon(world: World, rng) -> Optional[PerMonst]:

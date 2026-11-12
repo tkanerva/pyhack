@@ -512,6 +512,8 @@ from .monst_defs import (  # noqa: F401
     PM_WIZARD_OF_YENDOR,
     PM_ERINYS,
     PM_GIANT_EEL,
+    PM_PIRANHA,
+    PM_ELECTRIC_EEL,
 )
 
 from .monst_data import MONS, PM_NAMES, SUBSET_PM

@@ -1,7 +1,15 @@
 # Plan: Wave 5 — special rooms (temple → zoo family → shops)
 
-**Status: phase 0's terrain half + phase 1 (temple) + phase 2 (the
-zoo family) LANDED; phases 3-5 proposed.**  Phase 2 landed as
+**Status: phase 0 (terrain + engraving) + phase 1 (temple) + phase 2
+(the zoo family) + phase 3 (the swamp) LANDED; phases 4-5
+proposed.**  Phase 3 landed as the engraving half of phase 0
+(core.engrave: the Engraving on the Tile, engr_at / make_engr_at /
+del_engr_at, the E_* tool constants) + core.mkroom.mkswamp (up to 5
+rooms -> POOL on the (sx+sy) % 2 squares through set_levltyp, the
+nexttodoor guard, the del_engr_at, the eel / piranha pick and the
+S_FUNGUS branch, flags.has_swamp) + the PM_PIRANHA / PM_ELECTRIC_EEL
+anchors — tests in tests/test_swamp.py (6) and tests/test_engrave.py
+(5).  Phase 2 landed as
 core.mkroom.fill_zoo (C order: the throne / queen-square / gold-budget
 setup, the per-square monsters and objects, the royal coffers, the
 level flags) + the zoo pickers (courtmon / squadmon / morguemon /
@@ -20,8 +28,9 @@ C-ordered room pick + shrine altar + AM_SHRINE + flags.has_temple),
 the `Epri` extra on Monster (MM_EPRI in makemon now allocates it),
 and the TEMPLE half of the room-entry hook in core.step (C's
 check_special_room).  Phase 0's engraving half (`make_engr_at` /
-`del_engr_at`) is still out — it blocks mkswamp and the shop door
-sign.  Table.txt row 4, the `L` end of the `M→L` range: temples and
+`del_engr_at`) landed with phase 3 (core.engrave) — the shop door sign
+now has it too.  Table.txt row 4, the `L` end of the `M→L` range:
+temples and
 the zoo family are "room + a few lines" once PLAN-MAKEMON.md and
 PLAN-MKOBJ.md exist; **shops are the expensive one**, because a shop
 is billing (`src/shk.c`, 6,147 lines, 55.7k tokens — 21 % of a context
@@ -63,7 +72,7 @@ and PLAN-MKOBJ.md (a room full of monsters and treasure needs both), on
 | `courtmon` / `squadmon` / `morguemon` / `antholemon` / `mkundead` | mkroom.c 792 / 826 / 477 / 501 / 455 | the zoo-family monster pickers (`mkclass` + `ndemon`) | same names (STUBs) |
 | `mktemple` | mkroom.c 607-630 | `pick_room(TRUE)`, `rtype = TEMPLE`, `shrine_pos`, `ALTAR` + `induced_align(80)`, `priestini`, `AM_SHRINE`, `flags.has_temple` | `mkroom.mktemple` (STUB) |
 | `shrine_pos(roomno)` | mkroom.c 578-605 | the room centre, or a free square when the centre is blocked | `mkroom.shrine_pos` (exists) |
-| `mkswamp` | mkroom.c 529-574 | up to 5 rooms → `POOL` on the `(sx+sy)%2` squares, eels, fungus; `flags.has_swamp` | `mkroom.mkswamp` (STUB) |
+| `mkswamp` | mkroom.c 529-574 | up to 5 rooms → `POOL` on the `(sx+sy)%2` squares, eels, fungus; `flags.has_swamp` | `mkroom.mkswamp` (exists) |
 | `induced_align(pct)` | dungeon.c 2010-2025 | the level's/dungeon's alignment, else `rn2(3)-1` | `dungeon.induced_align` |
 | `priestini(lvl, sroom, sx, sy, sanctum)` | priest.c 220-~300 | the priest: a 1-square ring search, `makemon(PM_ALIGNED_CLERIC, MM_EPRI)`, `epri.shrpos/shralign/shroom`, peaceful, `set_malign`, the goodies | `priest.priestini` |
 | `newepri` / `EPRI` | priest.c 16 / mextra.h 95-106 | the priest extra struct (shralign, shroom, shrpos, timers) | `Monster.epri` |
@@ -338,12 +347,46 @@ Not this plan's work, but this plan cannot test anything without them:
    updates there and in tests/test_mkroom.py (the shop and the swamp
    are the two STUBs left).
 
-### Phase 3 — swamp (~1 session)
+### Phase 3 — swamp (LANDED) — landed as described, with these notes
 
-`mkswamp` with `set_levltyp` (POOL), the `nexttodoor` guard, the
-`del_engr_at`, the eel/piranha pick and the `mkclass(S_FUNGUS)` branch.
-Tests: pools only on `(sx+sy)%2` squares, never in a doorway, eels are
-in the water, `flags.has_swamp`.
+1. **The engraving half of phase 0 landed first** (core.engrave):
+   `Engraving` on the Tile (the C `head_engr` list keyed by (x, y)
+   becomes `Tile.engr`), `engr_at` / `make_engr_at` / `del_engr_at`
+   (C: engrave.c 231 / 408 / 461), and the `E_*` tool constants
+   (engrave.h).  Named simplifications: the three text copies collapse
+   to one, the time-based wear is not ported, the Elbereth guard and
+   the `rnd(N_ENGRAVE - 1)` type roll are not ported (callers pass an
+   explicit type), and the player-facing doengrave / read / wipe half
+   is out.  This unblocks both the swamp (del_engr_at) and the shop
+   door sign (make_engr_at).
+2. **`mkswamp` (core.mkroom, C: mkroom.c 529-574)** in C's order:
+   up to 5 passes, each a *plain random room* (`map_.rooms[rng.rn2(
+   len)]` — NOT pick_room's single-door preference); a room is taken
+   only if it is an OROOM with no stairs (the C `hx < 0` empty-slot
+   test is a no-op — pyhack's `map_.rooms` holds only real rooms).  A
+   taken room is set to SWAMP and stocked *inline* (the swamp, like the
+   temple, sets no needfill, so the end-of-level fill_special_room
+   refuses it and only its flag would be carried — which mkswamp sets
+   itself).  Per square: a floor-type square (C: IS_ROOM = `typ >=
+   ROOM`) belonging to the room, free of object / monster / trap and
+   not next to a door (nexttodoor); on the (sx+sy)%2 squares the
+   engraving is removed and the square becomes a POOL (through
+   set_levltyp), with an eel when it is the first (eelct == 0) or by a
+   1-in-4 roll — the species by C's conditional draws (rn2(5) giant
+   eel, else rn2(2) piranha, else electric eel; mkclass() "won't do,
+   as we might get kraken"); the other squares get a S_FUNGUS by a
+   1-in-4 roll.  `flags.has_swamp` is set after each swampy room (set
+   iff at least one room was swamped).
+3. **The table:** `PM_PIRANHA` (317) / `PM_ELECTRIC_EEL` (320) anchors
+   in core.monst_defs (the rows were already in the 383-row table; the
+   giant eel anchor `PM_GIANT_EEL` 319 was already in).
+4. Tests: tests/test_swamp.py (6 — pools only on (sx+sy)%2 squares and
+   never in a doorway, the pools run over an engraving, eels in the
+   water, fungus on the dry squares, the swamp stocked inline not by
+   the dispatcher, the room stays walkable) + tests/test_engrave.py
+   (5 — make / read / delete / replace / out-of-bounds).  The STUB
+   tests updated: the shop is the one unstocked special room left
+   (tests/test_mklev.py, tests/test_mkroom.py).
 
 ### Phase 4 — shops (4a-4d, ~4-6 sessions; the `L` in `M→L`)
 
@@ -486,7 +529,7 @@ adds only prices).
 - [x] `fill_zoo` for all eight zoo-family types, `fill_special_room`
       dispatching (including the vault's gold), the `_roll_special_room`
       conditions complete
-- [ ] `mkswamp` on `set_levltyp`
+- [x] `mkswamp` on `set_levltyp` (+ the engraving half of phase 0: core.engrave)
 - [ ] shops 4a-4c: stocked, priced, policed; the `Pay` command; the bill
       model tested table-driven
 - [ ] `shtypes[]` + shop names as data, `nameshk` never repeating a name

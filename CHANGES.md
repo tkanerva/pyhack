@@ -5,6 +5,52 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The swamp: mkswamp and the engraving model (Wave 5, phase 3)
+
+**Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 3): the
+zoo family proved the object / gold / monster loops; this session
+floods up to five rooms with pools and the eels / fungus, and lands
+the engraving half of phase 0 that blocked both the swamp (the pools
+run over engravings) and the shop door sign (next).
+
+**The choices:**
+
+1. **The engraving is a minimal model on the Tile** (core.engrave +
+   core.types.Engraving): C keeps a level-wide `head_engr` linked list
+   keyed by (engr_x, engr_y); here the key is the Tile
+   (`Tile.engr`), so `engr_at` / `del_engr_at` are tile reads / writes
+   and `make_engr_at` is a tile write that replaces the old one.  The
+   three text copies collapse to one, the time-based wear, the
+   Elbereth guard, and the `rnd(N_ENGRAVE - 1)` type roll are named
+   simplifications (callers pass an explicit `E_*` type); the
+   player-facing doengrave / read / wipe half is out.
+2. **mkswamp is C's, in C's order** (core.mkroom; C: mkroom.c
+   529-574): up to 5 passes, each a *plain random room*
+   (`map_.rooms[rng.rn2(len)]` -- NOT pick_room's single-door
+   preference), taken only if an OROOM with no stairs; set to SWAMP
+   and stocked *inline* (no needfill, like the temple).  Per square a
+   floor-type square (C: IS_ROOM = `typ >= ROOM`, not a wall / rock)
+   belonging to the room, free of object / monster / trap and not next
+   to a door (nexttodoor); on the (sx+sy)%2 squares the engraving is
+   removed (del_engr_at) and the square becomes a POOL (through the
+   sanctioned set_levltyp), with an eel when it is the first (eelct
+   == 0) or by a 1-in-4 roll -- the species by C's *conditional*
+   draws (rn2(5) giant eel, else rn2(2) piranha, else electric eel;
+   mkclass() "won't do, as we might get kraken"); the other squares
+   get a S_FUNGUS by a 1-in-4 roll ("swamps tend to be moldy").
+   `flags.has_swamp` is set after each swampy room (so it is set iff
+   at least one room was swamped).
+3. **`rn2` is 0-indexed in this NetHack (5.0)** (`0 <= rn2(x) < x`):
+   `!rn2(4)` is "1 in 4", and pyhack's `Rng.rn2` matches, so the eel /
+   fungus rolls port directly.  The eel species keeps C's
+   short-circuit (the second draw only if the first was 0) so the
+   stream does not drift.
+4. **The table:** `PM_PIRANHA` (317) / `PM_ELECTRIC_EEL` (320) anchors
+   in core.monst_defs (the rows were already in the 383-row table).
+5. Tests: tests/test_swamp.py (6) + tests/test_engrave.py (5).  The
+   STUB tests updated -- the shop is the one unstocked special room
+   left.
+
 ## The zoo family: fill_zoo and the end-of-level dispatcher (Wave 5, phase 2)
 
 **Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 2): the
