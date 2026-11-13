@@ -61,11 +61,13 @@ STUBs (announced here, each with the C it waits for):
     polymorph, no quest.
   - the ``mextra`` half: ``MM_EPRI`` allocates the priest extra
     (``Monster.epri``, the C newepri) and core.priest.priestini fills
-    it (PLAN-SPECIAL-ROOMS.md phase 1); MM_ESHK / MM_EDOG / MM_EMIN /
-    MM_EGD are still accepted and ignored (their systems land with the
-    shop / pet / minion work).  C's "a cleric made without MM_EPRI
-    gets an emin instead" tail (the roaming-priest half) is not
-    ported: pyhack has no emin.
+    it (PLAN-SPECIAL-ROOMS.md phase 1); ``MM_ESHK`` allocates the
+    shopkeeper extra (``Monster.eshk``, the C neweshk) and
+    core.shk.init fills it (phase 4a).  MM_EDOG / MM_EMIN / MM_EGD are
+    still accepted and ignored (their systems land with the pet /
+    minion work).  C's "a cleric made without MM_EPRI gets an emin
+    instead" tail (the roaming-priest half) is not ported: pyhack has
+    no emin.
 
 Deliberate divergences (documented, not bugs):
 
@@ -150,6 +152,7 @@ from .monst import (
 from .place import enexto_core, goodpos
 from .types import (
     Epri,
+    Eshk,
     GP_AVOID_MONPOS,
     GP_CHECKSCARY,
     MM_IGNOREWATER,
@@ -915,10 +918,14 @@ def makemon(
     # C: the mextra allocation half of the MM_* flags (the newepri /
     # neweshk block, makemon.c): MM_EPRI allocates the priest extra
     # here and priestini() fills it afterwards (PLAN-SPECIAL-ROOMS.md
-    # phase 1); the other extras wait for their systems (module
-    # docstring)
+    # phase 1); MM_ESHK allocates the shopkeeper extra and
+    # core.shk.init() fills it (phase 4a); the other extras wait for
+    # their systems (module docstring)
     if mmflags & MmFlags.EPRI:
         mon.epri = Epri()
+    if mmflags & MmFlags.ESHK:
+        # C: neweshk() -- a zeroed struct with the owner recorded
+        mon.eshk = Eshk(parentmid=mon.id)
 
     newmonhp(world, rng, mon, mndx)
 

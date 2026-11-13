@@ -561,6 +561,14 @@ class Room:
     doors: List[Pos] = field(default_factory=list)
     sbrooms: List[int] = field(default_factory=list)
     needfill: int = FILL_NONE
+    # C: sroom->resident -- the monster that "lives" in this room, the
+    # shopkeeper for a shop (PLAN-SPECIAL-ROOMS.md §2.9).  pyhack holds
+    # the monster's id, not a pointer (the "no object graphs inside the
+    # World" rule); core.shk.shop_keeper resolves it.  It is on the room
+    # rather than only on the eshk extra so a revisited level (the Map
+    # is parked in World.levels) still knows whose shop this is without
+    # scanning the monster list.
+    resident: Optional[str] = None
 
     # --- C-compatible readings of the door bookkeeping ---
     @property
@@ -620,8 +628,8 @@ class Engraving:
     """
 
     text: str
-    # C: engr_type (E_PLAIN, E_PEN, E_SABER, E_STYLUS, E_HEADSTONE,
-    # E_RUNIC, E_MAGICAL -- the constants in core.engrave)
+    # C: engr_type (engrave.h: DUST 1, ENGRAVE 2, BURN 3, MARK 4,
+    # ENGR_BLOOD 5, HEADSTONE 6 -- the E_* constants in core.engrave)
     type: int = 0
 
 
@@ -962,6 +970,48 @@ class Epri:
 
 
 @dataclass
+class Eshk:
+    """The shopkeeper extra (C: struct eshk, mextra.h).
+
+    Allocated by makemon()'s MM_ESHK (the C neweshk() half) and filled
+    by core.shk.init; every other monster has ``Monster.eshk`` None.
+    ``shoproom`` is the shop's room number (C stores ``sroom -
+    svr.rooms + ROOMOFFSET``), ``shoptype`` the room type
+    (SHOPBASE + the shop index), ``shd`` the shop door and ``shk`` the
+    shopkeeper's own square (C duplicates mx/my here).
+
+    What the *billing* half would use is carried as zeroed fields and
+    named deferred (PLAN-SPECIAL-ROOMS.md: phase 4a lands the stocked,
+    robbable shop; the bill is 4b, the police 4c, the dialogue 4d):
+    ``debit`` / ``credit`` / ``loan`` (C's eshk account, the customer's
+    running total), ``robbed`` (the "you stole from me" amount),
+    ``surcharge`` (alter_cost's 1/3 markup) and ``following`` /
+    ``dismiss_kops`` (the police half).  C's ``struct bill_x bill[]``
+    -- the list of unpaid items -- is not a field yet: it is the model
+    4b adds (a dict keyed by item id, PLAN-SPECIAL-ROOMS.md §2.3).
+    None of these is read or written outside this comment yet.
+    """
+
+    parentmid: str = ""  # C: eshk.parentmid -- the owning monster's id
+    shoproom: int = NO_ROOM  # the shop's room number
+    shoptype: int = 0  # the shop's room type (SHOPBASE + index)
+    shoplevel: int = 1  # C: shoplevel (a d_level, reduced to a number)
+    shd: Pos = (0, 0)  # the shop door
+    shk: Pos = (0, 0)  # the shopkeeper's square
+    shknam: str = ""  # the shopkeeper's name (C: shknam[PL_NSIZ])
+    robbed: int = 0  # the amount the hero stole (0 = nothing)
+    debit: int = 0  # what the hero owes
+    credit: int = 0  # the shopkeeper's credit to the hero (always 0)
+    loan: int = 0  # a loan (always 0)
+    following: bool = False  # C: the shopkeeper follows the hero out
+    surcharge: bool = False  # C: the alter_cost markup
+    dismiss_kops: bool = False  # C: the kops half
+    billct: int = 0  # C: billct -- the number of billed items
+    visitct: int = 0  # C: visitct -- the shop-visit counter
+    customer: str = ""  # C: customer[] -- who is shopping here
+
+
+@dataclass
 class Monster:
     id: str
     name: str
@@ -1095,6 +1145,12 @@ class Monster:
     # (C does the same, after the newepri of makemon)
     ispriest: bool = False
     isshk: bool = False
+    # the shopkeeper extra (C: mextra->eshk via neweshk): allocated by
+    # makemon()'s MM_ESHK and filled by core.shk.init; None for every
+    # monster that is not a shopkeeper.  The flag above and this extra
+    # are set together by shkinit (C does the same: makemon only
+    # allocates, shkinit() decides).
+    eshk: Optional[Eshk] = None
 
 
 # ============================================================

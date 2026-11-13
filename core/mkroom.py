@@ -18,6 +18,9 @@ C provenance:
                 shrine_pos(), fill_zoo() and the zoo pickers
                 courtmon()/squadmon()/morguemon()/antholemon(),
                 mk_zoo_thronemon(), mkundead()
+  src/shknam.c  the shop stocking (stock_room / shkinit / the per-square
+                objects) -- ported to core.shk; mkshop() itself is
+                mkroom.c's
   src/sp_lev.c  fill_special_room() -- the end-of-level room-stocking
                 dispatcher.  C lives in sp_lev.c 2732, NOT mkroom.c
                 (PLAN-SPECIAL-ROOMS.md trap 1); it is ported here
@@ -31,7 +34,12 @@ C provenance:
 
 Included (the parts that need nothing beyond the ported terrain):
 
-  isbig, pick_room, do_mkroom dispatch, mkzoo (the room *selection*
+  isbig, pick_room, do_mkroom dispatch, mkshop (the room pick -- the
+  first ordinary, staircase-free, one-door room that is a valid shop
+  shape -- the lit rectangle, the shop-type roll from the shknam.c
+  table, `rtype = SHOPBASE + i` and FILL_NORMAL; the stocking is
+  core.shk.stock_room at the end of the level), mkzoo (the room
+  *selection*,
   and the rtype / needfill bookkeeping -- C: "the room does not get
   stocked at this time -- it will get stocked at the end of
   makelevel()"), fill_zoo (the zoo family in C order: the throne /
@@ -54,12 +62,13 @@ Included (the parts that need nothing beyond the ported terrain):
 
 STUBs (raise NotImplementedError, each with the machinery it waits for):
 
-  - mkshop(): needs the shknam.c shop-type table (shtypes[]) and then
-    the shk.c stock_room() billing side (phase 4).
-  - fill_special_room's shop branch (C: stock_room): the same
-    stock_room(); the branch is unreachable while mkshop is a STUB
-    (no shop room can exist), and phase 4 replaces the body.
   - cmap_to_type(): needs the display symbol table (S_* -> terrain).
+
+The shop (PLAN-SPECIAL-ROOMS.md phase 4) is split the way C splits it:
+`mkshop` -- the room pick, the lit rectangle and the shop-type roll --
+lives here, and the stocking (`stock_room`, the shopkeeper, the door
+fix-up, the per-square objects) lives in core.shk, which this module
+calls at the end of the level through fill_special_room.
 
 Simplifications (documented, not bugs):
 
@@ -68,10 +77,15 @@ Simplifications (documented, not bugs):
     fungus) -- neither sets a needfill, so fill_special_room only
     carries their flag.  The zoo family is stocked by fill_zoo
     through the needfill model (mkzoo sets FILL_NORMAL, the
-    end-of-level fill_special_room loop stocks it); the shop (phase
-    4) is the one unstocked room left (a STUB).  Every handler states
-    its C provenance so the next phase can land without re-reading the
-    C.
+    end-of-level fill_special_room loop stocks it), and the shop is
+    claimed by mkshop and stocked by core.shk.stock_room the same
+    way.  Every handler states its C provenance so the next phase can
+    land without re-reading the C.
+  - mkshop's wizard-only `SHOPTYPE` environment override (C: the
+    `if (wizard)` block that can force a shop, zoo or temple type) is
+    not ported -- there is no wizard mode.  Without it the room pick
+    is C's loop: the first ordinary, staircase-free, single-door room
+    that is a valid shop shape.
   - do_mkroom is only reached when the generator is asked for special
     rooms (core.mklev.makelevel(specials=True)); the demo level has
     none, and the default level generator passes specials=False.
@@ -460,8 +474,9 @@ def do_mkroom(
     The zoo family is the room *selection* only (see mkzoo), the
     temple is fully stocked here (mktemple), and the swamp is fully
     stocked here (mkswamp -- the pools and the eels / fungus, PLAN-
-    SPECIAL-ROOMS.md phase 3); the shop is a STUB, so asking for one
-    raises NotImplementedError naming the C it waits for.
+    SPECIAL-ROOMS.md phase 3); the shop is claimed here (mkshop) and
+    stocked by the end-of-level fill_special_room loop, like the zoo
+    family.
     """
     if roomtype >= RoomType.SHOPBASE:
         return mkshop(map_, stairs, rng)
@@ -707,11 +722,11 @@ def fill_special_room(
 
     The order is C's: the subrooms first (the recursion), the
     OROOM / THEMEROOM / FILL_NONE refusal, then the FILL_NORMAL
-    stocking (the shop branch first -- C's `rtype >= SHOPBASE`; the
-    VAULT gold-per-square; the zoo family through fill_zoo), then the
-    level-flag switch, which runs even for a room that was only
-    carried (the temple's stocking comes from mktemple; its flag here
-    is the special-level half).
+    stocking (the shop branch first -- C's `rtype >= SHOPBASE`, into
+    core.shk.stock_room; the VAULT gold-per-square; the zoo family
+    through fill_zoo), then the level-flag switch, which runs even for
+    a room that was only carried (the temple's stocking comes from
+    mktemple; its flag here is the special-level half).
     """
     for sidx in room.sbrooms:
         fill_special_room(world, rng, map_, traps, map_.subrooms[sidx],
@@ -761,36 +776,80 @@ def fill_special_room(
 def _stock_room(
     world: World, rng, map_: Map, traps: Iterable, room: Room, lev: int
 ) -> None:
-    """C: shk.c#stock_room -- the shop's stock and the shopkeeper
-    (C's signature: stock_room(int type, struct mkroom *r), `type` =
-    rtype - SHOPBASE).
+    """C: shknam.c#stock_room -- the shop branch of fill_special_room
+    (C: ``stock_room(croom->rtype - SHOPBASE, croom)``).
 
-    STUB (PLAN-SPECIAL-ROOMS.md phase 4): needs the shknam.c shtypes[]
-    table and the shk.c billing side.  The dispatcher's branch is
-    unreachable while mkshop() is a STUB (no shop room can exist), and
-    phase 4 replaces this body.
+    The body lives in core.shk (the shop system); this thin shim keeps
+    the dispatcher reading like the C and the traps parameter of the
+    other branches.  `traps` is unused by the shop, exactly as in C.
     """
-    raise NotImplementedError(
-        "shop stocking needs the shknam.c shtypes[] table and shk.c "
-        "stock_room() (C: src/shk.c stock_room(); PLAN-SPECIAL-ROOMS.md "
-        "phase 4)"
-    )
+    from . import shk  # local import: shk imports core.mklev lazily
+
+    shk.stock_room(world, rng, map_, room, lev)
 
 
 def mkshop(map_: Map, stairs: Iterable[Stairway], rng) -> Optional[Room]:
     """C: mkroom.c#mkshop -- turn an unused one-door room into a shop.
 
-    STUB: the shop *type* comes from the shknam.c shtypes[] table
-    (name / symbol / probability) and the stocking from shk.c
-    stock_room(); neither is ported.  The eligibility rules (rtype ==
-    OROOM, no stairs, exactly one door, not an invalid shop shape) are
-    already available in pick_room / invalid_shop_shape for when this
-    lands.
+    C's order, draw for draw: the room walk (the first room that is an
+    OROOM with no staircase and exactly one door, and whose shape
+    leaves the shopkeeper somewhere to stand -- invalid_shop_shape),
+    the lit rectangle (``rlit``), the shop-type roll
+    (``for (j = rnd(100), i = 0; (j -= shtypes[i].prob) > 0; i++)``,
+    with the overshoot landing on the general store, which is a
+    feature), the big-room downgrade (a room of more than 20 squares
+    cannot be a wand or book shop, so it becomes a general store), the
+    rtype and FILL_NORMAL.
+
+    Nothing is *created* here: C moved the stocking to the end of
+    makelevel ("The shop used to be stocked here, but this no longer
+    happens"), so the room is only claimed and core.shk.stock_room
+    fills it through fill_special_room (PLAN-SPECIAL-ROOMS.md trap 5).
+
+    The wizard-only `SHOPTYPE` override at the top of C's mkshop is not
+    ported (no wizard mode), which is why the walk is unconditional.
     """
-    raise NotImplementedError(
-        "shops need the shknam.c shop-type table and shk.c stock_room() "
-        "(C: src/mkroom.c mkshop())"
-    )
+    from .mklev import topologize  # local import: mklev imports this module
+    from .shknam_data import SHOPTYPES
+
+    room: Optional[Room] = None
+    for cand in map_.rooms:
+        if cand.rtype != RoomType.OROOM:
+            continue
+        if has_dnstairs(map_, stairs, cand) or has_upstairs(map_, stairs, cand):
+            continue
+        if cand.doorct == 1 and not invalid_shop_shape(map_, cand):
+            room = cand
+            break
+    if room is None:
+        return None  # C: "cannot find any eligible room to be a shop"
+
+    if not room.rlit:
+        for x in range(room.lx - 1, room.hx + 2):
+            for y in range(room.ly - 1, room.hy + 2):
+                if map_.in_bounds((x, y)):
+                    map_.tiles[y][x].lit = True
+        room.rlit = True
+
+    # pick a shop type at random
+    i = 0
+    j = rng.rnd(100)
+    while True:
+        j -= SHOPTYPES[i].prob
+        if j <= 0:
+            break
+        i += 1
+    # big rooms cannot be wand or book shops -- make them general stores
+    if isbig(room) and SHOPTYPES[i].symb in (
+        int(ObjClass.WAND), int(ObjClass.SPBOOK)
+    ):
+        i = 0
+
+    room.rtype = RoomType(int(RoomType.SHOPBASE) + i)
+    # set the room bits before stocking the shop (C: topologize)
+    topologize(map_, room)
+    room.needfill = FILL_NORMAL
+    return room
 
 
 def mktemple(

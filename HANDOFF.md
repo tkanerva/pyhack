@@ -3,54 +3,54 @@
 ## 1. Task & scope
 Port NetHack (C, cloned at `../NetHack`) to pyhack, following the
 PLAN-*.md specs and ARCHITECTURE.md's "Suggested next steps" queue.
-This session executed queue item 1's third staging: **Wave 5, phase 3
-(PLAN-SPECIAL-ROOMS.md) — the swamp**, which needed the engraving half
-of phase 0 first: `core.engrave` (`make_engr_at` / `engr_at` /
-`del_engr_at` — the `Tile.engr` minimal model), then `mkswamp` (up to 5
-rooms → POOL on the `(sx+sy)%2` squares through `set_levltyp`, the
-`nexttodoor` guard, the `del_engr_at`, the eel / piranha pick and the
-`S_FUNGUS` branch, `flags.has_swamp`).
+This session executed queue item 1's fourth staging: **Wave 5, phase 4a
+(PLAN-SPECIAL-ROOMS.md) — a stocked shop you can rob**.  That is the
+`shknam.c` half of `src/shk.c`: the shop-type table, the room picker,
+the shopkeeper and the stock.  The billing half (prices, the police,
+the dialogue) is 4b-4d and still open.
 
 ## 2. Status
-**Done (this session, to commit):** core.engrave (the engraving half
-of phase 0 — `Engraving` on the Tile, the C `head_engr` list keyed by
-(x, y) becomes `Tile.engr`; `engr_at` / `make_engr_at` / `del_engr_at`,
-C: engrave.c 231 / 408 / 461; the `E_*` tool constants from engrave.h;
-named simplifications: one text copy, no time-wear, no Elbereth guard,
-no `rnd(N_ENGRAVE-1)` type roll — callers pass an explicit type);
-core.mkroom.mkswamp (C: mkroom.c 529-574 — up to 5 passes, each a
-plain random room, taken only if an OROOM with no stairs; set to SWAMP
-and stocked *inline*, no needfill; per square a floor-type square
-(`typ >= ROOM`) of the room, free of object / monster / trap and not
-next to a door; on the (sx+sy)%2 squares del_engr_at + POOL through
-set_levltyp + an eel (first always, else 1-in-4) by C's conditional
-draws (rn2(5) giant eel / rn2(2) piranha / electric eel); the other
-squares a S_FUNGUS 1-in-4; `flags.has_swamp` after each swampy room);
-the `PM_PIRANHA` (317) / `PM_ELECTRIC_EEL` (320) anchors in
-core.monst_defs; tests — 6 in tests/test_swamp.py (pools only on
-(sx+sy)%2 squares and never in a doorway, the pools run over an
-engraving, eels in the water, fungus on the dry squares, the swamp
-stocked inline not by the dispatcher, the room stays walkable) + 5 in
-tests/test_engrave.py (make / read / delete / replace / out-of-bounds);
-the STUB tests updated (the shop is the one unstocked special room
-left — tests/test_mklev.py `test_shop_handler_is_a_stub`,
-tests/test_mkroom.py dispatch docstring); docs (the plan's phase 3
-record + status header + the reference row + the DoD box, CHANGES).
-**Done (earlier, committed):** phase 1 — the temple (core/priest.py);
-phase 2 — the zoo family (core.mkroom.fill_zoo + fill_special_room +
-the pickers, Room.needfill, the two missing _roll_special_room
-conditions). 1260 tests green, mypy + flake8 clean. The demo path is
-untouched (it never calls makelevel with specials=True, and the swamp
+**Done (this session, to commit):** `core.shknam_data.py` (the
+`shtypes[]` table — 12 rows with their nine-slot `iprobs` arrays and
+`shdist` — plus the twelve shopkeeper name lists, transcribed verbatim
+from shknam.c 39-357); `core/shk.py` (the new module: `inside_shop`
+(C: shk.c 567), `good_shopdoor` (581), `init` = shkinit (627),
+`stock_goodpos` (694), `stock_room` (717), `mkshobj_at` (453),
+`get_shop_item` (828), `veggy_item` / `shkveg` / `mkveggy_at`
+(379/407/442), `nameshk` (486), plus `shop_keeper` / `room_keeper`);
+`core.mkroom.mkshop` (the room pick, the lit rectangle, the shop-type
+roll, `rtype = SHOPBASE + i`, FILL_NORMAL — C's forward walk over
+`svr.rooms[]`, NOT `pick_room`); `fill_special_room`'s `_stock_room`
+shim into `shk.stock_room`; `Eshk` on `Monster` (types.py) with
+`makemon`'s MM_ESHK now allocating it (the C neweshk);
+`Room.resident` (the keeper's id, cleared in `do_room_or_subroom` with
+`needfill`); `cvt_sdoor_to_door` (C: detect.c 1588) in core.mklev;
+the `PM_SHOPKEEPER` (271) and `PM_LICHEN` (158) anchors in
+core.monst_defs / core.monst; **the engraving constants corrected** to
+this NetHack's engrave.h (`E_DUST 1` .. `E_HEADSTONE 6`, `N_ENGRAVE 6`
+— the 3.6 `E_PLAIN / E_PEN / E_SABER / E_STYLUS` set was wrong);
+tests — 33 in tests/test_shop.py + 1 in tests/test_engrave.py, and
+tests/test_mklev.py's shop STUB test became the mkshop claim test;
+docs (the plan's phase 4a record + status header + the §1 rows + the
+§6 traps + the DoD, CHANGES, ARCHITECTURE's queue item 1 and the
+"Added" list).  1294 tests green, mypy + flake8 clean.  The demo path
+is untouched (it never calls makelevel with specials=True, and the shop
 is only reached through the specials roll).
+**Done (earlier, committed):** phase 1 — the temple (core/priest.py);
+phase 2 — the zoo family; phase 3 — the swamp (+ core.engrave).
 
 **Not done (the rest of Wave 5, in the plan's order):**
-- **Phase 4 — shops (4a-4d, the `L` in `M→L`)** (next): the shk.c
-  billing side, per the plan's four sub-phases; the shtypes[] table +
-  name lists as data (core/shknam_data.py); `_stock_room` in
-  core.mkroom is the dispatcher's shop branch (unreachable while
-  mkshop is a STUB).  The engraving half now exists, so the shop door
-  sign ("Closed for inventory" on a locked door, C: stock_room) has
-  its make_engr_at.
+- **Phase 4b — prices** (next): `getprice` (shk.c 4341-4380) + all its
+  per-class adjustments, `bcsign` (the ×2 / ×½ BUC multipliers, and the
+  mirror for selling), the CHA table, the per-move `u.ushops` shop
+  square tracking (`inside_shop` is already the room-number lookup),
+  `onbill` / `billable` / `add_one_tobill` / `eshk.debit` (the bill as a
+  dict keyed by item id — `Eshk` already carries the zeroed account),
+  the `Pay` command (`p`) + `paybill`'s messages, the status-line total.
+- **Phase 4c — the police** (`stolen_value`, `eshk.robbed`,
+  `surcharge`, `alter_cost`, the door block), **4d — behaviour**
+  (`shk_talk`, `shkname` with the honorific, `shk_move`); kops stay
+  deferred.
 - **Phase 5 — the vault** (~1 session, optional here): create_vault +
   the guard is out of scope.
 - Interleaveable from the ARCHITECTURE queue: item 2 (the genesis
@@ -59,70 +59,81 @@ is only reached through the specials roll).
   residue), item 4 (wire QuaffCommand), item 5 (scrolls STUBs).
 
 ## 3. Files to read first
-1. `PLAN-SPECIAL-ROOMS.md` — the status header + **phase 3 as
-   rewritten (the record of what landed and why)** + phase 4 (the next
-   work) + §5 (the deliberate divergences) + §6 (the traps).
-2. `core/mkroom.py` — mkswamp + fill_zoo + fill_special_room + the zoo
-   pickers; the module docstring's STUB list (mkshop, _stock_room,
-   cmap_to_type) is what's left in the module.
-3. `core/engrave.py` — the minimal engraving model (the new module).
-4. `tests/test_swamp.py` — the swamp test shapes (the `_room_map` /
-   `_world` / `_pools` / `_mons` helpers); `tests/test_engrave.py` —
-   the engraving shapes.
-5. `../nethack_index/NETHACK-INDEX.md` — the C span index; never read
-   a C file whole (read the spans: shknam.c 209-357 / 628-801 for the
-   shops, shk.c for the billing).
+1. `PLAN-SPECIAL-ROOMS.md` — the status header + **phase 4a as rewritten
+   (the record of what landed and why)** + phase 4b (the next work) +
+   §5 (the deliberate divergences) + §6 (the traps, three of them new
+   this session).
+2. `core/shk.py` — the shop system (the module docstring's "what this
+   phase deliberately leaves out" list is the 4b-4d work list).
+3. `core/shknam_data.py` — the table; `core/mkroom.py`'s mkshop (the
+   claim half) and `core/engrave.py` (the constants).
+4. `tests/test_shop.py` — the test shapes (`_room_map` / `_FixedRng` /
+   `_claim` / `_floor_items`), and `tests/test_zoo.py` for the
+   end-of-level dispatch shapes.
+5. `../nethack_index/NETHACK-INDEX.md` — the C span index; never read a
+   C file whole (read the spans: shknam.c 39-357 for the tables and
+   407-801 for the functions, shk.c 4341+ for `getprice`, shk.c 3331+
+   for the bill).
 
 ## 4. Key discoveries
-- **Room stocking is two-phase in C** — EXCEPT the temple and the
-  swamp, which C stocks in their mk* handler (no needfill): the mk*
-  handler claims (rtype) and, for the temple / swamp, stocks inline;
-  the zoo family and the shop are claimed (rtype + needfill) and
-  stocked by the end-of-level fill_special_room loop.  A port that
-  stocks the zoo / shop inside the handler, or that gives the temple /
-  swamp a needfill, moves the rng or re-stocks (trap 4).
-- **`rn2` is 0-indexed in this NetHack (5.0)** (`0 <= rn2(x) < x`,
-  C: rnd.c 93): `!rn2(4)` is "1 in 4".  pyhack's `Rng.rn2` matches
-  exactly, so the swamp's eel / fungus rolls port directly (`if not
-  rng.rn2(4)`).  The eel species is C's *conditional* draws (rn2(5),
-  then rn2(2) only if the first was 0) — keep the short-circuit or the
-  stream drifts.
-- **`IS_ROOM(typ)` is `typ >= ROOM`, not `typ == ROOM`** (C: rm.h
-  126) — it means "a floor-type square, not a wall / rock".  pyhack's
-  TerrainType has the same ordering (ROOM = 25), so the test is
-  `tile.typ < TerrainType.ROOM`.
-- **The swamp picks a *plain random room* (`rooms[rn2(nroom)]`), NOT
-  pick_room** (which prefers single-door rooms and skips non-OROOM);
-  the eligibility is the in-loop `rtype != OROOM || has_upstairs ||
-  has_dnstairs` test.  A re-picked room is skipped (its rtype is now
-  SWAMP).
-- **`flags.has_swamp` is set inline by mkswamp** (C: after each
-  swampy room), so the end-of-level fill_special_room never sets it for
-  the swamp (the swamp's needfill is FILL_NONE, so the dispatcher
-  returns before its flag switch).  The dispatcher's SWAMP flag case is
-  C-faithful but dead in the normal flow.
-- **The pool square's engraving is removed *before* the pool write**
-  (C: del_engr_at then levl[].typ = POOL) — the pools run over it.  The
-  shop door sign and the graves are the other make_engr_at callers.
-- **fill_ordinary_room skips non-OROOM rooms** (its first line), so the
-  swamp room (set before the fill loop, C's order) is not re-filled
-  with a monster / objects after its pools are placed.
+- **`mkshop`'s room pick is NOT `pick_room`** — it is C's plain forward
+  walk from `svr.rooms[0]`, taking the first OROOM with no staircase,
+  exactly one door, and a shape `invalid_shop_shape` accepts.  So a shop
+  is deterministic given the level's rooms, and a two-door room can
+  never be a shop.  `pick_room` (the zoo family's) has a random start
+  and a `!rn2(5)` door preference — do not "unify" them.
+- **`shtypes[]` has exactly ONE zero-probability shop** (the lighting
+  store).  The plan's §6 said "the four zero-probability special-level
+  shops" — that was a 3.6 memory and is corrected in place.  The
+  eleven rolled rows sum to 100.
+- **The "Closed for inventory" sign goes on the CORRIDOR side.** C
+  tests `inside_shop(sx + 1, sy)` and then steps the engraving *away*
+  from the shop (`m--`), i.e. out into the street, and coerces that
+  square to ROOM / CORR when it is neither.  A port that engraves the
+  shop floor looks reasonable and is wrong (this session's first draft
+  did exactly that and the test caught it).
+- **`good_shopdoor` returns the door *stepped inside*, and `shkinit`
+  records both squares**: `eshk.shd` is the door, `eshk.shk` is where
+  the keeper stands.  `stock_room`'s door fix-up uses the room's FIRST
+  door (C: `svd.doors[sroom->fdoor]`) while the stocking loop uses the
+  keeper's (`svd.doors[sh]`); a shop has one door so they agree.
+- **The stocking is a separate phase for a reason**: `mkshop` runs
+  during the special-room roll (early), `stock_room` at the very end of
+  makelevel.  Stocking inside mkshop moves the rng for every later room
+  and level (trap 4/5).
+- **`veggy_item(None, otyp)` and `veggy_item(obj)` disagree for tins**
+  until `set_tin_variety(HEALTHY_TIN)` is ported: the type-only call
+  seeds corpsenm with PM_LICHEN (vegetarian), the object call sees an
+  empty tin (spe 0).  The health-food tests therefore check the *type*.
+- **`_roll_special_room`'s shop gate is `depth > 1 and depth <
+  max_lev - 5 and nroom >= 3 and rn2(depth) < 3`** — with the default
+  `max_lev == 1` the medusa cap is negative and a shop can never roll.
+  A test that wants a generated shop must set `world.max_lev` (see
+  tests/test_shop.py's last test).
+- **`name_wanted = m_id + ledger_no - (nseed % 13) + (nseed % 5)`**, with
+  `nseed = ubirthday / 257`; pyhack reads the monster's numeric id, the
+  level number (no ledger) and `World.birth`.  The tools list always
+  draws with `rn2` (its names are the jokes) — that is C's, not a bug.
 - The pytest tool's `paths` are relative to the workspace root and
   currently resolve to a container mount that doesn't see the files —
   run the full suite with no paths (as always).
 
 ## 5. Next steps
-1. **Wave 5, phase 4: shops** (PLAN-SPECIAL-ROOMS.md), starting with
-   4a — a stocked room you can rob: `shknam_data.py` (shtypes[] + the
-   name lists + shop_prob), `mkshop` (the room picker rules), `shk.init`
-   (good_shopdoor, makemon(PM_SHOPKEEPER, MM_ESHK), the eshk fields,
-   initial capital, nameshk), `stock_room` + `mkshobj_at` +
-   stock_goodpos (door row empty, everything else stocked), the door
-   fix-up (the "Closed for inventory" engraving now has its
-   make_engr_at), `flags.has_shop`, `Room.resident`.
-2. Interleaveable: the genesis residue (queue item 2 — `m_initweap` /
-   `m_initinv` would finish the priest's robe half: the rn2(2)
-   bless/curse of the W_ARMC slot, named in core/priest.py's
-   docstring).
-3. Keep HANDOFF.md updated per the 5 sections above; keep every PLAN
+1. **Wave 5, phase 4b: prices** (PLAN-SPECIAL-ROOMS.md).  Read shk.c
+   4341-4380 (`getprice`) first and pin it table-driven: the base cost
+   from `objects[].oc_cost`, the per-class adjustments (the
+   "un-ID'd" gem prices, the wand / potion / book `oc_prob` math), then
+   `bcsign` (×2 blessed / ×½ cursed when buying, the mirror when
+   selling) and the CHA multiplier — four separate multipliers, so pin
+   them separately (trap: "a long sword costs 10" pins the wrong
+   number).  `bcsign` is already in core.mkobj.
+2. Same phase: the `ushk` / `u.ushops` tracking on every hero move
+   (C: `check_special_room`'s shop half — core.step's `_room_entry`
+   already has the temple branch to grow a SHOP one), `onbill` /
+   `billable` / `add_one_tobill` and the `Eshk` bill dict (the item-id
+   key), then the `Pay` command and `paybill`'s messages.
+3. Interleaveable: the genesis residue (queue item 2 — `m_initweap` /
+   `m_initinv` would finish the priest's robe half and give the
+   shopkeeper its wielded weapon).
+4. Keep HANDOFF.md updated per the 5 sections above; keep every PLAN
    status header in sync in the same commit.

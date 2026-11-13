@@ -235,6 +235,27 @@ details live in the PLAN-*.md files and the module docstrings):**
   misaligned-altar line -- src/pray.c is out of scope (the plan says so
   loudly).  The priest draws as the human glyph (C S_HUMAN is `@`;
   the legend says so).
+- The shop (PLAN-SPECIAL-ROOMS.md phase 4a, core/shk.py +
+  core/shknam_data.py + core.mkroom.mkshop): the shknam.c half of a
+  shop, split the way C splits it -- `mkshop` *claims* a room (the
+  first ordinary, staircase-free, one-door room with a valid shape;
+  lit; the shop type rolled from `shtypes[]`; `rtype = SHOPBASE + i`;
+  FILL_NORMAL) and `fill_special_room` stocks it at the end of
+  makelevel, so the rng stands where C leaves it.  The shop types are
+  data (the 12 rows with their nine-slot `iprobs` and the twelve
+  keeper-name lists, C order: `SHOPTYPES[i]` <-> `SHOPBASE + i`); the
+  keeper is a `PM_SHOPKEEPER` with the `Eshk` extra (C `mextra->eshk`,
+  allocated by makemon's MM_ESHK) that knows its room, its door and its
+  name (`nameshk`, C's m_id/ledger/birthday seed, never repeating a
+  name on a level) and carries its purse as a COIN item;
+  `Room.resident` is the "whose shop is this" record (the id, not a
+  pointer).  `stock_room` stocks one object per free square (the door
+  row stays empty, a mimic may take a square) and repairs the doorway
+  (no door -> open, secret -> real via `cvt_sdoor_to_door`, trapped ->
+  locked + the "Closed for inventory" engraving, which C puts on the
+  *corridor* side).  Prices, the "you stole from me" police and the
+  dialogue are 4b-4d; the tribute "special spot" and
+  `set_tin_variety(HEALTHY_TIN)` are named skips.
 - The inventory core (PLAN-INVENT.md phase A, core/invent.py): the
   port of the item half of src/invent.c, and the **single writer** of
   the PACK half of an item's where-state (`addinv` / `freeinv` /
@@ -391,8 +412,15 @@ temple itself has landed with it, queue item 1):
    test_zoo.py), and so is the swamp (phase 3: the engraving half of
    phase 0 in core.engrave + `mkswamp` -- the pools on the (sx+sy)%2
    squares through set_levltyp, the eels / fungus, tests/test_swamp.py
-   + tests/test_engrave.py); next is the shops, last
-   (shk.c is billing before it is a room).
+   + tests/test_engrave.py); and so is the shop's first phase (4a: the
+   shknam.c `shtypes[]` table + name lists as data, `mkshop`'s room
+   pick, core.shk's stock_room / shkinit / nameshk / the door fix-up,
+   tests/test_shop.py).  What is left of the plan is the shop's *billing*
+   side -- 4b prices (`getprice`, the CHA / BUC multipliers, `onbill`,
+   `eshk.debit`, the `Pay` command), 4c the police (`stolen_value`,
+   `robbed`, the door block), 4d the dialogue -- and, optionally, the
+   vault (phase 5).  shk.c is billing before it is a room, which is why
+   the shop is last and lands in sub-phases.
 2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),

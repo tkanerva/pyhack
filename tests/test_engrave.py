@@ -18,10 +18,10 @@ W, H = 40, 20
 
 def test_make_engr_at_writes_text_and_type():
     m = blank_map(W, H)
-    engraving = engrave.make_engr_at(m, 5, 5, "Elbereth", engrave.E_STYLUS)
+    engraving = engrave.make_engr_at(m, 5, 5, "Elbereth", engrave.E_HEADSTONE)
     assert isinstance(engraving, Engraving)
     assert engraving.text == "Elbereth"
-    assert engraving.type == engrave.E_STYLUS
+    assert engraving.type == engrave.E_HEADSTONE
     # it is on the tile (the C (engr_x, engr_y) key becomes the Tile)
     assert m.tile_at((5, 5)).engr is engraving
 
@@ -48,10 +48,20 @@ def test_del_engr_at_clears_the_square():
 
 def test_make_engr_at_replaces_the_existing_one():
     m = blank_map(W, H)
-    engrave.make_engr_at(m, 5, 5, "old", engrave.E_PEN)
-    engrave.make_engr_at(m, 5, 5, "new", engrave.E_SABER)
+    engrave.make_engr_at(m, 5, 5, "old", engrave.E_DUST)
+    engrave.make_engr_at(m, 5, 5, "new", engrave.E_BURN)
     assert m.tile_at((5, 5)).engr.text == "new"
-    assert m.tile_at((5, 5)).engr.type == engrave.E_SABER
+    assert m.tile_at((5, 5)).engr.type == engrave.E_BURN
+
+
+def test_the_engraving_types_are_this_nethacks():
+    """The E_* values are engrave.h's (5.0: DUST 1 .. HEADSTONE 6,
+    N_ENGRAVE 6) -- not the 3.6 E_PLAIN / E_PEN / E_SABER set, which
+    an earlier revision of this module carried by mistake."""
+    assert (engrave.E_DUST, engrave.E_ENGRAVE, engrave.E_BURN,
+            engrave.E_MARK, engrave.E_ENGR_BLOOD, engrave.E_HEADSTONE) == (
+                1, 2, 3, 4, 5, 6)
+    assert engrave.N_ENGRAVE == 6
 
 
 def test_out_of_bounds_is_refused():

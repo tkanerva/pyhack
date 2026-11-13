@@ -5,6 +5,96 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The shop: a stocked room you can rob (Wave 5, phase 4a)
+
+**Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 4a): the
+last unstocked special room.  A generated level can now hold a shop --
+a room with a shopkeeper just inside the door, one object per free
+square, and a doorway that is never secret, never a bare doorway and
+never trapped.  Taking from it is free: prices (4b), the "you stole
+from me" police (4c) and the shopkeeper's dialogue (4d) are not
+ported, and each is named where it would go.
+
+**The choices:**
+
+1. **The split is C's.** `mkshop` -- the room pick, the lit rectangle,
+   the shop-type roll, `rtype`, FILL_NORMAL -- stayed in core.mkroom
+   with the other mk* handlers; everything that *creates* (shkinit, the
+   door fix-up, the per-square objects) is the new **core/shk.py**,
+   called from `fill_special_room` at the end of makelevel
+   (`stock_room(croom->rtype - SHOPBASE, croom)`).  Nothing is created
+   while the room is picked, so the rng stands where C leaves it
+   (PLAN-SPECIAL-ROOMS.md trap 5).  `mkshop(map_, stairs, rng)` needs
+   the staircase list for its eligibility test and nothing else, so
+   `do_mkroom`'s signature did not change.
+2. **The room pick is a plain forward walk, not pick_room** (C's
+   `for (sroom = &svr.rooms[0];; sroom++)`): the first room that is an
+   OROOM, holds no staircase, has exactly one door, and passes
+   `invalid_shop_shape`.  So a shop is deterministic given the level's
+   rooms, and a two-door room can never be one.  The wizard-only
+   `SHOPTYPE` override at the top of C's mkshop is a named skip.
+3. **The shop types are data** (core/shknam_data.py): the 12
+   `shtypes[]` rows with their nine-slot `iprobs` arrays plus the
+   twelve shopkeeper name lists, transcribed verbatim;
+   `SHOPTYPES[i]` <-> `SHOPBASE + i`, so the table index is the
+   room-type offset.  The roll is C's walk (`j = rnd(100); while (j -=
+   prob) > 0: i++`, the overshoot landing on the general store), and
+   `isbig(room)` downgrades a wand / book shop to index 0.  The table
+   has **one** zero-probability row (the lighting store), not the four
+   the plan's §6 claimed -- that was written from a 3.6 memory; the
+   trap is corrected in place, and tests/test_shop.py pins the table.
+4. **The billing half is a model, not a port** (§2.3): `Eshk` (types)
+   carries shoproom / shoptype / shd / shk / shoplevel / shknam and a
+   zeroed account, and `makemon`'s MM_ESHK now allocates it (the C
+   neweshk); C's `struct bill_x bill[]` is not a field at all -- 4b
+   adds it as a dict keyed by item id.  `Room.resident` carries the
+   keeper's id (§2.9) and `do_room_or_subroom` clears it with
+   `needfill` (a re-generated level must not name a shopkeeper it no
+   longer has).
+5. **The door fix-up is C's, including its surprise:** a doorway
+   without a door becomes an open one, a secret door becomes a real one
+   (`cvt_sdoor_to_door`, ported to core.mklev next to the door
+   writers), and a trapped door becomes LOCKED.  A locked door gets
+   "Closed for inventory" engraved on the square *opposite* the shop's
+   inside -- C steps the engraving away from the shop, i.e. into the
+   corridor, and coerces that square to ROOM / CORR.  `inside_shop()`
+   (the room-number lookup, §5.6) tells the two sides apart.
+6. **`nameshk` is C's, on pyhack's clocks:** `m_id + ledger_no -
+   (nseed % 13) + (nseed % 5)` with `nseed = ubirthday / 257`; here the
+   monster's numeric id stands in for `m_id`, the level number for the
+   ledger (one dungeon, no ledger) and `World.birth` for `ubirthday`.
+   The tools list always draws with `rn2`, a name already on the level
+   retries, and the fallback chain is the general store's list then
+   Lucrezia / Dirk; the `-`/`_`/`+`/`|`/`=` prefix codes set
+   `Monster.female` (the honorific is `shkname()`, 4d).
+7. **Named skips inside the stocking:** the tribute "special spot"
+   (no tribute system, so `mkspecl` is always false and the
+   `rnd(stockcount)` draw is not taken), `set_tin_variety(HEALTHY_TIN)`
+   (tins have no variety field; the type is vegetarian, the object is
+   not), and `mon_learns_traps` (no per-monster trap knowledge).  The
+   mimic roll IS taken in C's short-circuit order, so a shop square can
+   be a mimic instead of an object.
+8. **The engraving constants were wrong and are fixed.** core.engrave
+   carried the 3.6 `E_PLAIN / E_PEN / E_SABER / E_STYLUS / E_HEADSTONE
+   / E_RUNIC / E_MAGICAL`; this NetHack's engrave.h has `DUST 1 /
+   ENGRAVE 2 / BURN 3 / MARK 4 / ENGR_BLOOD 5 / HEADSTONE 6` with
+   `N_ENGRAVE 6` (so C's default `rnd(N_ENGRAVE - 1)` is 1..5 and never
+   a headstone).  The port now has `E_DUST .. E_HEADSTONE` with those
+   values, and the shop sign is `E_DUST` (C: DUST).
+9. **The monster table** gained the `PM_SHOPKEEPER` (271) and
+   `PM_LICHEN` (158) anchors; the rows were already in the 383-row
+   table.
+10. Tests: tests/test_shop.py (33) -- the table invariants; the room
+    pick / lighting / type roll / big-room downgrade (a `_FixedRng`
+    pins the roll); the keeper's square, eshk, purse, gifts and name
+    (and two shops never sharing one); the four door fix-ups and the
+    sign; `inside_shop`; one object per stockable square with the door
+    row empty; per-class stock; the health-food pseudo-class and
+    shkveg; the refusals; the walkable room; and a real
+    `makelevel(specials=True)` run.  tests/test_mklev.py's shop STUB
+    test became the mkshop claim test; tests/test_engrave.py gained
+    the engrave.h constants check.
+
 ## The swamp: mkswamp and the engraving model (Wave 5, phase 3)
 
 **Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 3): the

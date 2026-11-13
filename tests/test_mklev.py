@@ -445,23 +445,28 @@ def test_makelevel_is_idempotent_over_an_existing_level():
 
 
 # ------------------------------------------------------------
-# the special-room hooks (STUBs, deliberately)
+# the special-room hooks
 # ------------------------------------------------------------
 
 
-def test_shop_handler_is_a_stub():
-    """The shop is the one unstocked special room left (PLAN-SPECIAL-
-    ROOMS.md phase 4); the STUB names the C it waits for instead of
-    silently doing nothing.  (The temple, the zoo family, and the
-    swamp are in: core.mkroom.mktemple / fill_zoo + fill_special_room /
-    mkswamp -- tests/test_priest.py, tests/test_zoo.py, and
-    tests/test_swamp.py.)"""
+def test_mkshop_records_the_room_type_and_needfill():
+    """mkshop is the shop handler that needs no stocking at call time:
+    it picks a room and sets its type + needfill (C: "we set its rtype,
+    and it gets stocked at the end of makelevel()").  C's walk wants
+    exactly one door, so the room gets its door first; the stocking is
+    core.shk.stock_room -- tests/test_shop.py.  (The temple, the zoo
+    family and the swamp are in too: core.mkroom.mktemple / fill_zoo +
+    fill_special_room / mkswamp -- tests/test_priest.py,
+    tests/test_zoo.py, tests/test_swamp.py.)"""
     from core import mkroom
 
     m = blank_map(W, H)
-    add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
-    with pytest.raises(NotImplementedError):
-        mkroom.mkshop(m, [], _rng())
+    room = add_room(m, 5, 4, 10, 8, False, RoomType.OROOM, False)
+    M.add_door(m, 5, 3, room)
+    claimed = mkroom.mkshop(m, [], _rng())
+    assert claimed is room
+    assert room.rtype >= RoomType.SHOPBASE
+    assert room.needfill == FILL_NORMAL
 
 
 def test_mkzoo_records_the_room_type_and_needfill():

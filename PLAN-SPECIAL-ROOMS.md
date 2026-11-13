@@ -1,8 +1,18 @@
 # Plan: Wave 5 — special rooms (temple → zoo family → shops)
 
 **Status: phase 0 (terrain + engraving) + phase 1 (temple) + phase 2
-(the zoo family) + phase 3 (the swamp) LANDED; phases 4-5
-proposed.**  Phase 3 landed as the engraving half of phase 0
+(the zoo family) + phase 3 (the swamp) + phase 4a (a stocked shop you
+can rob) LANDED; phases 4b-4d (prices, the police, the dialogue) and 5
+(the vault) proposed.**  Phase 4a landed as core/shknam_data.py
+(the shtypes[] table + the twelve name lists, verbatim) + core/shk.py
+(inside_shop, good_shopdoor, shkinit, stock_room_goodpos,
+get_shop_item / veggy_item / shkveg / mkveggy_at / mkshobj_at,
+stock_room, nameshk, shop_keeper) + core.mkroom.mkshop (the room pick,
+the lit rectangle, the shop-type roll, rtype, FILL_NORMAL) + the
+`Eshk` extra on Monster (MM_ESHK in makemon now allocates it) +
+`Room.resident` + `cvt_sdoor_to_door` in core.mklev — tests in
+tests/test_shop.py (33).  Phase 3 landed as the engraving half of
+phase 0
 (core.engrave: the Engraving on the Tile, engr_at / make_engr_at /
 del_engr_at, the E_* tool constants) + core.mkroom.mkswamp (up to 5
 rooms -> POOL on the (sx+sy) % 2 squares through set_levltyp, the
@@ -65,12 +75,12 @@ and PLAN-MKOBJ.md (a room full of monsters and treasure needs both), on
 | C function | where | what it does | port target |
 |---|---|---|---|
 | `do_mkroom(roomtype)` | mkroom.c 51-92 | dispatch: `>= SHOPBASE` → `mkshop`, else the `mkzoo` family / `mktemple` / `mkswamp` | `mkroom.do_mkroom` (exists) |
-| `mkshop` | mkroom.c 94-216 | pick an unused one-door room, lit it, roll the shop type from `shtypes[]`, set `rtype = SHOPBASE + i`, `needfill = FILL_NORMAL` | `mkroom.mkshop` (STUB) |
+| `mkshop` | mkroom.c 94-216 | pick an unused one-door room, lit it, roll the shop type from `shtypes[]`, set `rtype = SHOPBASE + i`, `needfill = FILL_NORMAL` | `mkroom.mkshop` (exists, 4a) |
 | `mkzoo(type)` | mkroom.c 243-254 | only *claims* the room (`pick_room`, `rtype`) | `mkroom.mkzoo` (exists) |
-| `fill_zoo(sroom)` | mkroom.c 275-453 | the stocking: throne + monarch, queen bee, gold, corpses, chests, graves, statues with loot, ants | `mkroom.fill_zoo` (STUB) |
-| `mk_zoo_thronemon(x, y)` | mkroom.c 256-273 | gnome ruler → dwarf ruler → elven monarch → ogre tyrant by `rnd(level_difficulty())`, asleep, hostile, carrying a MACE | `mkroom.mk_zoo_thronemon` (STUB) |
-| `courtmon` / `squadmon` / `morguemon` / `antholemon` / `mkundead` | mkroom.c 792 / 826 / 477 / 501 / 455 | the zoo-family monster pickers (`mkclass` + `ndemon`) | same names (STUBs) |
-| `mktemple` | mkroom.c 607-630 | `pick_room(TRUE)`, `rtype = TEMPLE`, `shrine_pos`, `ALTAR` + `induced_align(80)`, `priestini`, `AM_SHRINE`, `flags.has_temple` | `mkroom.mktemple` (STUB) |
+| `fill_zoo(sroom)` | mkroom.c 275-453 | the stocking: throne + monarch, queen bee, gold, corpses, chests, graves, statues with loot, ants | `mkroom.fill_zoo` (exists) |
+| `mk_zoo_thronemon(x, y)` | mkroom.c 256-273 | gnome ruler → dwarf ruler → elven monarch → ogre tyrant by `rnd(level_difficulty())`, asleep, hostile, carrying a MACE | `mkroom.mk_zoo_thronemon` (exists) |
+| `courtmon` / `squadmon` / `morguemon` / `antholemon` / `mkundead` | mkroom.c 792 / 826 / 477 / 501 / 455 | the zoo-family monster pickers (`mkclass` + `ndemon`) | same names (exists) |
+| `mktemple` | mkroom.c 607-630 | `pick_room(TRUE)`, `rtype = TEMPLE`, `shrine_pos`, `ALTAR` + `induced_align(80)`, `priestini`, `AM_SHRINE`, `flags.has_temple` | `mkroom.mktemple` (exists) |
 | `shrine_pos(roomno)` | mkroom.c 578-605 | the room centre, or a free square when the centre is blocked | `mkroom.shrine_pos` (exists) |
 | `mkswamp` | mkroom.c 529-574 | up to 5 rooms → `POOL` on the `(sx+sy)%2` squares, eels, fungus; `flags.has_swamp` | `mkroom.mkswamp` (exists) |
 | `induced_align(pct)` | dungeon.c 2010-2025 | the level's/dungeon's alignment, else `rn2(3)-1` | `dungeon.induced_align` |
@@ -78,15 +88,15 @@ and PLAN-MKOBJ.md (a room full of monsters and treasure needs both), on
 | `newepri` / `EPRI` | priest.c 16 / mextra.h 95-106 | the priest extra struct (shralign, shroom, shrpos, timers) | `Monster.epri` |
 | `intemple(roomno)` | priest.c 410-… | the temple-entry / peace-and-safety messages | `priest.intemple` (thin) |
 | `priest_talk` | priest.c 558-… | the service/donation dialogue | **deferred** (§2.6) |
-| `shkinit(shp, sroom)` | shknam.c 628-692 | `good_shopdoor`, `makemon(PM_SHOPKEEPER, MM_ESHK)`, `isshk`, `eshk.shoproom/shoptype/shd/shk`, initial capital `mkmonmoney(1000 + 30*rnd(100))`, a touchstone / charging scroll, `nameshk` | `shk.init` |
-| `stock_room(shp_indx, sroom)` | shknam.c 718-801 | fix the door (no `D_NODOOR`, no trap, no secret), the "Closed for inventory" engraving on a locked door, then one `mkshobj_at` per stockable square | `shk.stock_room` |
-| `mkshobj_at` / `mkveggy_at` / `get_shop_item` | shknam.c 442 / 407 / 829 | the per-square object (class, or a specific `-otyp`) | `shk.mkshobj_at` |
-| `stock_room_goodpos` | shknam.c 694-716 | "not the door row, not a wall, not occupied" | `shk.stock_goodpos` |
-| `shtypes[]` | shknam.c 209-357 | the 13 shop classes: name, `symb`, probability, per-class item probabilities | **data** → `core/shknam_data.py` |
-| `getprice(obj, shk_buying)` | shk.c 4341-4380 | the base price and its per-class adjustments | `shk.getprice` |
+| `shkinit(shp, sroom)` | shknam.c 628-692 | `good_shopdoor`, `makemon(PM_SHOPKEEPER, MM_ESHK)`, `isshk`, `eshk.shoproom/shoptype/shd/shk`, initial capital `mkmonmoney(1000 + 30*rnd(100))`, a touchstone / charging scroll, `nameshk` | `shk.init` (exists, 4a) |
+| `stock_room(shp_indx, sroom)` | shknam.c 718-801 | fix the door (no `D_NODOOR`, no trap, no secret), the "Closed for inventory" engraving on a locked door, then one `mkshobj_at` per stockable square | `shk.stock_room` (exists, 4a) |
+| `mkshobj_at` / `mkveggy_at` / `get_shop_item` | shknam.c 442 / 407 / 829 | the per-square object (class, or a specific `-otyp`) | `shk.mkshobj_at` (exists, 4a) |
+| `stock_room_goodpos` | shknam.c 694-716 | "not the door row, not a wall, not occupied" | `shk.stock_goodpos` (exists, 4a) |
+| `shtypes[]` | shknam.c 209-357 | the 12 shop classes: name, `symb`, probability, per-class item probabilities | **data** → `core/shknam_data.py` (exists, 4a) |
+| `getprice(obj, shk_buying)` | shk.c 4341-4380 | the base price and its per-class adjustments | `shk.getprice` (4b) |
 | `add_one_tobill` / `billable` / `sub_one_frombill` / `alter_cost` / `stolen_value` / `paybill` | shk.c 3331 / 3473 / 3683 / 3259 / 3776 / 2507 | the bill | `shk.bill` (a *model*, §2.3) |
-| `inside_shop` / `inhishop` / `costly_spot` / `onbill` | shk.c | "which shop is this square in / is this shopkeeper at home / may this cost money / is this on a bill" | `shk.inside_shop` … |
-| `fill_special_room(croom)` | sp_lev.c 2732-… | the **dispatcher** called for *every* room at the end of `makelevel`: shop → `stock_room`, `VAULT` → gold per square, zoo family → `fill_zoo` | `splev.fill_special_room` (or `mkroom.fill_special_room` until sp_lev exists) |
+| `inside_shop` / `inhishop` / `costly_spot` / `onbill` | shk.c | "which shop is this square in / is this shopkeeper at home / may this cost money / is this on a bill" | `shk.inside_shop` (exists, 4a); `inhishop` / `costly_spot` / `onbill` = 4b |
+| `fill_special_room(croom)` | sp_lev.c 2732-… | the **dispatcher** called for *every* room at the end of `makelevel`: shop → `stock_room`, `VAULT` → gold per square, zoo family → `fill_zoo` | `mkroom.fill_special_room` (exists) |
 | the special-room roll | mklev.c 1347-1378 | one special room per level by depth, with the genocide pre-checks (`G_GONE` on leprechaun / killer bee / soldier / cockatrice) and the `depth(medusa_level)` cap | `mklev._roll_special_room` (exists, needs the two missing conditions) |
 
 ---
@@ -388,38 +398,119 @@ Not this plan's work, but this plan cannot test anything without them:
    tests updated: the shop is the one unstocked special room left
    (tests/test_mklev.py, tests/test_mkroom.py).
 
-### Phase 4 — shops (4a-4d, ~4-6 sessions; the `L` in `M→L`)
+### Phase 4 — shops (4a LANDED; 4b-4d proposed; the `L` in `M→L`)
 
-- **4a — a stocked room you can rob (1-2 sessions).**
-  `shknam_data.py` (`shtypes[]` + the name lists + `shop_prob`),
-  `mkshop` (the room picker rules: `rtype == OROOM`, no stairs, exactly
-  one door, `invalid_shop_shape`), `shk.init` (`good_shopdoor`,
-  `makemon(PM_SHOPKEEPER, MM_ESHK)`, `eshk` fields, initial capital,
-  `nameshk`), `stock_room` + `mkshobj_at` + `stock_goodpos` (door row
-  empty, everything else stocked), the door fix-up (no door → open;
-  secret door → door; trapped → locked + the "Closed for inventory"
-  engraving), `flags.has_shop`, `Room.resident`.
-  *Exit:* a shop you can walk into, take from, and walk out of — free.
-- **4b — prices (1-2 sessions).** `getprice` (the per-class
-  adjustments, all of them), `bcsign` (blessed ×2 / cursed ×1/2 for
-  buying, the mirror for selling), the CHA multiplier table, the
-  `ushk`/`u.ushops` square tracking (`inside_shop` on every move),
-  `onbill`, `billable`, `add_one_tobill`, `eshk.debit`, the `Pay`
-  command (`p`), `paybill`'s "You bought …" / "You owe …" messages, and
-  the total on the status line.
+**4a — a stocked room you can rob (LANDED)** — landed as described,
+with these notes:
+
+1. **The split is C's, not the plan's convenience.** mkshop (the room
+   pick, the lit rectangle, the shop-type roll, `rtype = SHOPBASE + i`,
+   FILL_NORMAL) stayed in core.mkroom with the other mk* handlers;
+   everything that *creates* — shkinit, the door fix-up, the per-square
+   objects — is core.shk, called from fill_special_room at the end of
+   makelevel (`stock_room(croom->rtype - SHOPBASE, croom)`).  Nothing is
+   created while the room is picked, so the rng stands where C leaves
+   it (trap 4/5).  `do_mkroom` gained no new arguments: `mkshop(map_,
+   stairs, rng)` needs the staircase list for its eligibility test and
+   nothing else.
+2. **The room pick is a plain forward walk, not pick_room** (C: the
+   `for (sroom = &svr.rooms[0];; sroom++)` loop): the first room that is
+   an OROOM, holds no staircase, has exactly one door and passes
+   `invalid_shop_shape`.  Two consequences pyhack's `pick_room` would
+   have hidden: a shop is *deterministic* given the level's rooms, and a
+   two-door room can never be a shop.  The wizard-only `SHOPTYPE`
+   override at the top of C's mkshop is a named skip (no wizard mode).
+3. **The shop type is data** (core/shknam_data.py): the 12 `shtypes[]`
+   rows with their nine-slot `iprobs` arrays and the twelve name lists,
+   transcribed verbatim; `SHOPTYPES[i]` <-> `SHOPBASE + i`, so the index
+   is the room-type offset.  The roll is C's walk (`j = rnd(100); while
+   (j -= prob) > 0: i++`) — the overshoot lands on the general store,
+   which is a feature — and `isbig(room)` downgrades a wand / book shop
+   to index 0 (a big room has nowhere to stand for those).
+4. **`shtypes[]` has exactly ONE zero-probability shop** (the lighting
+   store), not the four §6 claimed: §6 was written from a 3.6 memory.
+   The row is still unreachable from mkshop; it waits for the special
+   level loader.  tests/test_shop.py pins the table (12 rows, the 11
+   rolled rows sum to 100, every iprobs row sums to 100, no name twice
+   within a list).
+5. **The billing half is a model, not a port** (§2.3, unchanged):
+   `Eshk` carries `shoproom` / `shoptype` / `shd` / `shk` / `shoplevel`
+   / `shknam` and a *zeroed* account (`debit` / `credit` / `loan` /
+   `robbed` / `surcharge` / `following` / `billct` / `visitct`), and C's
+   `struct bill_x bill[]` is not a field at all — 4b adds it as a dict
+   keyed by item id.
+6. **The door fix-up is C's, including its surprise**: a doorway without
+   a door becomes an open one, a secret door becomes a real one
+   (`cvt_sdoor_to_door`, ported to core.mklev next to the door writers),
+   and a trapped door becomes LOCKED.  A locked door gets "Closed for
+   inventory" engraved on the square *opposite the shop's inside* — C
+   steps the engraving `m--` / `n--` away from the shop, i.e. into the
+   corridor, where a customer can read it, and coerces that square to
+   ROOM / CORR when it is neither.  `inside_shop()` (core.shk) is the
+   room-number lookup that tells the two sides apart (§5.6).
+7. **`nameshk` is C's, on pyhack's clocks:** the seed is `m_id +
+   ledger_no - (nseed % 13) + (nseed % 5)` with `nseed = ubirthday /
+   257`; here the monster's numeric id stands in for `m_id`, the level
+   number for the ledger (one dungeon, no ledger) and `World.birth` for
+   `ubirthday`.  The tools list always draws with `rn2` (its names are
+   the jokes), a name already in use on the level retries, and the
+   fallback chain is the general store's list then Lucrezia / Dirk.
+   The `-` / `_` / `+` / `|` / `=` prefix codes are carried and set
+   `Monster.female`; the honorific is `shkname()` (4d).
+8. **Named skips inside the stocking:** the tribute "special spot"
+   (`svc.context.tribute.enabled` + the `rnd(stockcount)` draw — pyhack
+   has no tribute system, so `mkshobj_at` is always called with
+   `mkspecl=False` and there are no novels), `set_tin_variety(obj,
+   HEALTHY_TIN)` (tins have no variety field, so a health-food tin is an
+   ordinary one — which is why the tests check `veggy_item(None, otyp)`
+   rather than the object), and `mon_learns_traps` (no per-monster trap
+   knowledge, the priest's skip).  The mimic roll IS taken, in C's
+   short-circuit order (`rn2(100) < depth && !MON_AT && mkclass(S_MIMIC)
+   && makemon`), so a shop square can be a mimic instead of an object.
+9. **`Room.resident` carries the keeper's id** (§2.9) and
+   `do_room_or_subroom` now clears it with `needfill` (a re-generated
+   level must not name a shopkeeper it no longer has — trap 2).
+   `shk.shop_keeper(world, lev, roomno)` is C's scan; `room_keeper(world,
+   room)` reads the field.
+10. **The engraving constants were wrong and are fixed**: core.engrave
+    carried the 3.6 `E_PLAIN / E_PEN / E_SABER / E_STYLUS` set; this
+    NetHack's engrave.h has `DUST 1 / ENGRAVE 2 / BURN 3 / MARK 4 /
+    ENGR_BLOOD 5 / HEADSTONE 6` and `N_ENGRAVE 6` (so C's default roll
+    `rnd(N_ENGRAVE - 1)` is 1..5 and never a headstone).  The port now
+    spells them `E_DUST .. E_HEADSTONE` with those values, and the shop's
+    door sign is `E_DUST` (C: DUST).
+11. Tests: tests/test_shop.py (33) — the table invariants; the room
+    pick, the lighting, the type roll per band and the big-room
+    downgrade (a `_FixedRng` pins the roll); the keeper's square, eshk,
+    purse, gifts and name (and two shops never sharing one); the four
+    door fix-ups and the sign; inside_shop; one object per stockable
+    square with the door row empty (or a mimic); the per-class stock;
+    the health-food pseudo-class and shkveg; the refusals (no room, no
+    door); the walkable room; and a makelevel(specials=True) run that
+    really produces a stocked shop.  tests/test_mklev.py's STUB test
+    became the mkshop claim test.
+
+**4b — prices (1-2 sessions, proposed).**
+  `getprice` (the per-class adjustments, all of them), `bcsign` (blessed ×2 / cursed ×1/2 for buying, the mirror for selling), the CHA
+  multiplier table, the `ushk` / `u.ushops` square tracking (`inside_shop`
+  on every move), `onbill`, `billable`, `add_one_tobill`, `eshk.debit`,
+  the `Pay` command (`p`), `paybill`'s "You bought …" / "You owe …"
+  messages, and the total on the status line.
   *Exit:* taking stock creates a bill; paying settles it; the numbers
-  match a table-driven test of `getprice` for ~20 representative
-  objects.
-- **4c — the shopkeeper polices it (1-2 sessions).**
-  `stolen_value` on leaving the shop with unpaid goods,
-  `eshk.robbed`, `surcharge`, the "You stole from me!" path,
-  `alter_cost` (so `scroll of enchant armour` inside a shop adds
-  `EF_PAY`), the door block (a shopkeeper stands in the doorway and
-  `m_move` refuses to let him leave it), `inhishop` "closed" state.
-- **4d — behaviour (~1-2 sessions).** `shk_talk` subset (the greeting,
-  the bill total, "pay for your items", the "please leave" line),
-  `nameshk`-driven `shkname`, `shk_move` (the greedy pickup of gold
-  `M2_GREEDY` behaviour can wait), `angry_shopkeeper`, and kops
+  match a table-driven test of `getprice` for ~20 representative objects.
+
+**4c — the shopkeeper polices it (1-2 sessions, proposed).**
+  `stolen_value` on leaving the shop with unpaid goods, `eshk.robbed`,
+  `surcharge`, the "You stole from me!" path, `alter_cost` (so
+  `scroll of enchant armour` inside a shop adds `EF_PAY`), the door
+  block (a shopkeeper stands in the doorway and `m_move` refuses to let
+  him leave it), `inhishop`'s "closed" state.
+
+**4d — behaviour (1-2 sessions, proposed).**
+  `shk_talk` subset (the greeting, the bill total, "pay for your
+  items", the "please leave" line), `nameshk`-driven `shkname` (the
+  honorific and the prefix stripping), `shk_move` (the greedy pickup of
+  gold `M2_GREEDY` behaviour can wait), `angry_shopkeeper`, and kops
   **deferred** (no Keystone Kop system yet).
 
 ### Phase 5 — the vault (~1 session, optional here)
@@ -483,10 +574,26 @@ most of the fun and none of the cost.
   *messages* say "1 gold piece" vs "N gold pieces" — `mkgold` merging
   into an existing pile is the only place stacking matters in this
   wave.
-- **`shtypes[i].prob` sums to 100** including the four zero-probability
-  special-level shops; the `for (j = rnd(100), i = 0; (j -= prob) > 0;
-  i++)` loop silently lands on index 0 (general store) when the roll
-  overshoots — that is a feature, keep it.
+- **`shtypes[i].prob` sums to 100** for the eleven *rolled* rows; the
+  one zero-probability row is the lighting store (special-level only).
+  (§6 of the original plan said "the four zero-probability
+  special-level shops" — that was a 3.6 memory; this NetHack's table
+  has one, and the sentinel row is not a shop.)  The `for (j =
+  rnd(100), i = 0; (j -= prob) > 0; i++)` loop silently lands on index
+  0 (general store) when the roll overshoots — that is a feature, keep
+  it.
+- **The "Closed for inventory" sign goes OUTSIDE the shop.** C steps
+  the engraving square *away* from the shop side
+  (`if (inside_shop(sx + 1, sy)) m--`), i.e. into the corridor, and
+  then coerces that square to ROOM / CORR if it is neither — the sign
+  is for the street, not for the shop floor.  A port that engraves the
+  shop floor looks reasonable and is wrong.
+- **`set_tin_variety(obj, HEALTHY_TIN)` is not ported**, so a tin from
+  the health-food store is an ordinary (empty) tin and an *object*-level
+  `veggy_item()` check rejects it.  The stocking is right (the type is
+  vegetarian); the variety field is the gap.  Same shape for the
+  tribute "special spot": no tribute system means `mkspecl` is always
+  false and the `rnd(stockcount)` draw is not taken.
 - **Session-summary drift.** `PROGRESS_SESSION_32.md` §8 lists
   `cmap_to_type`, `save_rooms`, and a `mkundead(pos, rng)` signature
   that do not match the source. Read the span before porting.
@@ -530,10 +637,15 @@ adds only prices).
       dispatching (including the vault's gold), the `_roll_special_room`
       conditions complete
 - [x] `mkswamp` on `set_levltyp` (+ the engraving half of phase 0: core.engrave)
-- [ ] shops 4a-4c: stocked, priced, policed; the `Pay` command; the bill
-      model tested table-driven
-- [ ] `shtypes[]` + shop names as data, `nameshk` never repeating a name
-      on a level
-- [ ] every STUB in `core/mkroom.py`'s `__all__` either implemented or
-      documented as deferred **with the C span**
-- [ ] `PROGRESS`/`CHANGES.md`: a `## Wave 5: special rooms` section
+- [x] shop 4a: `shtypes[]` + the name lists as data, `mkshop` claiming a
+      room, `stock_room` stocking it with a named peaceful keeper (the
+      door fix-up + "Closed for inventory"), `nameshk` never repeating a
+      name on a level, `flags.has_shop`, `Room.resident`
+      (tests/test_shop.py)
+- [ ] shops 4b-4c: priced, policed; the `Pay` command; the bill model
+      tested table-driven
+- [x] every STUB in `core/mkroom.py`'s `__all__` either implemented or
+      documented as deferred **with the C span** (only `cmap_to_type`
+      is left, and it names the defsym table it waits for)
+- [x] `PROGRESS`/`CHANGES.md`: a `## Wave 5: special rooms` section
+      (CHANGES.md carries one section per phase)

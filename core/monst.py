@@ -495,6 +495,7 @@ from .monst_defs import (  # noqa: F401
     PM_LONG_WORM,
     PM_BLACK_LIGHT,
     PM_STALKER,
+    PM_LICHEN,
     PM_GRAY_OOZE,
     PM_NAZGUL,
     PM_STRAW_GOLEM,

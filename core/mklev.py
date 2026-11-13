@@ -21,6 +21,8 @@ C provenance:
                  mkstairs(), generate_stairs_room_good(),
                  generate_stairs_find_room(), generate_stairs() and
                  makelevel() -- the rooms + corridors branch
+  src/detect.c   cvt_sdoor_to_door() -- a terrain writer, so it lives
+                 next to dosdoor() (the shop's door fix-up calls it)
   src/sp_lev.c   check_room(), create_room(), create_subroom(),
                  dig_corridor(), wallify_map()
   src/rect.c     init_rect(), get_rect(), rnd_rect(), remove_rect(),
@@ -341,8 +343,11 @@ def do_room_or_subroom(
     room.irregular = False
     room.sbrooms = []
     # the room object is re-used on regeneration: a stale FILL_NORMAL
-    # would re-stock a stale room (PLAN-SPECIAL-ROOMS.md trap 2)
+    # would re-stock a stale room, and a stale resident id would name a
+    # shopkeeper the new level no longer has (PLAN-SPECIAL-ROOMS.md
+    # trap 2)
     room.needfill = FILL_NONE
+    room.resident = None
     if special:
         return
 
@@ -837,6 +842,26 @@ def dodoor(map_: Map, rng, depth: int, x: int, y: int, room: Room) -> None:
         room,
         TerrainType.SDOOR if maybe_sdoor(rng, depth, 8) else TerrainType.DOOR,
     )
+
+
+def cvt_sdoor_to_door(map_: Map, pos: Pos) -> None:
+    """C: detect.c#cvt_sdoor_to_door -- turn a secret door into a real
+    door, closed (and still trapped if it was).
+
+    C strips the WM_MASK wall bits out of the doormask first; pyhack's
+    Tile keeps no wall-info bits, so its `door_mask` is the door mask
+    already.  The rogue-level branch ("rogue didn't have doors, only
+    doorways" -> D_NODOOR) has no counterpart: there is no rogue level,
+    so a newly exposed door is always closed.  Called by the shop's
+    door fix-up (core.shk.stock_room), where a secret door into a shop
+    must become a visible, openable one.
+    """
+    tile = map_.tile_at(pos)
+    mask = tile.door_mask
+    if not (mask & DoorMask.LOCKED):
+        mask |= DoorMask.CLOSED
+    tile.typ = TerrainType.DOOR
+    tile.door_mask = mask
 
 
 # ============================================================
@@ -1827,13 +1852,11 @@ def _roll_special_room(
     G_GONE pre-checks on the leprechaun / killer bee / soldier /
     cockatrice rolls (plus C's antholemon() pre-check on the ant
     roll, which is draw-free).  The temple is fully ported (core.
-    mkroom.mktemple -> core.priest.priestini), the zoo family is
-    stocked by the end-of-level fill_special_room loop, and the swamp
+    mkroom.mktemple -> core.priest.priestini), the zoo family and the
+    shop are stocked by the end-of-level fill_special_room loop
+    (core.mkroom.fill_zoo / core.shk.stock_room), and the swamp
     is fully ported (core.mkroom.mkswamp -- the pools + eels / fungus,
-    PLAN-SPECIAL-ROOMS.md phase 3).  The shop is the one remaining
-    core.mkroom STUB, so asking for specials on a level that rolls a
-    shop still raises NotImplementedError -- that is why the demo
-    generator passes specials=False.
+    PLAN-SPECIAL-ROOMS.md phase 3).
     """
     traps = [t for t in world.traps.values() if t.lev == lev]
     nrooms = len(map_.rooms)
