@@ -449,8 +449,10 @@ with these notes:
    ROOM / CORR when it is neither.  `inside_shop()` (core.shk) is the
    room-number lookup that tells the two sides apart (§5.6).
 7. **`nameshk` is C's, on pyhack's clocks:** the seed is `m_id +
-   ledger_no - (nseed % 13) + (nseed % 5)` with `nseed = ubirthday /
-   257`; here the monster's numeric id stands in for `m_id`, the level
+   ledger_no + (nseed % 13) - (nseed % 5)` with `nseed = ubirthday /
+   257` (C: `name_wanted += ledger_no(&u.uz) + (nseed % 13) -
+   (nseed % 5)`); here the monster's numeric id stands in for
+   `m_id`, the level
    number for the ledger (one dungeon, no ledger) and `World.birth` for
    `ubirthday`.  The tools list always draws with `rn2` (its names are
    the jokes), a name already in use on the level retries, and the

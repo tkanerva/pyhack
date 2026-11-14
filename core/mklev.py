@@ -1905,8 +1905,8 @@ def makelevel(world: World, map_: Map, rng, lev: int, specials: bool = False) ->
       3. generate_stairs()-- INSIDE rooms, before the corridors exist
       4. makecorridors()  -- the doors and the corridors between them
       5. make_niches()    -- the alcoves in the outer walls
-      6. [special room]   -- at most one, by depth (the temple and the
-                             zoo family are in; shop / swamp are STUBs,
+      6. [special room]   -- at most one, by depth (the temple, the
+                             zoo family, the shop and the swamp are in,
                              see _roll_special_room)
       7. fill_ordinary_room() for every room -- monsters and traps
       8. fill_special_room() for every room -- the end-of-level

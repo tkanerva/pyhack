@@ -59,8 +59,8 @@ ported, and each is named where it would go.
    inside -- C steps the engraving away from the shop, i.e. into the
    corridor, and coerces that square to ROOM / CORR.  `inside_shop()`
    (the room-number lookup, §5.6) tells the two sides apart.
-6. **`nameshk` is C's, on pyhack's clocks:** `m_id + ledger_no -
-   (nseed % 13) + (nseed % 5)` with `nseed = ubirthday / 257`; here the
+6. **`nameshk` is C's, on pyhack's clocks:** `m_id + ledger_no +
+   (nseed % 13) - (nseed % 5)` with `nseed = ubirthday / 257`; here the
    monster's numeric id stands in for `m_id`, the level number for the
    ledger (one dungeon, no ledger) and `World.birth` for `ubirthday`.
    The tools list always draws with `rn2`, a name already on the level

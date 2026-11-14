@@ -110,7 +110,7 @@ phase 2 — the zoo family; phase 3 — the swamp (+ core.engrave).
   `max_lev == 1` the medusa cap is negative and a shop can never roll.
   A test that wants a generated shop must set `world.max_lev` (see
   tests/test_shop.py's last test).
-- **`name_wanted = m_id + ledger_no - (nseed % 13) + (nseed % 5)`**, with
+- **`name_wanted = m_id + ledger_no + (nseed % 13) - (nseed % 5)`** (C: shknam.c nameshk, verified), with
   `nseed = ubirthday / 257`; pyhack reads the monster's numeric id, the
   level number (no ledger) and `World.birth`.  The tools list always
   draws with `rn2` (its names are the jokes) — that is C's, not a bug.
