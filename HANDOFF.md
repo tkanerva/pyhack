@@ -119,19 +119,26 @@ phase 2 — the zoo family; phase 3 — the swamp (+ core.engrave).
   run the full suite with no paths (as always).
 
 ## 5. Next steps
-1. **Wave 5, phase 4b: prices** (PLAN-SPECIAL-ROOMS.md).  Read shk.c
-   4341-4380 (`getprice`) first and pin it table-driven: the base cost
-   from `objects[].oc_cost`, the per-class adjustments (the
-   "un-ID'd" gem prices, the wand / potion / book `oc_prob` math), then
-   `bcsign` (×2 blessed / ×½ cursed when buying, the mirror when
-   selling) and the CHA multiplier — four separate multipliers, so pin
-   them separately (trap: "a long sword costs 10" pins the wrong
-   number).  `bcsign` is already in core.mkobj.
-2. Same phase: the `ushk` / `u.ushops` tracking on every hero move
-   (C: `check_special_room`'s shop half — core.step's `_room_entry`
-   already has the temple branch to grow a SHOP one), `onbill` /
-   `billable` / `add_one_tobill` and the `Eshk` bill dict (the item-id
-   key), then the `Pay` command and `paybill`'s messages.
+1. **Wave 5, phase 4b: prices — fully specified in
+   PLAN-SPECIAL-ROOMS.md §4b (build from that section).**  Every C span
+   it cites was read and verified 2026-07-11 (`getprice` 4339-4379,
+   `get_cost` 2898-3009, the bill functions, `dopay` / `pay_billed_`
+   `items` / `dopayobj` / `pay`); the session should not need to
+   re-read shk.c beyond spot checks.  Scope: the buy-price chain
+   (`getprice` + `get_cost`, table-driven), the bill model (`BillEntry`
+   dict on `Eshk` + `onbill` / `billable` / `add_one_tobill` /
+   `sub_one_frombill` / `shop_debt`), the pickup hook +
+   `costly_spot` / `inhishop`, the `in_shop` move hook with the
+   no_charge enter/leave marks, and the `Pay` command (`p` →
+   `do_pay`, C's `dopay` simplified to pay-all — no menu).  Two old
+   claims are corrected there: this C has **no `bcsign` price
+   multiplier** (blessed ×2 / cursed ×½ was a 3.6 memory) and **no
+   `oc_prob` math in `getprice`**; the sell side (`sellobj` /
+   `set_cost` / `saleable`) is deferred.  Note: in C, buying
+   *establishes credit* (`pay()` at 3903-3931 adds to `eshk.credit`) —
+   the 4a-era "credit stays 0" note was true of stocking, not of 4b.
+2. Same commit: the plan's §1 reference rows and DoD line, the
+   CHANGES.md entry, and this HANDOFF rewritten for 4c.
 3. Interleaveable: the genesis residue (queue item 2 — `m_initweap` /
    `m_initinv` would finish the priest's robe half and give the
    shopkeeper its wielded weapon).

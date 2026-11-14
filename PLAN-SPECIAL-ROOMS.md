@@ -2,8 +2,8 @@
 
 **Status: phase 0 (terrain + engraving) + phase 1 (temple) + phase 2
 (the zoo family) + phase 3 (the swamp) + phase 4a (a stocked shop you
-can rob) LANDED; phases 4b-4d (prices, the police, the dialogue) and 5
-(the vault) proposed.**  Phase 4a landed as core/shknam_data.py
+can rob) LANDED; phase 4b (prices) specified (§4b below — build from
+it); 4c-4d (the police, the dialogue) and 5 (the vault) proposed.**  Phase 4a landed as core/shknam_data.py
 (the shtypes[] table + the twelve name lists, verbatim) + core/shk.py
 (inside_shop, good_shopdoor, shkinit, stock_room_goodpos,
 get_shop_item / veggy_item / shkveg / mkveggy_at / mkshobj_at,
@@ -398,7 +398,7 @@ Not this plan's work, but this plan cannot test anything without them:
    tests updated: the shop is the one unstocked special room left
    (tests/test_mklev.py, tests/test_mkroom.py).
 
-### Phase 4 — shops (4a LANDED; 4b-4d proposed; the `L` in `M→L`)
+### Phase 4 — shops (4a LANDED; 4b specified; 4c-4d proposed; the `L` in `M→L`)
 
 **4a — a stocked room you can rob (LANDED)** — landed as described,
 with these notes:
@@ -492,14 +492,219 @@ with these notes:
     really produces a stocked shop.  tests/test_mklev.py's STUB test
     became the mkshop claim test.
 
-**4b — prices (1-2 sessions, proposed).**
-  `getprice` (the per-class adjustments, all of them), `bcsign` (blessed ×2 / cursed ×1/2 for buying, the mirror for selling), the CHA
-  multiplier table, the `ushk` / `u.ushops` square tracking (`inside_shop`
-  on every move), `onbill`, `billable`, `add_one_tobill`, `eshk.debit`,
-  the `Pay` command (`p`), `paybill`'s "You bought …" / "You owe …"
-  messages, and the total on the status line.
-  *Exit:* taking stock creates a bill; paying settles it; the numbers
-  match a table-driven test of `getprice` for ~20 representative objects.
+**4b — prices: the bill, the buy, the Pay (specified 2026-07-11 — build
+  from this section; every C span below was read and verified that day,
+  so the session should not need to re-read shk.c beyond spot checks).**
+
+  *Corrections to the proposed text (read first):*
+
+  1. **This C has no `bcsign` price multiplier.**  "blessed ×2 / cursed
+     ×1/2" was a 3.6 memory, like the four zero-probability shops.
+     `bcsign` (mkobj.c 1872) is only the blessed/cursed *sign* helper
+     (it sets `spe`); blessed/cursed never touch price except through
+     `getprice`'s two zero-cases (empty wand `spe == -1` → 0; plain
+     water `!blessed && !cursed` → 0).
+  2. **`paybill` (shk.c 2506) is the death-time inventory-inheritance
+     function, not the `p` command.**  The `p` command is `dopay`
+     (1758+); its wallet/message core is `pay_billed_items` (2066+) →
+     `dopayobj` (2241+) → `pay()` (3903-3931).  4c owns `paybill`.
+  3. **`getprice` has no `oc_prob` math** (the old HANDOFF line was 3.6
+     too).  Its complete body is transcribed below; exactly five class
+     branches.
+
+  *The C price chain (transcribed, verified):*
+
+  **`getprice(obj, shk_buying)` (shk.c 4339-4379)** — base price; no
+  RNG.  `tmp = objects[otyp].oc_cost`; artifacts: `arti_cost`, ÷4 when
+  buying (pyhack: `oartifact` is always 0 — the branch never fires,
+  keep it for the shape).  Then per class:
+
+  - FOOD: `tmp += corpsenm_price_adj` (pyhack: no monster corpses →
+    0); **`if uhs >= HUNGRY and not buying: tmp *= uhs`** (the hunger
+    multiplier hits the *buy* side; uhs is the hunger-state int, 2..6
+    in core.hunger's `HungerState`); `if oeaten: tmp = 0`.
+  - WAND: `if spe == -1: tmp = 0`.
+  - POTION: `if otyp == POT_WATER and !blessed and !cursed: tmp = 0`
+    (otyp constants: `O.POT_WATER` in core/objects_enum.py).
+  - ARMOR / WEAPON: `if spe > 0: tmp += 10 * spe`.
+  - TOOL: candle and `age < 20 * oc_cost` → `tmp /= 2`.
+
+  **`get_cost(obj, shkp)` (2898-3009)** — the price that goes on the
+  bill (the buy side; `add_one_tobill` calls it):
+
+  - `tmp = getprice(obj, FALSE)`; `if !tmp: tmp = 5` (the 0→5 floor).
+  - If `!obj->dknown || !oc_name_known`: glass gem → priced as its real
+    gem twin (`pseudorand = (ubirthday % otyp) >= otyp/2`, a
+    color→gem table) — **named skip** (pyhack has no `oc_material`);
+    otherwise the un-ID'd surcharge `mult *= 4, div *= 3` —
+    **reachable in the demo**: core.mkobj's `unknow_object` leaves
+    most fresh items `dknown = False`, so apply C's `!dknown`
+    condition.
+  - DUNCE_CAP on the head, or tourist role / visible tourist shirt →
+    `mult *= 4, div *= 3` — **named skip** (no role system).
+  - CHA table on `ACURR(A_CHA)`: `> 18: div *= 2` | `== 18: mult *= 2,
+    div *= 3` | `>= 16: mult *= 3, div *= 4` | `<= 5: mult *= 2` |
+    `<= 7: mult *= 3, div *= 2` | `<= 10: mult *= 4, div *= 3`
+    (11-15: none) — **named skip** (no ability scores).
+  - Combine: `tmp *= mult; if div > 1: tmp = ((tmp * 10) / div + 5) /
+    10` — C's round-half-up; transcribe the four statements exactly
+    (a plain `round()` disagrees at the .5 cases).
+  - `if tmp <= 0: tmp = 1`; artifacts ×4 (never fires); **anger
+    surcharge: `if eshk.surcharge: tmp += (tmp + 2) // 3`** (4c sets
+    the flag; port the line now, it is harmless).
+
+  **`set_cost` (3169-3214)** — the *sell* price.  Deferred with the
+  sell side (below).
+
+  *The bill (C model → pyhack model, §2.3):*
+
+  C: `struct bill_x {bo_id, useup, price, bquan}` in `bill[BILLSZ]`
+  with **`BILLSZ = 200`** (mextra.h 114), `billct`, `bill_p`.
+  pyhack: `Eshk.bill: Dict[str, BillEntry]` keyed by item id, plus a
+  new `BillEntry` dataclass — `price: int`, `bquan: int`,
+  `useup: bool = False`, `name: str` (`name` is a model addition: C
+  looks the object up by `o_id`, but a used-up entry's object is a
+  deleted dummy and the pay message still needs the name; a documented
+  §2.3 model field).  Keep `Eshk.billct` in sync (`= len(bill)`).
+
+  - `onbill(item, eshk)` (1148-1167) → dict get by item id.
+  - `billable(eshk, item)` (3472-3508): keeper exists + `inhishop` +
+    not already on the bill + not (FOOD and `oeaten`) + not
+    `no_charge`.  C's container branch is a **named skip** (the demo
+    has no containers).
+  - `add_one_tobill(eshk, item)` (3330-3384): if not billable → free
+    (no entry); if `billct == 200` → `You got that for free!`; else
+    `bill[id] = BillEntry(price=get_cost(item, shkp), bquan=item.quan,
+    name=item.name)`, `item.unpaid = True`.  C does **not** merge
+    entries (one per item id) — don't add merging.  No
+    `record_price_quote`, no globs.
+  - `sub_one_frombill(eshk, item)` (3683-3711): C splits when
+    `bquan > item.quan` (the used-up part becomes a dummy object);
+    pyhack: **mark the entry `useup = True` and delete the item** (the
+    debt survives in `shop_debt`; the name is preserved).  A paid
+    item: delete the entry, `item.unpaid = False`.
+  - `shop_debt(eshk)` (990-999): `debit + Σ price * bquan`.  (Demo:
+    `debit` stays 0 — the bill *is* the debt; C's `debit` channel is
+    for used-up items and borrowed gold, and pyhack counts used-up
+    entries on the bill instead.)
+
+  *The Pay command (`p`; C: `dopay` 1758-2043, simplified to pay-all):*
+
+  - `PayCommand` (no fields) in core/commands.py + `Command` union
+    member; core/step.py dispatches to `shk.do_pay(world, rng)`;
+    ui/console.py binds `'p'` (verified unbound: the keys are `g`,
+    LIST_KEYS, `>`, `<`, `#pray`, `#offer`, arrows) + a help line.
+  - The keeper = the room keeper of the shop room the hero stands in
+    (`inside_shop(world.map, hero.pos)` → `room_keeper`).  If none →
+    `You are not in a shop.` (named simplification: C's `dopay` hunts
+    for the nearest keeper; 4c).  If `shop_debt == 0` → `You don't
+    owe any gold here.` (C's shopper_financial_report wording, 1033).
+  - The wallet is `core.invent.money_cnt(hero)` (526-532, already in).
+    **Credit counts toward it (C 1985 / 2081-2101): refuse when
+    `money + eshk.credit < total`** with `You don't have enough gold to
+    pay for the items on your bill.` (C 2495-2498, simplified; no
+    menu, no partial pay — named).
+  - Otherwise, per entry: `ltmp = price * bquan` (C 2274), message
+    `You bought <bquan> <name> for <ltmp> gold piece(s).` (C 2314),
+    then `pay(ltmp)` (3903-3931): **C's pay() against zero debit adds
+    to `eshk.credit` — buying in C *establishes credit***; port the
+    arithmetic as `shk.pay_debt` (the `debit` / `loan` / `credit`
+    branches and the "debt is (partially) paid off." messages, for 4c
+    reuse), so after a clean bill `credit == total`.  This overrides
+    the 4a-era "credit stays 0" note: that was true of the stocking
+    phase, not of 4b.
+  - The gold moves to the keeper: C does it via `money2mon` (the
+    hero's coin stack → the keeper's inventory; the keeper already
+    holds its 4a capital as a coin item).  Net: `money_cnt(hero)` down
+    by `total`, the keeper's coin stack up by `total`.
+  - C's closing line (2029): `Thank you for shopping in <keeper>
+    <shop>!` — port it (skip the Deaf/muteshk checks, named).
+  - **Named skips**: the itemized menu, the `y` buy menu, stashed gold
+    (`hidden_gold`), the `loan` channel, the `$` financial report (the
+    console's `$` is the wallet listing).
+
+  *The `u.ushops` tracking (C: `check_special_room`'s shop half):*
+
+  C keeps the string of shop rooms the hero is in, updated on every
+  move.  pyhack: one int — `Monster.in_shop: int = NO_ROOM` (the hero
+  is `world.hero`), set in core/step.py's `_room_entry` (195, next to
+  the temple branch) from `inside_shop(world.map, newpos)` (0 →
+  NO_ROOM).  On **entering** a shop room: mark the hero's carried
+  non-coin items `no_charge = True` (C 3094-3098: your own gear is
+  never billed); on **leaving**: clear `no_charge` on the hero's items
+  (C's `clear_no_charge`; `unpaid` items stay — 4c punishes leaving
+  with them).
+
+  *The pickup hook (C: pickobj → `addtobill`, 3510+):*
+
+  core/pickup.py `pickup()`: after `addinv`, if the square is a
+  `costly_spot` and the item is not a coin and not `no_charge` →
+  `add_one_tobill` (no extra message — C's is just "You pick up the
+  X.").  The two new predicates:
+
+  - `costly_spot(world, x, y)` (5374-5384):
+    `world.map.flags.has_shop` (LevelFlags 600) + a keeper for the
+    room at (x,y) + `inhishop` + inside the shop + **not the keeper's
+    own square**.
+  - `inhishop(world, shkp)` (1040-1048): the keeper is on the current
+    level (`eshk.shoplevel == world.lev`, the keeper in
+    `world.actors` / `world.map`) and the keeper's square sits in a
+    shop room matching `eshk.shoproom` (`inside_shop` at the keeper's
+    pos).
+
+  *Types changes (core/types.py):* `Item` + `unpaid: bool = False`,
+  `no_charge: bool = False` (C: `obj->unpaid` / `obj->no_charge`);
+  `Monster` + `in_shop: int = NO_ROOM`; `Eshk` + `bill: Dict[str,
+  BillEntry]` (`billct` stays in sync); the new `BillEntry`
+  dataclass (above).
+
+  *RNG:* none of these draws — the price chain, the bill and the pay
+  are pure arithmetic (C's glass-gem pseudorand reads `ubirthday`, and
+  is skipped anyway).  The seeded snapshot tests gain message events
+  only; no draw-order change.
+
+  *Named skips (4b):* the sell side (`sellobj` 3947+, `set_cost`
+  3169, `saleable`), the gem / glass-gem pricing (`oc_material`), the
+  CHA table (no ability scores), the dunce-cap / touristy-shirt ×4/3
+  (no roles), artifacts (`oartifact` always 0), `corpsenm_price_adj`
+  (no monster corpses), containers on the bill (no containers in the
+  demo), globby weight pricing, `record_price_quote`, the itemized /
+  `y` menus, stashed gold, the `loan` channel, the status-line total
+  (headless demo), the `$` financial report.
+
+  *Tests (tests/test_shop.py, table-driven — the existing `_room_map`
+  / `_claim` / `_floor_items` helpers apply):*
+
+  - `getprice`: ~20 pairs with the expected value computed from
+    `OBJECTS[otyp].cost` (the formula above is the spec): a long sword
+    at `spe` 0 / +2; potion of water (0) vs potion of healing; an
+    empty wand (0) vs a wand of lightning; an apple vs `oeaten` (0);
+    a candle on both sides of the `age < 20 * cost` boundary; armor at
+    `spe` +1; the hunger multiplier at `uhs` 2..6 (set `hero.uhs`
+    directly) for a bought food; a `dknown` vs unknown item through
+    `get_cost` (×4/3).
+  - `get_cost`: the 0→5 floor; the round-half-up case where C's
+    `((tmp*10)/div + 5)/10` disagrees with a plain division; the
+    surcharge line with `eshk.surcharge = True`.
+  - the bill: pick up a stocked item inside the shop → an entry,
+    `price == get_cost`, `item.unpaid`, `shop_debt == price * quan`;
+    a second item → two entries; the hero's own (no_charge) item →
+    none.
+  - `do_pay`: enough gold → a "You bought …" per entry, the bill
+    cleared, `credit == total`, `money_cnt(hero)` down by `total`, the
+    keeper's coin stack up by `total`; not enough gold → the refusal,
+    bill and wallet untouched; `shop_debt == 0` → "You don't owe any
+    gold here."; not in a shop → the refusal.
+  - the entry/leave hook: moving in sets `hero.in_shop` and marks
+    carried items `no_charge`; moving out clears both.
+  - BILLSZ: a fake `eshk` with 200 entries → the 201st gets "You got
+    that for free!" (no entry).
+  *Exit (unchanged):* taking stock creates a bill; paying settles it;
+  the numbers match the table-driven `getprice` tests.
+
+  *Docs in the same commit:* this section → LANDED; the §1 reference
+  rows (`shk.getprice` / the bill row) → exists (4b); the DoD 4b-4c
+  line; the CHANGES.md entry; the HANDOFF rewrite for 4c.
 
 **4c — the shopkeeper polices it (1-2 sessions, proposed).**
   `stolen_value` on leaving the shop with unpaid goods, `eshk.robbed`,
