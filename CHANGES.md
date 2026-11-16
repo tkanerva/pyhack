@@ -5,6 +5,92 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The shop: prices, the bill, and the Pay (Wave 5, phase 4b)
+
+**Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 4b): the
+`shknam.c` half of the shop (4a) left a room you could rob *for free*.
+This session is the billing half of `src/shk.c` -- the price chain,
+the bill, and the `p` command -- so a stocked shop is now a shop you
+can *buy from*.  The police (4c) and the dialogue (4d) stay out, each
+named where it would go.
+
+**The choices:**
+
+1. **The price chain is table-driven and draw-free** (core.shk,
+C: shk.c `getprice` 4339-4379 + `get_cost` 2898-3009): `getprice` is
+C's five-branch switch (the FOOD hunger multiplier on the buy side,
+the oeaten / cancelled-wand / plain-water zeros, the ARMOR/WEAPON
+`+10*spe`, the candle `age < 20*cost` half); `get_cost` is the
+0->5 floor, the un-ID'd x4/3, C's round-half-up combine transcribed
+statement for statement (a plain `round()` disagrees at the .5
+cases), the <=0 -> 1 floor, and the anger surcharge (4c's flag, the
+line ported now).  The named skips are the glass gem (no
+`oc_material`), the DUNCE_CAP / tourist x4/3 (no roles), the CHA
+table (no ability scores), and artifacts (`oartifact` always 0).
+2. **The un-ID'd surcharge follows the plan's `!dknown` reading.**
+C gates it on `oid_price_adjustment` (`o_id % 4 == 0`) as well as
+`!dknown || !oc_name_known`; the plan applies it on the `!dknown`
+arm, so a fresh un-ID'd item is *always* billed up here (a named
+simplification, in the docstring).  The type's name-known half reads
+the per-game `world.obj_tables.name_known` (the same read
+`core.rings` uses), not just the table's `name_known`.
+3. **A bill is a dict, not a linked list** (§2.3): `Eshk.bill`
+(`Dict[str, BillEntry]` keyed by item id, the new `BillEntry`
+dataclass in core.types) with `billct` kept in sync as `len(bill)`,
+and the four questions the game asks -- `get_cost` (what does it
+cost), `onbill` (is it unpaid), `shop_debt` (what is owed), and the
+`billable` / `add_one_tobill` / `sub_one_frombill` writers (C
+1148 / 3472 / 3330 / 3683 / 989).  `inhishop` (1038) and
+`costly_spot` (5370) are the two predicates; the keeper's own square
+is not a costly spot.
+4. **The pickup hook bills silently** (core.pickup, C: pickobj ->
+addtobill): a picked item on a costly_spot that is not a coin and not
+`no_charge` goes on the bill with no extra message (C's pickup line is
+the only one); a full bill (BILLSZ = 200) gives the item free ("You
+got that for free!").
+5. **The `in_shop` tracking is C's u.ushops half, reduced to one int**
+(`Monster.in_shop`, set in core.step's room-entry hook by
+`core.shk.track_shop` from `inside_shop`): on entering a shop the
+hero's carried non-coin gear is marked `no_charge` (your own gear is
+never billed), on leaving the marks are cleared (unpaid items stay --
+4c punishes leaving with them).
+6. **The `Pay` command (`p`) is pay-all, not a menu** (core.shk
+`do_pay`, C: dopay 1758 simplified): the room keeper of the shop the
+hero stands in (no nearest-keeper hunt), the `shop_debt`, the
+`money + credit >= total` gate, the per-entry "You bought ..." +
+`pay_debt` + the gold move (the money2mon source/destination halves,
+merge into the keeper's one pile, no rng draw), and the "Thank you
+for shopping in ..." closing line (the Mr./Ms. honorific is 4d, so
+the bare name).  `PayCommand` in core.commands, dispatched in
+core.step, bound to `p` in the console (verified unbound).
+7. **The credit model is the plan's deliberate 4b override.**  The 4a
+"credit stays 0" note was true of *stocking*, not of *paying*: buying
+*establishes* credit.  `pay_debt` ports the debit / loan / credit
+branches at shk.c 3903-3931 (the plan cites this span as `pay()`; it
+is C's `donate_gold`, whose zero-debit arm adds the payment to
+`eshk.credit`), so after a clean bill `credit == total` *and* the gold
+moves to the keeper.  C's actual buy path (`pay()` at 1310,
+check_credit + money2mon) does not establish credit -- this is the
+plan's model, ported as specified and pinned by the tests.
+8. **Types changes** (core.types): `Item.unpaid` / `Item.no_charge`,
+`Monster.in_shop`, `Eshk.bill` (+ the new `BillEntry`).  No rng draw
+anywhere in the price / bill / pay chain, so the seeded snapshot tests
+gain message events only.
+9. **Tests:** tests/test_shop.py's 4b section (22) -- the getprice
+table (weapon / armor enchant, water vs healing, cancelled vs charged
+wand, oeaten food, the candle age boundary, the uhs 2..6 hunger
+multiplier), the get_cost floor / un-ID'd surcharge / round-half-up /
+anger, the pickup bill (one entry, a second entry, the no-charge and
+coin skips, the keeper's square, the BILLSZ free item), the
+entry/leave no_charge marks, and the do_pay pay-all / refusal /
+no-debt / not-in-a-shop + the pay_debt credit model.
+
+mypy clean over 102 files, flake8 clean, 1316 tests green (22 new);
+the demo's pinned seeds, layouts and messages are unchanged (the demo
+generator never calls makelevel with specials=True, so no shop exists
+and the new hooks are no-ops: `costly_spot` sees no `has_shop`,
+`track_shop` sees no shop room).
+
 ## The shop: a stocked room you can rob (Wave 5, phase 4a)
 
 **Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 4a): the

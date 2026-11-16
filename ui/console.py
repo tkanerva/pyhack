@@ -18,6 +18,7 @@ from core.commands import (
     ListCommand,
     MoveCommand,
     OfferCommand,
+    PayCommand,
     PickupCommand,
     PrayCommand,
     QuaffCommand,
@@ -105,9 +106,11 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     line), `i` for the whole inventory list (+ `)` `[` `"` `=` `(` for
     one class, `*` for what is worn / wielded, `$` for the wallet --
     listings, so they cost no turn), `>` to go down the stairs / `<` to
-    climb up (C: the '>' / '<' commands), `#pray` / `#offer` for the
-    shrine commands (C: the extended commands, src/cmd.c do_extcmd --
-    both refuse until src/pray.c lands); anything else is a wait.
+    climb up (C: the '>' / '<' commands), `p` to pay the shop bill
+    (C: 'p' -> dopay, src/shk.c -- pay all, no menu), `#pray` /
+    `#offer` for the shrine commands (C: the extended commands,
+    src/cmd.c do_extcmd -- both refuse until src/pray.c lands);
+    anything else is a wait.
     """
     if world.occupation is not None:
         # C: while an occupation runs the bottom line shows the
@@ -140,6 +143,10 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
         return PrayCommand()
     if key == "#offer":
         return OfferCommand()
+    # the pay command (C: 'p' -> dopay, src/shk.c): pay the bill of the
+    # shop you stand in (PLAN-SPECIAL-ROOMS.md phase 4b)
+    if key == "p":
+        return PayCommand()
     # the close command (C: doclose, one step in a direction): 'x' +
     # an axis letter ('c' already casts, so close moved to 'x'); a
     # lone 'x' is a wait, like a lone 'q'

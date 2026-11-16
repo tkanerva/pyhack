@@ -133,6 +133,16 @@ class OfferCommand:
     refusal, as PrayCommand; a turn is spent."""
 
 
+@dataclass(frozen=True)
+class PayCommand:
+    """Pay the shopkeeper's bill (C: 'p' -> dopay, src/shk.c).
+
+    Simplified to pay-all (PLAN-SPECIAL-ROOMS.md phase 4b): the hero pays
+    every item on the bill of the shop they stand in, no itemized menu.
+    A turn is spent.
+    """
+
+
 Command = Union[
     MoveCommand,
     WaitCommand,
@@ -149,4 +159,5 @@ Command = Union[
     CloseCommand,
     PrayCommand,
     OfferCommand,
+    PayCommand,
 ]

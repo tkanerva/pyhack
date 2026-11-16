@@ -235,7 +235,7 @@ details live in the PLAN-*.md files and the module docstrings):**
   misaligned-altar line -- src/pray.c is out of scope (the plan says so
   loudly).  The priest draws as the human glyph (C S_HUMAN is `@`;
   the legend says so).
-- The shop (PLAN-SPECIAL-ROOMS.md phase 4a, core/shk.py +
+- The shop (PLAN-SPECIAL-ROOMS.md phases 4a+4b, core/shk.py +
   core/shknam_data.py + core.mkroom.mkshop): the shknam.c half of a
   shop, split the way C splits it -- `mkshop` *claims* a room (the
   first ordinary, staircase-free, one-door room with a valid shape;
@@ -253,9 +253,24 @@ details live in the PLAN-*.md files and the module docstrings):**
   row stays empty, a mimic may take a square) and repairs the doorway
   (no door -> open, secret -> real via `cvt_sdoor_to_door`, trapped ->
   locked + the "Closed for inventory" engraving, which C puts on the
-  *corridor* side).  Prices, the "you stole from me" police and the
-  dialogue are 4b-4d; the tribute "special spot" and
-  `set_tin_variety(HEALTHY_TIN)` are named skips.
+  *corridor* side).  Phase 4b adds the billing half of `src/shk.c`:
+  the price chain (`getprice` 4339 + `get_cost` 2898, table-driven and
+  draw-free -- the 0->5 floor, the un-ID'd x4/3, C's round-half-up
+  combine), the bill as a `BillEntry` dict on `Eshk` (`onbill` /
+  `billable` / `add_one_tobill` / `sub_one_frombill` / `shop_debt`,
+  `billct` in sync, BILLSZ = 200), the pickup hook (a picked item on a
+  `costly_spot` that is not a coin and not `no_charge` is billed
+  silently), the `in_shop` tracking (`Monster.in_shop`, the no_charge
+  enter/leave marks in core.step's room-entry hook), and the `Pay`
+  command (`p` -> `do_pay`, pay-all: the `money + credit >= total`
+  gate, the "You bought ..." + `pay_debt` + the money2mon gold move,
+  the "Thank you for shopping in ..." line).  The one deliberate
+  deviation from C's buy path: buying *establishes credit* (the plan's
+  4b override; `pay_debt` ports the debit/loan/credit branches at
+  3903-3931, C's `donate_gold`), so after a clean bill `credit ==
+  total` and the gold also moves to the keeper.  The "you stole from
+  me" police (4c) and the dialogue (4d) remain; the tribute "special
+  spot" and `set_tin_variety(HEALTHY_TIN)` are named skips.
 - The inventory core (PLAN-INVENT.md phase A, core/invent.py): the
   port of the item half of src/invent.c, and the **single writer** of
   the PACK half of an item's where-state (`addinv` / `freeinv` /
@@ -415,12 +430,17 @@ temple itself has landed with it, queue item 1):
    + tests/test_engrave.py); and so is the shop's first phase (4a: the
    shknam.c `shtypes[]` table + name lists as data, `mkshop`'s room
    pick, core.shk's stock_room / shkinit / nameshk / the door fix-up,
-   tests/test_shop.py).  What is left of the plan is the shop's *billing*
-   side -- 4b prices (`getprice`, the CHA / BUC multipliers, `onbill`,
-   `eshk.debit`, the `Pay` command), 4c the police (`stolen_value`,
-   `robbed`, the door block), 4d the dialogue -- and, optionally, the
-   vault (phase 5).  shk.c is billing before it is a room, which is why
-   the shop is last and lands in sub-phases.
+   tests/test_shop.py) and the shop's billing half (4b: the price
+   chain `getprice` / `get_cost`, the `BillEntry`-dict bill +
+   `onbill` / `billable` / `add_one_tobill` / `sub_one_frombill` /
+   `shop_debt`, the pickup hook + `costly_spot` / `inhishop`, the
+   `in_shop` tracking + the no_charge enter/leave marks, and the `Pay`
+   command `p` -> `do_pay`; tests/test_shop.py's 4b section).  What is
+   left of the plan is 4c the police (`stolen_value`, `robbed`,
+   `surcharge`, `alter_cost`, the door block, `paybill`) and 4d the
+   dialogue (`shk_talk`, the `shkname` honorific, `shk_move`) -- and,
+   optionally, the vault (phase 5).  shk.c is billing before it is a
+   room, which is why the shop is last and lands in sub-phases.
 2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),

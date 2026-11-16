@@ -1,13 +1,17 @@
-"""The shop system -- phase 4a of PLAN-SPECIAL-ROOMS.md.
+"""The shop system -- phases 4a (the stocked shop) and 4b (prices, the
+bill, the Pay) of PLAN-SPECIAL-ROOMS.md.
 
 A shop in pyhack is what 4a says it is: a room whose type is
 ``SHOPBASE + i`` (the ``i`` index into core.shknam_data.SHOPTYPES), a
 peaceful shopkeeper standing just inside its door who knows the room
 (``Eshk`` on the monster, C: ``mextra->eshk``), and a floor stocked one
-object per free square.  You can walk in, take what you like and walk
-out again -- for free.  Prices (4b), the "you stole from me" police
-(4c) and the shopkeeper's dialogue (4d) are *not* ported; every one of
-them is named where it would go.
+object per free square.  4b adds the billing half: you can walk in, take
+what you like (it goes on the keeper's bill, core.shk.add_one_tobill),
+and pay (the ``PayCommand``, core.shk.do_pay).  The "you stole from me"
+police (4c: ``stolen_value`` / ``eshk.robbed`` / ``surcharge`` /
+``alter_cost`` / the door block / ``paybill``) and the shopkeeper's
+dialogue (4d: ``shk_talk`` / the ``shkname`` honorific / ``shk_move``)
+are *not* ported; every one of them is named where it would go.
 
 C provenance (the spans this module owns, verified against
 nethack_index/symbols):
@@ -48,11 +52,17 @@ What this phase deliberately leaves out (each named at its call site):
     mklev's door writers do not call it);
   - ``mon_learns_traps(shk, ALL_TRAPS)``: pyhack monsters have no
     per-monster trap knowledge (the priest's skip, core.priest);
-  - ``saleable()`` (does this shop stock this item type) belongs to the
-    billing half; ``getprice`` / ``billable`` / ``add_one_tobill`` /
-    ``stolen_value`` / ``paybill`` are 4b-4c and not ported, so an
-    ``Eshk`` carries a zeroed account and ``Room.resident`` is the only
-    "who keeps this shop" record.
+  - ``saleable()`` (does this shop stock this item type) is the sell
+    half, deferred with 4c; the 4b bill is keyed by the pickup, not by
+    saleable;
+  - the 4c police: ``stolen_value`` / ``eshk.robbed`` / ``surcharge`` /
+    ``alter_cost`` (the EF_PAY half) / the door block / ``paybill``
+    (the death-time inheritance); ``Eshk.robbed`` / ``surcharge`` /
+    ``debit`` / ``loan`` are carried as zeroed fields, and the
+    ``pay_debt`` debit / loan branches are ported for their reuse;
+  - the 4d dialogue: ``shk_talk`` (the greeting, the "please pay" line),
+    the ``shkname`` honorific (do_pay uses the bare name), and
+    ``shk_move`` (the keeper's movement).
 
 Named divergences (documented, not bugs):
 
@@ -72,9 +82,11 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .engrave import E_DUST, make_engr_at
+from .events import Event, MessageEvent
 from .hacklib import distmin
+from .invent import currency, delobj, money_cnt
 from .makemon import makemon, mkclass, mkmonmoney, mongets, set_malign
-from .mkobj import is_ismnum, mkobj_at, mksobj_at
+from .mkobj import coarse_otype, is_ismnum, mkobj_at, mksobj_at
 from .mondata import vegetarian
 from .monst import MONS, NON_PM, PerMonst
 from .monst_defs import PM_LICHEN, PM_SHOPKEEPER, S_MIMIC
@@ -93,7 +105,10 @@ from .types import (
     NO_MM_FLAGS,
     NO_ROOM,
     ROOMOFFSET,
+    BillEntry,
     DoorMask,
+    Eshk,
+    HungerState,
     Item,
     Map,
     MmFlags,
@@ -104,7 +119,6 @@ from .types import (
     TerrainType,
     World,
 )
-
 
 # ============================================================
 # Small predicates
@@ -340,8 +354,14 @@ def init(
             occupant.pos = spot
 
     shk = makemon(
-        world, rng, _mons_row(PM_SHOPKEEPER), (sx, sy), MmFlags.ESHK,
-        map_=map_, lev=lev, in_mklev=True,
+        world,
+        rng,
+        _mons_row(PM_SHOPKEEPER),
+        (sx, sy),
+        MmFlags.ESHK,
+        map_=map_,
+        lev=lev,
+        in_mklev=True,
     )
     if shk is None:
         return None
@@ -379,9 +399,7 @@ def init(
 # ============================================================
 
 
-def stock_goodpos(
-    map_: Map, room: Room, rmno: int, door: Pos, pos: Pos
-) -> bool:
+def stock_goodpos(map_: Map, room: Room, rmno: int, door: Pos, pos: Pos) -> bool:
     """C: shknam.c#stock_room_goodpos -- may this square be stocked?
 
     C's rules, in C's order: an irregular room rejects its boundary
@@ -508,8 +526,7 @@ def mkveggy_at(world: World, rng, pos: Pos, lev: int) -> Item:
     HEALTHY_TIN)``); tins carry no variety field in pyhack yet, so that
     fix-up is a named skip and the tin is an ordinary one.
     """
-    return mksobj_at(world, rng, shkveg(rng), pos, lev,
-                     init=True, artif=True)
+    return mksobj_at(world, rng, shkveg(rng), pos, lev, init=True, artif=True)
 
 
 def mkshobj_at(
@@ -538,10 +555,20 @@ def mkshobj_at(
         return
     if rng.rn2(100) < lev and world.monster_at_lev(lev, pos) is None:
         mimic = mkclass(world, rng, S_MIMIC, 0)
-        if mimic is not None and makemon(
-            world, rng, mimic, pos, NO_MM_FLAGS, map_=map_, lev=lev,
-            in_mklev=True,
-        ) is not None:
+        if (
+            mimic is not None
+            and makemon(
+                world,
+                rng,
+                mimic,
+                pos,
+                NO_MM_FLAGS,
+                map_=map_,
+                lev=lev,
+                in_mklev=True,
+            )
+            is not None
+        ):
             return  # a mimic took the square
     atype = get_shop_item(rng, shop_index)
     if atype == VEGETARIAN_CLASS:
@@ -618,7 +645,8 @@ def stock_room(world: World, rng, map_: Map, room: Room, lev: int) -> None:
             # -- there are no special levels here, so the room test is
             # the whole answer
             target = (
-                TerrainType.ROOM if map_.room_at((m, n)) is not None
+                TerrainType.ROOM
+                if map_.room_at((m, n)) is not None
                 else TerrainType.CORR
             )
             set_levltyp(map_, m, n, target)
@@ -635,18 +663,459 @@ def stock_room(world: World, rng, map_: Map, room: Room, lev: int) -> None:
     map_.flags.has_shop = True
 
 
+# ============================================================
+# Prices (PLAN-SPECIAL-ROOMS.md phase 4b; C: shk.c getprice / get_cost)
+# ============================================================
+
+# C: BILLSZ (mextra.h 114) -- a keeper's bill holds at most this many
+# entries; the 201st pickup in a shop is free.
+BILLSZ = 200
+
+
+def _type_name_known(world: World, otyp: int) -> bool:
+    """C: objects[otyp].oc_name_known -- the type's name is known (either
+    pre-known in the table or discovered this game; the per-game half is
+    world.obj_tables.name_known, the same read core.rings uses)."""
+    state = world.obj_tables
+    if state is not None and otyp in state.name_known:
+        return True
+    return bool(OBJECTS[otyp].name_known)
+
+
+def getprice(world: World, item: Item, shk_buying: bool) -> int:
+    """C: shk.c#getprice (4339-4379) -- the BASE price of an object; no
+    RNG.  `shk_buying` is True when the shopkeeper is buying (the hero
+    selling); the buy side (the hero buying) passes False.
+
+    The base is `objects[otyp].oc_cost`, then C's five-branch switch:
+
+    - FOOD: + the corpse subject's price adjustment (pyhack has no
+      monster corpses, so 0); the hunger multiplier -- when the hero is
+      at least HUNGRY (uhs >= 2) and BUYING (not shk_buying) the price
+      is multiplied by `uhs` (2..6, core.hunger's HungerState); a
+      partly-eaten piece (oeaten) is worth 0.
+    - WAND: a cancelled / empty wand (spe == -1) is worth 0.
+    - POTION: plain water (POT_WATER, neither blessed nor cursed) is 0.
+    - ARMOR / WEAPON: an enchant bonus (spe > 0) adds 10 * spe.
+    - TOOL: a candle (tallow / wax) younger than 20 * its cost is half.
+
+    Artifacts (oartifact) take arti_cost and are quartered when the
+    keeper is buying -- pyhack has no artifacts (oartifact is always 0),
+    so the branch is a named no-op, kept for the shape.
+    """
+    tmp = OBJECTS[item.otyp].cost
+    if item.oartifact:
+        # C: tmp = arti_cost(obj); if (shk_buying) tmp /= 4 -- no
+        # artifacts in pyhack (oartifact always 0): a named no-op
+        pass
+    oclass = item.oclass
+    if oclass == int(ObjClass.FOOD):
+        # C: tmp += corpsenm_price_adj(obj) -- pyhack has no monster
+        # corpses, so the adjustment is 0
+        hero = world.hero_or_none
+        uhs = int(hero.uhs) if hero is not None else int(HungerState.NOT_HUNGRY)
+        if uhs >= int(HungerState.HUNGRY) and not shk_buying:
+            tmp *= uhs
+        if item.oeaten:
+            tmp = 0
+    elif oclass == int(ObjClass.WAND):
+        if item.spe == -1:
+            tmp = 0
+    elif oclass == int(ObjClass.POTION):
+        if item.otyp == int(O.POT_WATER) and not item.blessed and not item.cursed:
+            tmp = 0
+    elif oclass in (int(ObjClass.ARMOR), int(ObjClass.WEAPON)):
+        if item.spe > 0:
+            tmp += 10 * item.spe
+    elif oclass == int(ObjClass.TOOL):
+        if (
+            item.otyp in (int(O.TALLOW_CANDLE), int(O.WAX_CANDLE))
+            and item.age < 20 * OBJECTS[item.otyp].cost
+        ):
+            tmp //= 2
+    return tmp
+
+
+def get_cost(world: World, item: Item, shkp: Optional[Monster]) -> int:
+    """C: shk.c#get_cost (2898-3009) -- the price that goes on the bill
+    (the buy side; add_one_tobill calls it).
+
+    Starts from getprice(obj, FALSE) with the 0->5 floor, applies the
+    un-ID'd surcharge (x4/3), then C's round-half-up combine, the
+    <=0 -> 1 floor, and (for 4c) the anger surcharge.
+
+    Named skips (the plan's 4b list): the glass-gem re-pricing (pyhack
+    has no oc_material, so an un-ID'd glass gem takes the plain
+    surcharge), the DUNCE_CAP / tourist-shirt x4/3 (no role system), the
+    CHA table (no ability scores), and artifacts (oartifact always 0).
+
+    The un-ID'd surcharge follows the plan's reading of C's
+    `!dknown || !oc_name_known` arm (the 0->5 floor already ran, so a
+    fresh, un-ID'd item is billed x4/3).
+    """
+    tmp = getprice(world, item, False)
+    if not tmp:
+        tmp = 5  # C: `if (!tmp) tmp = 5L` -- the 0->5 floor
+    mult = 1
+    div = 1
+    if (not item.dknown) or (not _type_name_known(world, item.otyp)):
+        # C: `else if (oid_price_adjustment(obj, obj->o_id) > 0)`: the
+        # un-ID'd x4/3.  (C additionally gates it on o_id % 4 == 0;
+        # the plan applies the surcharge on the !dknown arm, so a fresh
+        # item is always billed up -- see PLAN-SPECIAL-ROOMS.md 4b.)
+        mult *= 4
+        div *= 3
+    # C: the DUNCE_CAP / tourist x4/3 and the CHA table -- named skips
+    # (no role system, no ability scores)
+    # the combine, C's round-half-up, transcribed statement for
+    # statement (a plain floor division disagrees at the .5 cases)
+    tmp *= mult
+    if div > 1:
+        tmp = ((tmp * 10) // div + 5) // 10
+    if tmp <= 0:
+        tmp = 1
+    if item.oartifact:
+        tmp *= 4  # C: the artifact x4 -- never fires
+    if shkp is not None and shkp.eshk is not None and shkp.eshk.surcharge:
+        # C: the anger surcharge (4c sets the flag; the line is ported
+        # now, it is harmless while surcharge stays False)
+        tmp += (tmp + 2) // 3
+    return tmp
+
+
+# ============================================================
+# The bill (PLAN-SPECIAL-ROOMS.md 4b; C: shk.c's bill_x machinery)
+# ============================================================
+
+
+def onbill(item: Item, eshk: Optional[Eshk]) -> Optional[BillEntry]:
+    """C: shk.c#onbill (1148-1167) -- the bill entry for `item` on
+    `eshk`'s bill, or None.  C walks the array comparing bo_id; here it
+    is a dict lookup by item id."""
+    if eshk is None:
+        return None
+    return eshk.bill.get(item.id)
+
+
+def inhishop(world: World, shkp: Monster) -> bool:
+    """C: shk.c#inhishop (1038-1048) -- is this shopkeeper "at home"?
+
+    The keeper's shop level is the current level AND the keeper's square
+    sits inside the shop room it keeps (inside_shop at the keeper's pos
+    answering eshk.shoproom).  A dead / moved / cross-level keeper is
+    not at home, so nothing it stocked is billable.
+    """
+    eshkp = shkp.eshk
+    if eshkp is None:
+        return False
+    if eshkp.shoplevel != world.lev:
+        return False
+    return inside_shop(world.map, shkp.pos) == eshkp.shoproom
+
+
+def billable(world: World, shkp: Optional[Monster], item: Item) -> bool:
+    """C: shk.c#billable (3472-3508) -- does this shopkeeper bill for
+    this item?
+
+    The keeper must exist and be at home (inhishop); the item must not be
+    already on the bill, not a partly-eaten food (FOOD + oeaten), and not
+    no_charge (the hero's own gear).  C's container arm (a no_charge
+    container whose contents are still billable) is a named skip (the
+    demo has no containers).
+    """
+    if shkp is None or shkp.eshk is None:
+        return False
+    if not inhishop(world, shkp):
+        return False
+    if onbill(item, shkp.eshk) is not None:
+        return False
+    if item.oclass == int(ObjClass.FOOD) and item.oeaten:
+        return False
+    if item.no_charge:
+        return False
+    return True
+
+
+def add_one_tobill(world: World, shkp: Optional[Monster], item: Item) -> List[Event]:
+    """C: shk.c#add_one_tobill (3330-3384) -- put `item` on `shkp`'s
+    bill.
+
+    Not billable -> free (no entry, no message).  A full bill
+    (billct >= BILLSZ) -> "You got that for free!" (no entry).  Otherwise
+    the entry is added -- price = get_cost, bquan = item.quan, name =
+    item.name -- and item.unpaid is set.  C does NOT merge entries (one
+    per item id), so there is no merging here; the glob and
+    record_price_quote arms are named skips.
+    """
+    if shkp is None or shkp.eshk is None:
+        return []
+    eshkp = shkp.eshk
+    if not billable(world, shkp, item):
+        return []  # the keeper does not want it: free
+    if eshkp.billct >= BILLSZ:
+        return [MessageEvent("You got that for free!")]
+    eshkp.bill[item.id] = BillEntry(
+        price=get_cost(world, item, shkp), bquan=item.quan, name=item.name
+    )
+    eshkp.billct = len(eshkp.bill)
+    item.unpaid = True
+    return []
+
+
+def sub_one_frombill(eshk: Eshk, item: Item) -> None:
+    """C: shk.c#sub_one_frombill (3683-3711) -- take `item` off the bill.
+
+    A paid item: the entry is deleted and item.unpaid cleared.  A
+    partly-used-up item (bquan > quan -- C splits the difference into a
+    dummy object that stays on the bill) is marked useup on the entry:
+    the debt survives in shop_debt and the name is preserved for the pay
+    message (the item itself is deleted by the useup path, not here).  An
+    item not on the bill but flagged unpaid gets the flag cleared (C's
+    impossible()).
+    """
+    entry = eshk.bill.get(item.id)
+    if entry is None:
+        if item.unpaid:
+            item.unpaid = False  # C: impossible("not on bill"), clear
+        return
+    if not entry.useup and entry.bquan > item.quan:
+        # C's split: the used-up part stays billed as useup; the item
+        # (the remaining part) is deleted by the caller
+        entry.useup = True
+        return
+    eshk.bill.pop(item.id, None)
+    eshk.billct = len(eshk.bill)
+    item.unpaid = False
+
+
+def shop_debt(eshk: Eshk) -> int:
+    """C: shk.c#shop_debt (989-999) -- what the hero owes this keeper:
+    debit + the sum of price * bquan over the bill.
+
+    In the demo debit stays 0 (the bill IS the debt; C's debit channel is
+    for used-up items and borrowed gold, and pyhack counts used-up entries
+    on the bill instead), so this is the bill total.
+    """
+    debt = eshk.debit
+    for entry in eshk.bill.values():
+        debt += entry.price * entry.bquan
+    return debt
+
+
+def costly_spot(world: World, x: int, y: int) -> bool:
+    """C: shk.c#costly_spot (5370-5384) -- may an item on this square
+    cost money?
+
+    The level has a shop; the square is strictly inside a shop whose
+    keeper is at home (inhishop); and the square is not the keeper's own
+    (a keeper stocking its own counter is not a sale).
+    """
+    if not world.map.flags.has_shop:
+        return False
+    roomno = inside_shop(world.map, (x, y))
+    if roomno == NO_ROOM:
+        return False
+    shkp = shop_keeper(world, world.lev, roomno)
+    if shkp is None or not inhishop(world, shkp):
+        return False
+    eshkp = shkp.eshk
+    assert eshkp is not None  # the MM_ESHK of makemon allocated it
+    return (x, y) != eshkp.shk
+
+
+# ============================================================
+# The hero's shop presence (C: check_special_room's u.ushops half)
+# ============================================================
+
+
+def track_shop(world: World, newpos: Pos) -> None:
+    """C: check_special_room()'s shop half (hack.c) -- update the hero's
+    `in_shop` and mark / clear no_charge on entering / leaving a shop.
+
+    Called from core.step's room-entry hook on every hero move.  No
+    events: C's entry / leave dialogue is the shopkeeper's behaviour half
+    (phase 4d).  On entry the hero's carried non-coin gear is marked
+    no_charge (your own gear is never billed, C 3094-3098); on leave the
+    no_charge marks are cleared (unpaid items stay -- 4c punishes leaving
+    with them).
+    """
+    hero = world.hero
+    new_in_shop = inside_shop(world.map, newpos)
+    if new_in_shop == hero.in_shop:
+        return
+    if new_in_shop == NO_ROOM:
+        hero.in_shop = NO_ROOM  # leaving a shop
+        for it in hero.inventory:
+            it.no_charge = False  # C: clear_no_charge (unpaid stays)
+    else:
+        hero.in_shop = new_in_shop  # entering a shop
+        for it in hero.inventory:
+            # C: your own gear is never billed (the !unpaid guard keeps
+            # an already-stolen item off the no_charge mark)
+            if it.oclass != int(ObjClass.COIN) and not it.unpaid:
+                it.no_charge = True
+
+
+# ============================================================
+# The Pay command (PLAN-SPECIAL-ROOMS.md 4b; C: shk.c dopay, simplified
+# to pay-all)
+# ============================================================
+
+
+def _spend_gold(world: World, mon: Monster, amount: int) -> int:
+    """Reduce `mon`'s gold by `amount` (C: money2mon's source half).
+    A gold pile is one item whose quan is the amount; reduce the
+    stack(s) and delete a pile that empties.  Returns what could not be
+    spent (0 when the pack held enough)."""
+    remaining = amount
+    for it in list(mon.inventory):
+        if it.oclass != int(ObjClass.COIN) or remaining <= 0:
+            continue
+        take = min(it.quan, remaining)
+        it.quan -= take
+        remaining -= take
+        if it.quan <= 0:
+            delobj(world, it.id)
+    return remaining
+
+
+def _give_gold(world: World, mon: Monster, amount: int) -> None:
+    """Add `amount` gold to `mon`, merging into its existing coin pile
+    (C: money2mon's destination half).  The keeper always carries its
+    4a capital as one pile, so the merge is the live path; the bare
+    fallback builds a pile without an rng draw (4b is pure
+    arithmetic)."""
+    for it in mon.inventory:
+        if it.oclass == int(ObjClass.COIN):
+            it.quan += amount
+            return
+    gold = Item(
+        id=world.new_id("gold"),
+        otype=coarse_otype(int(O.GOLD_PIECE)),
+        name="gold piece",
+        otyp=int(O.GOLD_PIECE),
+        oclass=int(ObjClass.COIN),
+        quan=amount,
+    )
+    gold.carrier = mon.id
+    gold.lev = mon.lev
+    mon.inventory.append(gold)
+    world.items[gold.id] = gold
+
+
+def pay_debt(eshkp: Eshk, amount: int) -> None:
+    """C: shk.c's pay arithmetic (the debit / loan / credit branches at
+    3903-3931) -- settle `amount` against the keeper's account.
+
+    Against a clean account (debit 0, the 4b case) the whole amount
+    becomes credit: buying in this model establishes credit (the plan's
+    4b override of the 4a "credit stays 0" note, which was true of
+    stocking, not of paying).  The debit / loan branches are ported for
+    4c (the robbery ledger) reuse.
+    """
+    if eshkp.debit >= amount:
+        if eshkp.loan:
+            if eshkp.loan > amount:
+                eshkp.loan -= amount
+            else:
+                eshkp.loan = 0
+        eshkp.debit -= amount
+        return
+    delta = amount - eshkp.debit
+    eshkp.credit += delta
+    if eshkp.debit:
+        eshkp.debit = 0
+        eshkp.loan = 0  # C: the debt (and the borrowed gold) is settled
+
+
+def do_pay(world: World, rng) -> List[Event]:
+    """C: shk.c#dopay (1758-2043), simplified to pay-all (the plan's
+    4b): the hero pays every item on the bill of the shop they stand in.
+
+    The named simplifications: C hunts for the nearest keeper and offers
+    an itemized `y` menu; here the keeper is the room keeper of the shop
+    room the hero stands in and every entry is paid at once.  No stashed
+    gold, no loan channel, no `$` financial report.
+    """
+    hero = world.hero
+    roomno = inside_shop(world.map, hero.pos)
+    if roomno == NO_ROOM:
+        return [MessageEvent("You are not in a shop.")]
+    room = world.map.room_at(hero.pos)
+    shkp = room_keeper(world, room) if room is not None else None
+    if shkp is None:
+        shkp = shop_keeper(world, world.lev, roomno)
+    if shkp is None:
+        return [MessageEvent("You are not in a shop.")]
+    eshkp = shkp.eshk
+    assert eshkp is not None  # the MM_ESHK of makemon allocated it
+    total = shop_debt(eshkp)
+    if total == 0:
+        # C: the shopper_financial_report wording (1033)
+        return [MessageEvent("You don't owe any gold here.")]
+    money = money_cnt(hero)
+    if money + eshkp.credit < total:
+        # C 2495-2498, simplified (no menu, no partial pay -- named)
+        return [
+            MessageEvent(
+                "You don't have enough gold to pay for the items on your bill."
+            )
+        ]
+    events: List[Event] = []
+    for item_id, entry in list(eshkp.bill.items()):
+        ltmp = entry.price * entry.bquan  # C 2274
+        # C 2314: "bought %s for %ld gold piece%s" (the money noun is
+        # pyhack's currency(), the zorkmid)
+        events.append(
+            MessageEvent(
+                f"You bought {entry.bquan} {entry.name} for "
+                f"{ltmp} {currency(ltmp)}."
+            )
+        )
+        pay_debt(eshkp, ltmp)
+        _spend_gold(world, hero, ltmp)
+        _give_gold(world, shkp, ltmp)
+        item = world.items.get(item_id)
+        if item is not None and not entry.useup:
+            sub_one_frombill(eshkp, item)  # paid: off the bill
+        else:
+            eshkp.bill.pop(item_id, None)  # a useup entry: the item is gone
+    eshkp.billct = len(eshkp.bill)
+    # C 2029: the closing line (the Deaf / muteshk checks are named
+    # skips; the Mr. / Ms. honorific is 4d, so the bare name)
+    keeper_name = eshkp.shknam
+    if keeper_name and keeper_name[0] in "-_+|=":
+        keeper_name = keeper_name[1:]
+    shop_name = SHOPTYPES[int(eshkp.shoptype) - int(RoomType.SHOPBASE)].name
+    events.append(MessageEvent(f"Thank you for shopping in {keeper_name} {shop_name}!"))
+    return events
+
+
 __all__ = [
+    "BILLSZ",
+    "add_one_tobill",
+    "billable",
+    "costly_spot",
+    "do_pay",
+    "get_cost",
     "get_shop_item",
+    "getprice",
     "good_shopdoor",
+    "inhishop",
     "init",
     "inside_shop",
     "mkveggy_at",
     "mkshobj_at",
     "nameshk",
+    "onbill",
+    "pay_debt",
     "room_keeper",
     "shkveg",
+    "shop_debt",
     "shop_keeper",
     "stock_goodpos",
     "stock_room",
+    "sub_one_frombill",
+    "track_shop",
     "veggy_item",
 ]

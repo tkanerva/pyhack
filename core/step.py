@@ -19,6 +19,7 @@ from .commands import (
     ListCommand,
     MoveCommand,
     OfferCommand,
+    PayCommand,
     PickupCommand,
     PrayCommand,
     QuaffCommand,
@@ -40,6 +41,7 @@ from .potions import quaff
 from .priest import do_offer, do_pray, intemple
 from .rings import tick_rings
 from .scrolls import read_scroll
+from .shk import do_pay, track_shop
 from .stairs import go_stairs
 from .uhitm import uhitm
 from .rules import apply_damage, melee_attack, process_events, tick_actor
@@ -127,6 +129,8 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
             events += do_pray(world)
         elif isinstance(cmd, OfferCommand):
             events += do_offer(world)
+        elif isinstance(cmd, PayCommand):
+            events += do_pay(world, rng)
         # WaitCommand: a deliberate pass (no trap re-roll, unlike the old demo)
 
     # --- monster turns ---
@@ -203,7 +207,16 @@ def _room_entry(world: World, oldpos: Pos, newpos: Pos, rng) -> List[Event]:
     Crossing the room boundary is what stands in for C's u.urooms /
     u.uentered bookkeeping: moving inside the room (or staying in it)
     never re-enters it.
+
+    Phase 4b adds the SHOP half: the hero's `in_shop` is updated and
+    the no_charge marks are set / cleared on entering / leaving a shop
+    (core.shk.track_shop) -- C's u.ushops bookkeeping, which has no
+    message of its own (the dialogue is 4d).
     """
+    # the shop tracking (C: check_special_room's u.ushops half) -- a
+    # state update with no events, run on every hero move
+    track_shop(world, newpos)
+    events: List[Event] = []
     old_room = world.map.room_at(oldpos)
     new_room = world.map.room_at(newpos)
     if (
@@ -211,8 +224,8 @@ def _room_entry(world: World, oldpos: Pos, newpos: Pos, rng) -> List[Event]:
         and new_room.rtype == RoomType.TEMPLE
         and old_room is not new_room
     ):
-        return intemple(world, new_room, rng)
-    return []
+        events += intemple(world, new_room, rng)
+    return events
 
 
 def _melee_combat(world: World, attacker_id: str, defender_id: str, rng) -> List[Event]:

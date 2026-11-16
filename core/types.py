@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag, auto
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from .glyph import GLYPH_UNEXPLORED
 from .o_init import ObjTables
@@ -931,6 +931,17 @@ class Item:
     # accepted and always 0: pyhack has no artifact system
     # (C: obj->oartifact)
     oartifact: int = 0
+    # --- the shop billing state (C: obj->unpaid / obj->no_charge,
+    # PLAN-SPECIAL-ROOMS.md phase 4b) ---
+    # unpaid: the item is on a shopkeeper's bill (taken, not yet paid).
+    # Written by core.shk.add_one_tobill (set) and sub_one_frombill /
+    # do_pay (cleared on a purchase).
+    unpaid: bool = False
+    # no_charge: this floor item is NOT for sale (it belongs to someone
+    # already -- the hero's own gear while inside a shop, set on entry
+    # by core.shk and cleared on leave).  A no_charge item picked up in
+    # a shop is not billed (core.shk.billable).
+    no_charge: bool = False
 
 
 # ============================================================
@@ -970,6 +981,24 @@ class Epri:
 
 
 @dataclass
+class BillEntry:
+    """One line of a shopkeeper's bill (C: struct bill_x, mextra.h).
+
+    C stores ``struct bill_x {bo_id, useup, price, bquan}`` in a fixed
+    ``bill[BILLSZ]`` array; here a bill is a ``dict`` keyed by item id
+    (PLAN-SPECIAL-ROOMS.md §2.3) and each value is this entry.  ``name``
+    is a pyhack model addition: C looks the object up by ``bo_id``, but a
+    used-up entry's object is a deleted dummy and the pay message still
+    needs the name, so the name is carried on the entry.
+    """
+
+    price: int  # the per-unit cost billed (C: bp->price)
+    bquan: int  # the quantity billed (C: bp->bquan)
+    useup: bool = False  # the billed item has been used up / deleted
+    name: str = ""  # the item's name (the model addition, for messages)
+
+
+@dataclass
 class Eshk:
     """The shopkeeper extra (C: struct eshk, mextra.h).
 
@@ -980,16 +1009,15 @@ class Eshk:
     (SHOPBASE + the shop index), ``shd`` the shop door and ``shk`` the
     shopkeeper's own square (C duplicates mx/my here).
 
-    What the *billing* half would use is carried as zeroed fields and
-    named deferred (PLAN-SPECIAL-ROOMS.md: phase 4a lands the stocked,
-    robbable shop; the bill is 4b, the police 4c, the dialogue 4d):
-    ``debit`` / ``credit`` / ``loan`` (C's eshk account, the customer's
-    running total), ``robbed`` (the "you stole from me" amount),
-    ``surcharge`` (alter_cost's 1/3 markup) and ``following`` /
-    ``dismiss_kops`` (the police half).  C's ``struct bill_x bill[]``
-    -- the list of unpaid items -- is not a field yet: it is the model
-    4b adds (a dict keyed by item id, PLAN-SPECIAL-ROOMS.md §2.3).
-    None of these is read or written outside this comment yet.
+    What the *billing* half uses (PLAN-SPECIAL-ROOMS.md: phase 4a lands
+    the stocked, robbable shop; 4b the prices / bill / Pay, 4c the
+    police, 4d the dialogue): ``debit`` / ``credit`` / ``loan`` (C's
+    eshk account, the customer's running total), ``robbed`` (the "you
+    stole from me" amount, 4c), ``surcharge`` (alter_cost's 1/3 markup,
+    4c) and ``following`` / ``dismiss_kops`` (the police half, 4c).  The
+    bill is the ``bill`` dict below (C's ``struct bill_x bill[]``, a
+    dict keyed by item id, §2.3), written by core.shk's bill functions
+    (add_one_tobill / sub_one_frombill / do_pay).
     """
 
     parentmid: str = ""  # C: eshk.parentmid -- the owning monster's id
@@ -1009,6 +1037,11 @@ class Eshk:
     billct: int = 0  # C: billct -- the number of billed items
     visitct: int = 0  # C: visitct -- the shop-visit counter
     customer: str = ""  # C: customer[] -- who is shopping here
+    # the bill itself (C: struct bill_x bill[BILLSZ], the bill_p /
+    # billct bookkeeping): a dict keyed by item id, so every dict
+    # operation C does on the array is a dict op here (§2.3).  billct
+    # is kept in sync as len(bill) by core.shk's bill writers.
+    bill: "Dict[str, BillEntry]" = field(default_factory=dict)
 
 
 @dataclass
@@ -1151,6 +1184,14 @@ class Monster:
     # are set together by shkinit (C does the same: makemon only
     # allocates, shkinit() decides).
     eshk: Optional[Eshk] = None
+    # the shop room the hero stands in (C: the u.ushops string of shop
+    # rooms the hero is in, reduced to ONE int -- the hero occupies one
+    # square, hence at most one shop room; PLAN-SPECIAL-ROOMS.md §5.6).
+    # NO_ROOM when the hero is not in a shop.  Set on the hero by
+    # core.step's room-entry hook (core.shk.track_shop) from
+    # core.shk.inside_shop; only the hero's value is live (monsters
+    # don't shop).
+    in_shop: int = NO_ROOM
 
 
 # ============================================================

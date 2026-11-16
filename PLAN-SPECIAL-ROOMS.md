@@ -2,8 +2,15 @@
 
 **Status: phase 0 (terrain + engraving) + phase 1 (temple) + phase 2
 (the zoo family) + phase 3 (the swamp) + phase 4a (a stocked shop you
-can rob) LANDED; phase 4b (prices) specified (§4b below — build from
-it); 4c-4d (the police, the dialogue) and 5 (the vault) proposed.**  Phase 4a landed as core/shknam_data.py
+can rob) + phase 4b (prices, the bill, the Pay) LANDED; 4c (the police)
++ 4d (the dialogue) and 5 (the vault) proposed.**  Phase 4b landed as
+the price chain in core.shk (getprice / get_cost, table-driven), the
+bill model (the BillEntry dict on Eshk + onbill / billable /
+add_one_tobill / sub_one_frombill / shop_debt), the pickup billing hook
++ costly_spot / inhishop, the in_shop move hook with the no_charge
+enter/leave marks (core.shk.track_shop, called from core.step's
+room-entry hook), and the Pay command (p -> do_pay, pay-all) — tests in
+tests/test_shop.py (the 4b section, 22 tests).  Phase 4a landed as core/shknam_data.py
 (the shtypes[] table + the twelve name lists, verbatim) + core/shk.py
 (inside_shop, good_shopdoor, shkinit, stock_room_goodpos,
 get_shop_item / veggy_item / shkveg / mkveggy_at / mkshobj_at,
@@ -93,9 +100,9 @@ and PLAN-MKOBJ.md (a room full of monsters and treasure needs both), on
 | `mkshobj_at` / `mkveggy_at` / `get_shop_item` | shknam.c 442 / 407 / 829 | the per-square object (class, or a specific `-otyp`) | `shk.mkshobj_at` (exists, 4a) |
 | `stock_room_goodpos` | shknam.c 694-716 | "not the door row, not a wall, not occupied" | `shk.stock_goodpos` (exists, 4a) |
 | `shtypes[]` | shknam.c 209-357 | the 12 shop classes: name, `symb`, probability, per-class item probabilities | **data** → `core/shknam_data.py` (exists, 4a) |
-| `getprice(obj, shk_buying)` | shk.c 4341-4380 | the base price and its per-class adjustments | `shk.getprice` (4b) |
-| `add_one_tobill` / `billable` / `sub_one_frombill` / `alter_cost` / `stolen_value` / `paybill` | shk.c 3331 / 3473 / 3683 / 3259 / 3776 / 2507 | the bill | `shk.bill` (a *model*, §2.3) |
-| `inside_shop` / `inhishop` / `costly_spot` / `onbill` | shk.c | "which shop is this square in / is this shopkeeper at home / may this cost money / is this on a bill" | `shk.inside_shop` (exists, 4a); `inhishop` / `costly_spot` / `onbill` = 4b |
+| `getprice(obj, shk_buying)` | shk.c 4341-4380 | the base price and its per-class adjustments | `shk.getprice` (exists, 4b) + `shk.get_cost` (2898-3009, the bill price) |
+| `add_one_tobill` / `billable` / `sub_one_frombill` / `alter_cost` / `stolen_value` / `paybill` | shk.c 3331 / 3473 / 3683 / 3259 / 3776 / 2507 | the bill | `shk.add_one_tobill` / `billable` / `sub_one_frombill` / `onbill` / `shop_debt` (exist, 4b; the *model* of §2.3); `alter_cost` / `stolen_value` / `paybill` = 4c |
+| `inside_shop` / `inhishop` / `costly_spot` / `onbill` | shk.c | "which shop is this square in / is this shopkeeper at home / may this cost money / is this on a bill" | `shk.inside_shop` (4a) + `shk.inhishop` / `costly_spot` / `onbill` (exist, 4b) |
 | `fill_special_room(croom)` | sp_lev.c 2732-… | the **dispatcher** called for *every* room at the end of `makelevel`: shop → `stock_room`, `VAULT` → gold per square, zoo family → `fill_zoo` | `mkroom.fill_special_room` (exists) |
 | the special-room roll | mklev.c 1347-1378 | one special room per level by depth, with the genocide pre-checks (`G_GONE` on leprechaun / killer bee / soldier / cockatrice) and the `depth(medusa_level)` cap | `mklev._roll_special_room` (exists, needs the two missing conditions) |
 
@@ -492,11 +499,68 @@ with these notes:
     really produces a stocked shop.  tests/test_mklev.py's STUB test
     became the mkshop claim test.
 
-**4b — prices: the bill, the buy, the Pay (specified 2026-07-11 — build
-  from this section; every C span below was read and verified that day,
-  so the session should not need to re-read shk.c beyond spot checks).**
+**4b — prices: the bill, the buy, the Pay (LANDED)** — landed as
+  specified, with these notes:
 
-  *Corrections to the proposed text (read first):*
+  1. **The price chain** (core.shk, table-driven, no RNG): `getprice`
+     (shk.c 4339-4379, C's five-branch switch — the FOOD hunger
+     multiplier on the buy side, the oeaten zero, the cancelled-wand
+     zero, the plain-water zero, the ARMOR/WEAPON `+10*spe`, the candle
+     `age < 20*cost` half) and `get_cost` (2898-3009 — the 0->5 floor,
+     the un-ID'd x4/3, C's round-half-up combine transcribed statement
+     for statement, the <=0 -> 1 floor, the anger surcharge).  The named
+     skips are the glass gem, the DUNCE_CAP / tourist x4/3, the CHA
+     table, and artifacts.  The un-ID'd surcharge follows the plan's
+     `!dknown || !oc_name_known` reading; C additionally gates it on
+     `o_id % 4 == 0` (`oid_price_adjustment`), which the plan omits, so a
+     fresh un-ID'd item is *always* billed up here (a named
+     simplification, noted in the docstring).
+  2. **The bill is the `BillEntry` dict on `Eshk`** (§2.3) with
+     `onbill` / `billable` / `add_one_tobill` / `sub_one_frombill` /
+     `shop_debt` (C 1148 / 3472 / 3330 / 3683 / 989); `billct` stays in
+     sync as `len(bill)`.  `inhishop` (1038) and `costly_spot` (5370)
+     are the two predicates (the keeper's own square is not costly).
+  3. **The pickup hook** (core.pickup, C: pickobj -> addtobill): a picked
+     item on a costly_spot that is not a coin and not no_charge goes on
+     the bill, silently (C's pickup line is the only message); a full
+     bill (BILLSZ = 200) gives the item free ("You got that for
+     free!").
+  4. **The `in_shop` tracking** (C: check_special_room's u.ushops half):
+     `Monster.in_shop` is set in core.step's room-entry hook
+     (core.shk.track_shop) from `inside_shop`, and the no_charge marks
+     are set on entry (carried non-coin gear is never billed) and
+     cleared on leave (unpaid items stay — 4c).
+  5. **The `PayCommand` (`p`)** dispatches to `shk.do_pay` (C dopay
+     1758, simplified to pay-all — no menu, no nearest-keeper hunt): the
+     room keeper of the shop the hero stands in, the `shop_debt`, the
+     `money + credit >= total` gate, the per-entry "You bought ..." +
+     `pay_debt` + the gold move (the money2mon source/destination halves,
+     no rng draw), and the "Thank you for shopping in ..." closing line
+     (the honorific is 4d, so the bare name).
+  6. **The credit model — the one deliberate deviation from C's buy
+     path.**  The plan's 4b overrides the 4a "credit stays 0" note:
+     buying *establishes* credit.  `pay_debt` ports the debit / loan /
+     credit branches at shk.c 3903-3931 (the plan cites this span as
+     `pay()`; it is C's `donate_gold`, whose zero-debit arm adds the
+     payment to `eshk.credit`), so after a clean bill `credit == total`
+     *and* the gold moves to the keeper (money down by total, the
+     keeper's pile up by total).  C's actual buy path (`pay()` at 1310,
+     check_credit + money2mon) does not establish credit; this is the
+     plan's deliberate 4b model, ported as specified and pinned by the
+     tests.
+  7. **Types changes**: `Item.unpaid` / `Item.no_charge`,
+     `Monster.in_shop`, `Eshk.bill` (+ the new `BillEntry` dataclass).
+     No rng draw anywhere in the price / bill / pay chain, so the seeded
+     snapshot tests gain message events only.
+  8. **Tests**: tests/test_shop.py's 4b section (22 — the getprice
+     table, the get_cost floor / surcharge / round-half-up / anger,
+     the pickup bill, the no-charge / coin / keeper-square skips, the
+     BILLSZ free item, the entry/leave marks, the do_pay pay-all /
+     refusal / no-debt / not-in-a-shop, and the pay_debt credit model).
+
+  *The spec below (the transcribed C chain, the bill model, the Pay
+  command, the named skips) is the record it was built from.  The
+  Corrections (read first):*
 
   1. **This C has no `bcsign` price multiplier.**  "blessed ×2 / cursed
      ×1/2" was a 3.6 memory, like the four zero-probability shops.
@@ -849,8 +913,14 @@ adds only prices).
       door fix-up + "Closed for inventory"), `nameshk` never repeating a
       name on a level, `flags.has_shop`, `Room.resident`
       (tests/test_shop.py)
-- [ ] shops 4b-4c: priced, policed; the `Pay` command; the bill model
-      tested table-driven
+- [x] shops 4b: priced (`getprice` / `get_cost`, table-driven), the
+      bill model (the `BillEntry` dict + `onbill` / `billable` /
+      `add_one_tobill` / `sub_one_frombill` / `shop_debt`), the `Pay`
+      command (`p` -> `do_pay`), the pickup billing hook + `in_shop`
+      tracking — tested table-driven (tests/test_shop.py 4b section)
+- [ ] shops 4c: policed (`stolen_value`, `eshk.robbed`, `surcharge`,
+      `alter_cost`, the door block, `inhishop`'s "closed" state);
+      `paybill` (the death-time inventory inheritance)
 - [x] every STUB in `core/mkroom.py`'s `__all__` either implemented or
       documented as deferred **with the C span** (only `cmap_to_type`
       is left, and it names the defsym table it waits for)

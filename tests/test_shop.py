@@ -17,11 +17,15 @@ square of the room except the row the door stands on.
 from typing import List, Tuple
 
 from core import mkroom, shk
+from core.commands import PayCommand
+from core.events import MessageEvent
 from core.hacklib import distmin
+from core.invent import addinv, money_cnt
 from core.mklev import add_door, add_room, blank_map, makelevel, topologize
+from core.mkobj import coarse_otype, place_object
 from core.monst import MONS
 from core.monst_defs import PM_SHOPKEEPER, S_MIMIC
-from core.objects import O, ObjClass
+from core.objects import BASES, NUM_OBJECTS, OBJECTS, O, ObjClass
 from core.rnd import Rng
 from core.shknam_data import (
     FODDER_SHOP,
@@ -30,9 +34,14 @@ from core.shknam_data import (
     UNIQUE_SHOP_START,
     VEGETARIAN_CLASS,
 )
+from core.step import step
 from core.types import (
     ANY_SHOP,
+    BillEntry,
+    Eshk,
     FILL_NORMAL,
+    HungerState,
+    Item,
     NO_ROOM,
     DoorMask,
     Map,
@@ -43,7 +52,7 @@ from core.types import (
     Tile,
     World,
 )
-from conftest import assert_item_locations, make_hero
+from conftest import assert_item_locations, make_hero, make_monster
 
 W, H = 40, 20
 LX, LY, HX, HY = 5, 4, 14, 10  # a 10x7 floor: 70 squares
@@ -500,9 +509,7 @@ def test_get_shop_item_rolls_the_class_or_a_specific_type():
     assert shk.get_shop_item(_FixedRng(100), deli) == -int(O.ICE_BOX)
     # the health food store: 1..70 is the vegetarian pseudo-class
     assert shk.get_shop_item(_FixedRng(1), FODDER_SHOP) == VEGETARIAN_CLASS
-    assert shk.get_shop_item(_FixedRng(71), FODDER_SHOP) == (
-        -int(O.POT_FRUIT_JUICE)
-    )
+    assert shk.get_shop_item(_FixedRng(71), FODDER_SHOP) == (-int(O.POT_FRUIT_JUICE))
 
 
 def test_the_health_food_store_stocks_its_pseudo_class():
@@ -647,3 +654,493 @@ def test_a_generated_level_can_hold_a_stocked_shop():
     assert m.flags.has_shop is True
     assert distmin(keeper.pos, shop.doors[0]) <= 1
     assert_item_locations(w)
+
+
+# ============================================================
+# phase 4b -- prices, the bill, the Pay
+# ============================================================
+
+# the first real wand otyp (the WAND class base is the generic
+# placeholder; +1 is the "light" wand)
+WAND_OTYP = BASES[int(ObjClass.WAND)] + 1
+
+
+def _item(otyp: int, **kw) -> Item:
+    """A hand-built fine-grained object (the test's mksobj stand-in).
+    The extra kwargs (spe, dknown, quan, oeaten, ...) are set after
+    construction."""
+    row = OBJECTS[otyp]
+    name = row.name if row.name is not None else "obj"
+    item_id = kw.pop("id", f"t{otyp}")
+    item = Item(
+        id=item_id,
+        otype=coarse_otype(otyp),
+        name=name,
+        otyp=otyp,
+        oclass=int(row.oclass),
+    )
+    for k, v in kw.items():
+        setattr(item, k, v)
+    return item
+
+
+def _price_world() -> World:
+    w = World(map=blank_map(W, H))
+    w.actors["player"] = make_hero(pos=(1, 1))
+    return w
+
+
+def _find_cost(cost: int) -> int:
+    for i in range(NUM_OBJECTS):
+        row = OBJECTS[i]
+        if not row.unique and row.cost == cost:
+            return i
+    raise AssertionError(f"no non-unique otyp with cost {cost}")
+
+
+def _msgs(events) -> List[str]:
+    return [e.text for e in events if isinstance(e, MessageEvent)]
+
+
+# ------------------------------------------------------------
+# getprice -- the base price (the table-driven core of 4b)
+# ------------------------------------------------------------
+
+
+def test_getprice_weapon_and_armor_enchant():
+    """The ARMOR / WEAPON branch: an enchant bonus (spe > 0) adds
+    10 * spe to the base cost; spe 0 / negative is the base."""
+    w = _price_world()
+    sword = _item(int(O.SHORT_SWORD))
+    base = OBJECTS[int(O.SHORT_SWORD)].cost
+    assert base > 0
+    assert shk.getprice(w, sword, False) == base
+    sword.spe = 2
+    assert shk.getprice(w, sword, False) == base + 20
+    sword.spe = -1  # a cursed bonus adds nothing (C: spe > 0)
+    assert shk.getprice(w, sword, False) == base
+
+    armor_otyp = _find_armor_cost(base)
+    armor = _item(armor_otyp)
+    abase = OBJECTS[armor_otyp].cost
+    assert shk.getprice(w, armor, False) == abase
+    armor.spe = 1
+    assert shk.getprice(w, armor, False) == abase + 10
+
+
+def _find_armor_cost(any_base: int) -> int:
+    for i in range(NUM_OBJECTS):
+        row = OBJECTS[i]
+        if not row.unique and int(row.oclass) == int(ObjClass.ARMOR) and row.cost > 0:
+            return i
+    raise AssertionError("no armor row")
+
+
+def test_getprice_water_free_healing_priced():
+    """The POTION branch: plain water (neither blessed nor cursed) is
+    worth 0; a healing potion is its base cost; a blessed water is
+    priced (the BUC half of the zero-case)."""
+    w = _price_world()
+    assert shk.getprice(w, _item(int(O.POT_WATER)), False) == 0
+    blessed = _item(int(O.POT_WATER), blessed=True)
+    assert shk.getprice(w, blessed, False) == OBJECTS[int(O.POT_WATER)].cost
+    healing = _item(int(O.POT_HEALING))
+    assert shk.getprice(w, healing, False) == OBJECTS[int(O.POT_HEALING)].cost
+
+
+def test_getprice_cancelled_wand_free_charged_priced():
+    """The WAND branch: a cancelled / empty wand (spe == -1) is worth
+    0; a charged wand is its base cost."""
+    w = _price_world()
+    assert shk.getprice(w, _item(WAND_OTYP, spe=-1), False) == 0
+    charged = _item(WAND_OTYP, spe=5)
+    assert shk.getprice(w, charged, False) == OBJECTS[WAND_OTYP].cost
+    # a used-up (but not cancelled) wand, spe == 0, keeps its base price
+    empty = _item(WAND_OTYP, spe=0)
+    assert shk.getprice(w, empty, False) == OBJECTS[WAND_OTYP].cost
+
+
+def test_getprice_food_oeaten_is_free():
+    """The FOOD branch: a full piece is its base cost (the hero is not
+    hungry, so no multiplier); a partly-eaten piece (oeaten) is 0."""
+    w = _price_world()
+    apple = _item(int(O.APPLE))
+    base = OBJECTS[int(O.APPLE)].cost
+    assert shk.getprice(w, apple, False) == base
+    apple.oeaten = 1
+    assert shk.getprice(w, apple, False) == 0
+
+
+def test_getprice_candle_age_boundary():
+    """The TOOL branch: a candle younger than 20 * its cost is half
+    price; at / past the boundary it is full price."""
+    w = _price_world()
+    candle = _item(int(O.TALLOW_CANDLE))
+    base = OBJECTS[int(O.TALLOW_CANDLE)].cost
+    assert base > 0
+    candle.age = 0
+    assert shk.getprice(w, candle, False) == base // 2
+    candle.age = 20 * base - 1
+    assert shk.getprice(w, candle, False) == base // 2
+    candle.age = 20 * base
+    assert shk.getprice(w, candle, False) == base
+    # a non-candle tool is never halved
+    other = _item(_find_tool_cost())
+    assert shk.getprice(w, other, False) == OBJECTS[other.otyp].cost
+
+
+def _find_tool_cost() -> int:
+    for i in range(NUM_OBJECTS):
+        row = OBJECTS[i]
+        if (
+            not row.unique
+            and int(row.oclass) == int(ObjClass.TOOL)
+            and row.cost > 0
+            and i not in (int(O.TALLOW_CANDLE), int(O.WAX_CANDLE))
+        ):
+            return i
+    raise AssertionError("no tool row")
+
+
+def test_getprice_hunger_multiplier_hit_by_uhs():
+    """The FOOD hunger multiplier: for a BOLD food (shk_buying False) at
+    uhs 2..6 the price is base * uhs; selling (shk_buying True) takes no
+    multiplier (C: `u.uhs >= HUNGRY && !shk_buying`)."""
+    w = _price_world()
+    apple = _item(int(O.APPLE))
+    base = OBJECTS[int(O.APPLE)].cost
+    for uhs_val in (2, 3, 4, 5, 6):
+        w.hero.uhs = HungerState(uhs_val)
+        assert shk.getprice(w, apple, False) == base * uhs_val
+        assert shk.getprice(w, apple, True) == base
+    # below HUNGRY (uhs 0..1) there is no multiplier at all
+    for uhs_val in (0, 1):
+        w.hero.uhs = HungerState(uhs_val)
+        assert shk.getprice(w, apple, False) == base
+
+
+# ------------------------------------------------------------
+# get_cost -- the price that goes on the bill
+# ------------------------------------------------------------
+
+
+def test_get_cost_zero_floor():
+    """The 0->5 floor: a known plain-water potion (getprice 0) is billed
+    5.  The type's name must be known too, or the un-ID'd surcharge
+    (x4/3) moves the floor from 5 to 7."""
+    w = _price_world()
+    w.obj_tables.name_known.add(int(O.POT_WATER))
+    water = _item(int(O.POT_WATER), dknown=True)
+    assert shk.get_cost(w, water, None) == 5
+
+
+def test_get_cost_unknown_surcharge():
+    """The un-ID'd surcharge: an unknown item is billed x4/3 (C's
+    round-half-up), a known item its base.  The dknown-vs-unknown pair
+    is the plan's (x4/3) check."""
+    w = _price_world()
+    otyp = int(O.POT_HEALING)
+    c = OBJECTS[otyp].cost
+    unknown = _item(otyp, dknown=False)
+    expected = ((c * 4 * 10) // 3 + 5) // 10
+    assert expected != c  # the surcharge actually moved the price
+    assert shk.get_cost(w, unknown, None) == expected
+    w.obj_tables.name_known.add(otyp)
+    known = _item(otyp, dknown=True)
+    assert shk.get_cost(w, known, None) == c
+
+
+def test_get_cost_round_half_up_disagrees_with_floor():
+    """C's `((tmp*10)/div + 5)/10` rounds half up; a plain floor
+    division disagrees at the .5-and-over cases.  Find a base cost where
+    the two differ and pin C's answer."""
+    w = _price_world()
+    found = None
+    for i in range(NUM_OBJECTS):
+        row = OBJECTS[i]
+        if row.unique or row.cost == 0:
+            continue
+        c_round = ((row.cost * 4 * 10) // 3 + 5) // 10
+        c_floor = (row.cost * 4) // 3
+        if c_round != c_floor:
+            found = (i, c_round)
+            break
+    assert found is not None, "no cost where the round-half-up differs"
+    otyp, c_round = found
+    unknown = _item(otyp, dknown=False)
+    assert shk.get_cost(w, unknown, None) == c_round
+
+
+def test_get_cost_anger_surcharge():
+    """The anger surcharge (4c sets eshk.surcharge): a known item takes
+    (tmp + 2) // 3 on top of its price."""
+    w = _price_world()
+    otyp = int(O.POT_HEALING)
+    w.obj_tables.name_known.add(otyp)
+    item = _item(otyp, dknown=True)
+    base = OBJECTS[otyp].cost
+    assert shk.get_cost(w, item, None) == base
+    keeper = make_monster(kind="goblin", pos=(1, 1))
+    keeper.isshk = True
+    keeper.eshk = Eshk()
+    keeper.eshk.surcharge = True
+    assert shk.get_cost(w, item, keeper) == base + (base + 2) // 3
+
+
+# ------------------------------------------------------------
+# the bill -- pickup in a shop bills the item
+# ------------------------------------------------------------
+
+
+def _stocked_shop():
+    """A claimed + stocked shop (the 4a helpers), with the keeper."""
+    m, room = _room_map()
+    w = _world(m)
+    mkroom.mkshop(m, [], _rng())
+    shk.stock_room(w, _rng(), m, room, 1)
+    keeper = _kid(w, room)
+    return m, room, w, keeper
+
+
+def test_pickup_in_shop_bills_the_item():
+    """The pickup hook: taking a stocked item inside the shop puts it on
+    the bill (price == get_cost, item.unpaid, the debt is price * quan).
+    No extra message -- C's pickup line is the only one."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    assert eshk is not None
+    # a stocked square that is not the keeper's own
+    stocked = None
+    for it in _floor_items(w, 1):
+        if it.pos != eshk.shk:
+            stocked = it
+            break
+    assert stocked is not None
+    w.hero.pos = stocked.pos
+    from core.pickup import pickup
+
+    events = pickup(w, "player", _rng())
+    # exactly the one pickup message (the billing is silent)
+    assert _msgs(events) == [f"You pick up the {stocked.name}."]
+    entry = eshk.bill.get(stocked.id)
+    assert entry is not None
+    assert entry.price == shk.get_cost(w, stocked, keeper)
+    assert entry.bquan == stocked.quan
+    assert stocked.unpaid is True
+    assert eshk.billct == 1
+    assert shk.shop_debt(eshk) == entry.price * entry.bquan
+    assert onbill_check(eshk, stocked)
+    assert_item_locations(w)
+
+
+def onbill_check(eshk, item):
+    return shk.onbill(item, eshk) is not None
+
+
+def test_second_item_is_a_second_entry():
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    items = [it for it in _floor_items(w, 1) if it.pos != eshk.shk][:2]
+    assert len(items) == 2
+    from core.pickup import pickup
+
+    for it in items:
+        w.hero.pos = it.pos
+        pickup(w, "player", _rng())
+    assert len(eshk.bill) == 2
+    assert eshk.billct == 2
+    for it in items:
+        assert it.unpaid is True
+    assert shk.shop_debt(eshk) == sum(e.price * e.bquan for e in eshk.bill.values())
+    assert_item_locations(w)
+
+
+def test_no_charge_item_is_not_billed():
+    """The hero's own gear (no_charge) picked up inside the shop is not
+    billed."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    spot = (room.lx + 1, room.ly)  # the empty door row, not the keeper's
+    item = _item(int(O.APPLE))
+    place_object(w, item, spot, 1)
+    item.no_charge = True
+    w.hero.pos = spot
+    from core.pickup import pickup
+
+    pickup(w, "player", _rng())
+    assert item.id not in eshk.bill
+    assert item.unpaid is False
+    assert money_cnt(w.hero) == 0
+    assert_item_locations(w)
+
+
+def test_coin_is_never_billed():
+    """Gold picked up in a shop is not billed (C: the COIN_CLASS skip)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    spot = (room.lx + 1, room.ly)
+    gold = _item(int(O.GOLD_PIECE), quan=50)
+    place_object(w, gold, spot, 1)
+    w.hero.pos = spot
+    from core.pickup import pickup
+
+    pickup(w, "player", _rng())
+    assert gold.id not in eshk.bill
+    assert money_cnt(w.hero) == 50
+    assert_item_locations(w)
+
+
+def test_the_keeper_s_own_square_is_not_a_costly_spot():
+    """costly_spot excludes the keeper's square (a keeper stocking its
+    own counter is not a sale)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    assert shk.costly_spot(w, *eshk.shk) is False
+    # a neighbouring shop square IS costly
+    assert shk.costly_spot(w, room.lx + 1, room.ly + 1) is True
+    # outside the shop it is not
+    assert shk.costly_spot(w, 0, 0) is False
+
+
+def test_bill_full_gives_the_item_free():
+    """BILLSZ: a bill with 200 entries makes the 201st pickup free
+    ("You got that for free!"), with no entry added."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    for i in range(shk.BILLSZ):
+        eshk.bill[f"fake{i}"] = BillEntry(price=1, bquan=1, name="x")
+    eshk.billct = len(eshk.bill)
+    assert eshk.billct == shk.BILLSZ
+    item = _item(int(O.APPLE), dknown=True, id="free1")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    events = shk.add_one_tobill(w, keeper, item)
+    assert "You got that for free!" in _msgs(events)
+    assert item.id not in eshk.bill
+    assert item.unpaid is False
+
+
+# ------------------------------------------------------------
+# the entry / leave hook -- in_shop and the no_charge marks
+# ------------------------------------------------------------
+
+
+def test_entering_the_shop_marks_carried_gear_no_charge():
+    m, room, w, keeper = _stocked_shop()
+    gear = _item(int(O.SHORT_SWORD), id="gear")
+    addinv(w, "player", gear)
+    w.hero.pos = (1, 1)
+    assert w.hero.in_shop == NO_ROOM
+    assert gear.no_charge is False
+    # step inside
+    inside = (room.lx + 1, room.ly + 1)
+    shk.track_shop(w, inside)
+    assert w.hero.in_shop == m.room_of(room)
+    assert gear.no_charge is True
+    # a coin is never marked
+    gold = _item(int(O.GOLD_PIECE), quan=10, id="g")
+    addinv(w, "player", gold)
+    shk.track_shop(w, (1, 1))  # leave
+    shk.track_shop(w, inside)  # re-enter
+    assert gold.no_charge is False
+    assert gear.no_charge is True
+    # step out again: the marks are cleared (unpaid stays)
+    shk.track_shop(w, (1, 1))
+    assert w.hero.in_shop == NO_ROOM
+    assert gear.no_charge is False
+
+
+# ------------------------------------------------------------
+# the Pay command (p -> do_pay, pay-all)
+# ------------------------------------------------------------
+
+
+def _billed_shop():
+    """A stocked shop with two KNOWN items billed and the hero in it."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    it1 = _item(int(O.APPLE), dknown=True, id="b1")
+    it2 = _item(int(O.POT_HEALING), dknown=True, id="b2")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    w.obj_tables.name_known.add(int(O.POT_HEALING))
+    # the hero carries them (as if picked up inside the shop), so they
+    # are in world.items and do_pay can find them to clear the bill
+    addinv(w, "player", it1)
+    addinv(w, "player", it2)
+    shk.add_one_tobill(w, keeper, it1)
+    shk.add_one_tobill(w, keeper, it2)
+    w.hero.pos = (room.lx + 1, room.ly + 1)
+    return m, room, w, keeper, eshk, it1, it2
+
+
+def test_do_pay_clears_the_bill_and_moves_the_gold():
+    m, room, w, keeper, eshk, it1, it2 = _billed_shop()
+    total = shk.shop_debt(eshk)
+    assert total > 0
+    keeper_before = _purse(keeper)
+    addinv(w, "player", _item(int(O.GOLD_PIECE), quan=total + 100, id="g"))
+    hero_before = money_cnt(w.hero)  # total + 100
+    assert hero_before == total + 100
+    events = step(w, PayCommand(), _rng())
+    msgs = _msgs(events)
+    bought = [x for x in msgs if x.startswith("You bought")]
+    assert len(bought) == 2
+    assert any("Thank you for shopping in" in x for x in msgs)
+    # the bill is cleared and the items are paid
+    assert eshk.billct == 0
+    assert len(eshk.bill) == 0
+    assert it1.unpaid is False and it2.unpaid is False
+    # the plan's 4b model: buying establishes credit
+    assert eshk.credit == total
+    # the gold moved: the hero down by total, the keeper up by total
+    assert money_cnt(w.hero) == hero_before - total
+    assert _purse(keeper) == keeper_before + total
+    assert_item_locations(w)
+
+
+def test_do_pay_refuses_without_enough_gold():
+    m, room, w, keeper, eshk, it1, it2 = _billed_shop()
+    total = shk.shop_debt(eshk)
+    assert total > 0
+    addinv(w, "player", _item(int(O.GOLD_PIECE), quan=total - 1, id="g"))
+    assert money_cnt(w.hero) == total - 1
+    events = step(w, PayCommand(), _rng())
+    # (the monster turns follow -- the keeper and a mimic are nearby --
+    # but the refusal is the first message)
+    assert any("enough gold to pay" in x for x in _msgs(events)), _msgs(events)
+    # the bill and the wallet are untouched
+    assert eshk.billct == 2
+    assert money_cnt(w.hero) == total - 1
+    assert it1.unpaid is True and it2.unpaid is True
+
+
+def test_do_pay_with_no_debt_says_so():
+    m, room, w, keeper = _stocked_shop()
+    w.hero.pos = (room.lx + 1, room.ly + 1)
+    events = step(w, PayCommand(), _rng())
+    assert "You don't owe any gold here." in _msgs(events)
+
+
+def test_do_pay_outside_a_shop_refuses():
+    w = _world(blank_map(W, H))
+    w.hero.pos = (1, 1)
+    events = step(w, PayCommand(), _rng())
+    assert "You are not in a shop." in _msgs(events)
+
+
+def test_pay_debt_establishes_credit_on_a_clean_account():
+    """The plan's 4b model: against a clean account (debit 0) the whole
+    payment becomes credit -- buying establishes credit (the debit / loan
+    branches are ported for 4c reuse)."""
+    eshk = Eshk()  # debit 0, credit 0, loan 0
+    shk.pay_debt(eshk, 100)
+    assert eshk.credit == 100
+    assert eshk.debit == 0
+    # a second payment accumulates
+    shk.pay_debt(eshk, 50)
+    assert eshk.credit == 150
+    # the debit branch (4c): a debt is paid off from the amount first
+    eshk2 = Eshk()
+    eshk2.debit = 30
+    shk.pay_debt(eshk2, 10)
+    assert eshk2.debit == 20
+    assert eshk2.credit == 0

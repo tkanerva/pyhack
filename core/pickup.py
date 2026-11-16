@@ -22,18 +22,27 @@ Simplifications (documented, not bugs):
   entry in ``world.items_at()``'s insertion order.  Unobservable in
   the subset while every tile holds at most one item.
 """
+
 from __future__ import annotations
 
 from typing import List
 
 from .events import Event, MessageEvent
 from .invent import addinv
+from .objects import ObjClass
 from .types import World
 
 
 def pickup(world: World, mon_id: str, rng) -> List[Event]:
     """C: pickobj() -- take the topmost item on the actor's tile into
-    the actor's inventory (core.invent.addinv)."""
+    the actor's inventory (core.invent.addinv).
+
+    The shop billing half (C: pickobj -> addtobill, shk.c 3510+): when
+    the hero picks up an item on a costly_spot that is not a coin and
+    not no_charge, it goes on the shopkeeper's bill (core.shk
+    .add_one_tobill) -- no extra message, C's pickup line is the only
+    one.
+    """
     mon = world.actors.get(mon_id)
     if mon is None:
         return []
@@ -42,4 +51,25 @@ def pickup(world: World, mon_id: str, rng) -> List[Event]:
         return [MessageEvent("You see nothing here to pick up.")]
     top = here[-1]
     addinv(world, mon_id, top)
-    return [MessageEvent(f"You pick up the {top.name}.")]
+    events: List[Event] = [MessageEvent(f"You pick up the {top.name}.")]
+    if mon.is_hero:
+        events += _shop_billing(world, mon, top)
+    return events
+
+
+def _shop_billing(world: World, mon, top) -> List[Event]:
+    """The pickup billing hook (C: pickobj -> addtobill).  A picked-up
+    item on a costly_spot that is not a coin and not no_charge goes on
+    the shopkeeper's bill."""
+    from .shk import add_one_tobill, costly_spot, inside_shop, shop_keeper
+
+    x, y = mon.pos
+    if (
+        costly_spot(world, x, y)
+        and top.oclass != int(ObjClass.COIN)
+        and not top.no_charge
+    ):
+        roomno = inside_shop(world.map, mon.pos)
+        shkp = shop_keeper(world, world.lev, roomno)
+        return add_one_tobill(world, shkp, top)
+    return []
