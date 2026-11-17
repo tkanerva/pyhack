@@ -17,7 +17,7 @@ square of the room except the row the door stands on.
 from typing import List, Tuple
 
 from core import mkroom, shk
-from core.commands import PayCommand
+from core.commands import MoveCommand, PayCommand
 from core.events import MessageEvent
 from core.hacklib import distmin
 from core.invent import addinv, money_cnt
@@ -25,7 +25,7 @@ from core.mklev import add_door, add_room, blank_map, makelevel, topologize
 from core.mkobj import coarse_otype, place_object
 from core.monst import MONS
 from core.monst_defs import PM_SHOPKEEPER, S_MIMIC
-from core.objects import BASES, NUM_OBJECTS, OBJECTS, O, ObjClass
+from core.objects import BASES, NUM_OBJECTS, OBJECTS, O, ObjClass, W_ARMC
 from core.rnd import Rng
 from core.shknam_data import (
     FODDER_SHOP,
@@ -45,8 +45,10 @@ from core.types import (
     NO_ROOM,
     DoorMask,
     Map,
+    Pos,
     Room,
     RoomType,
+    ScrollType,
     Stairway,
     TerrainType,
     Tile,
@@ -1144,3 +1146,336 @@ def test_pay_debt_establishes_credit_on_a_clean_account():
     shk.pay_debt(eshk2, 10)
     assert eshk2.debit == 20
     assert eshk2.credit == 0
+
+
+# ============================================================
+# phase 4c -- the police (the robbery, the door block, the surcharge,
+# the EF_PAY reprice, and the death-time inheritance)
+# ============================================================
+
+
+def _inside_shop_pos(room: Room) -> Pos:
+    """A shop floor square that is not the door row and not the
+    keeper's square (a place the hero can stand inside)."""
+    return (room.lx + 1, room.ly + 1)
+
+
+def _bill_item(w: World, keeper, item: Item) -> None:
+    """Put `item` on the keeper's bill (the 4b add_one_tobill), carrying
+    it as if just picked up."""
+    from core.shk import add_one_tobill
+
+    addinv(w, "player", item)
+    add_one_tobill(w, keeper, item)
+
+
+def test_stolen_value_is_the_bill_total():
+    """stolen_value is the value the hero owes: the bill total (debit +
+    price*bquan) -- C's per-item sum collapsed to the 4b model."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.APPLE), dknown=True, id="sv1")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    assert shk.stolen_value(w, keeper) == shk.shop_debt(eshk)
+    assert shk.stolen_value(w, keeper) == eshk.bill[item.id].price * item.quan
+
+
+def test_leaving_with_unpaid_goods_is_a_robbery():
+    """The 4c police: leaving with an unsettled bill is a robbery -- the
+    bill becomes eshk.robbed, the keeper turns hostile (rile_shk /
+    hot_pursuit), and the messages come out."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.POT_HEALING), dknown=True, id="rob1")
+    w.obj_tables.name_known.add(int(O.POT_HEALING))
+    _bill_item(w, keeper, item)
+    total = shk.shop_debt(eshk)
+    assert total > 0
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    shk.track_shop(w, inside)  # enter: in_shop is set
+    w.hero.pos = (1, 1)
+    events = shk.track_shop(w, (1, 1))  # leave with the unpaid goods
+    msgs = _msgs(events)
+    assert any("escaped the shop without paying" in x for x in msgs)
+    assert any("stole" in x and str(total) in x for x in msgs)
+    assert eshk.robbed == total
+    assert keeper.mpeaceful is False  # the keeper is hostile now
+    assert eshk.following is True
+    assert eshk.surcharge is True
+    assert eshk.billct == 0  # the bill is settled
+    assert len(eshk.bill) == 0
+    assert item.unpaid is False  # no longer on a bill (stolen)
+    assert w.hero.in_shop == NO_ROOM
+    assert_item_locations(w)
+
+
+def test_credit_covers_the_bill_on_leaving():
+    """A credit that covers the bill pays it off: no robbery, the keeper
+    stays peaceful, the credit is cleared (C: rob_shop's credit half)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.APPLE), dknown=True, id="cred1")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    total = shk.shop_debt(eshk)
+    assert total > 0
+    eshk.credit = total  # the hero has enough credit
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    shk.track_shop(w, inside)
+    w.hero.pos = (1, 1)
+    events = shk.track_shop(w, (1, 1))  # leave
+    msgs = _msgs(events)
+    assert any("credit" in x and "cover" in x for x in msgs)
+    assert eshk.robbed == 0
+    assert keeper.mpeaceful is True  # stays peaceful
+    assert eshk.credit == 0  # cleared by setpaid
+    assert eshk.billct == 0
+    assert_item_locations(w)
+
+
+def test_rile_shk_marks_up_the_bill_and_angers():
+    """rile_shk makes the keeper angry (mpeaceful False) and, once, sets
+    the surcharge, marking up every bill entry by (price + 2) // 3."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.APPLE), dknown=True, id="rile1")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    old_price = eshk.bill[item.id].price
+    assert keeper.mpeaceful is True
+    assert eshk.surcharge is False
+    shk.rile_shk(keeper)
+    assert keeper.mpeaceful is False
+    assert eshk.surcharge is True
+    assert eshk.bill[item.id].price == old_price + (old_price + 2) // 3
+    # a second rile does not mark up again (the surcharge is already set)
+    price_after = eshk.bill[item.id].price
+    shk.rile_shk(keeper)
+    assert eshk.bill[item.id].price == price_after
+
+
+def test_block_door_holds_the_keeper_at_the_door():
+    """The keeper blocks the shop door while it is owed something and the
+    hero is inside: the bare name in the message, the shop's own door."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.APPLE), dknown=True, id="blk1")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    w.hero.pos = _inside_shop_pos(room)
+    w.hero.in_shop = m.room_of(room)  # the hero is in the shop
+    door = eshk.shd
+    block = shk.block_door(w, door[0], door[1])
+    assert block is not None
+    assert "blocks your way" in block.text
+    bare = eshk.shknam[1:] if eshk.shknam[0] in "-_+|=" else eshk.shknam
+    assert bare in block.text
+
+
+def test_block_door_is_open_when_the_bill_is_settled():
+    """No debt (no bill / debit / robbed): the way is open."""
+    m, room, w, keeper = _stocked_shop()
+    w.hero.pos = _inside_shop_pos(room)
+    w.hero.in_shop = m.room_of(room)
+    door = keeper.eshk.shd
+    assert shk.block_door(w, door[0], door[1]) is None
+
+
+def test_block_door_does_not_block_a_closed_shop():
+    """A dead keeper (a closed shop) does not block the door."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.APPLE), dknown=True, id="blk2")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    w.hero.pos = _inside_shop_pos(room)
+    w.hero.in_shop = m.room_of(room)
+    door = eshk.shd
+    keeper.alive = False
+    assert shk.block_door(w, door[0], door[1]) is None
+
+
+def test_the_keeper_blocks_the_door_in_step():
+    """Integration: a hero inside the shop, diagonally adjacent to the
+    door, cannot move onto it while a bill is unsettled (core.step's
+    block_door hook refuses the move)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.APPLE), dknown=True, id="blk3")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    door = eshk.shd
+    spot = (door[0] + 1, door[1] + 1)  # one square in from the door
+    w.hero.pos = spot
+    w.hero.in_shop = m.room_of(room)
+    events = step(w, MoveCommand(dx=-1, dy=-1), _rng())
+    msgs = _msgs(events)
+    assert any("blocks your way" in x for x in msgs)
+    assert w.hero.pos == spot  # the hero did not step onto the door
+
+
+def test_alter_cost_reprices_a_billed_item():
+    """alter_cost: an item whose cost rises on the bill (an enchantment)
+    is repriced up to get_cost."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    sword = _item(int(O.SHORT_SWORD), dknown=True, id="ac1", spe=0)
+    w.obj_tables.name_known.add(int(O.SHORT_SWORD))
+    _bill_item(w, keeper, sword)
+    base_price = eshk.bill[sword.id].price
+    assert base_price == OBJECTS[int(O.SHORT_SWORD)].cost  # spe 0
+    sword.spe = 2  # enchanted
+    shk.alter_cost(w, sword, 0)
+    assert eshk.bill[sword.id].price == base_price + 20
+
+
+def test_alter_cost_does_not_decrease_the_bill():
+    """A de-enchantment (a lower cost) never refunds the bill: the price
+    only goes up (C: `if (new_price > bp->price || amt < 0)`)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    sword = _item(int(O.SHORT_SWORD), dknown=True, id="ac2", spe=2)
+    w.obj_tables.name_known.add(int(O.SHORT_SWORD))
+    _bill_item(w, keeper, sword)
+    high_price = eshk.bill[sword.id].price  # base + 20
+    sword.spe = 0  # de-enchanted
+    shk.alter_cost(w, sword, 0)
+    assert eshk.bill[sword.id].price == high_price
+
+
+def test_alter_cost_is_a_no_op_off_the_bill():
+    """An item that is not on any bill is left alone."""
+    m, room, w, keeper = _stocked_shop()
+    sword = _item(int(O.SHORT_SWORD), dknown=True, id="ac3", spe=0)
+    w.obj_tables.name_known.add(int(O.SHORT_SWORD))
+    addinv(w, "player", sword)  # carried, but not billed
+    shk.alter_cost(w, sword, 0)
+    assert sword.id not in keeper.eshk.bill
+
+
+def test_enchant_armor_scroll_reprices_a_billed_item():
+    """The EF_PAY half: reading a scroll of enchant armour on a worn,
+    billed armour reprices the bill (the scroll calls alter_cost)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    armor_otyp = _find_armor_cost(1)
+    armor = _item(armor_otyp, dknown=True, id="ea1", spe=0, owornmask=W_ARMC)
+    w.obj_tables.name_known.add(armor_otyp)
+    _bill_item(w, keeper, armor)
+    old_price = eshk.bill[armor.id].price
+    scroll = _item(int(O.SCR_ENCHANT_ARMOR), id="scr1")
+    scroll.scroll_type = ScrollType.ENCHANT_ARMOR
+    addinv(w, "player", scroll)
+    from core.scrolls import read_scroll
+
+    read_scroll(w, "player", scroll.id, _rng())
+    assert armor.spe > 0  # the enchant landed
+    # the bill price was repriced up (alter_cost, the EF_PAY half)
+    assert eshk.bill[armor.id].price > old_price
+    assert_item_locations(w)
+
+
+def test_a_closed_shop_does_not_bill_or_block():
+    """inhishop's closed state: a keeper that is not at home (teleported
+    away) makes the shop closed -- no billing (costly_spot False) and no
+    door block."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    assert shk.inhishop(w, keeper) is True  # at home
+    keeper.pos = (1, 1)  # teleported away
+    assert shk.inhishop(w, keeper) is False  # closed
+    spot = _inside_shop_pos(room)
+    assert shk.costly_spot(w, *spot) is False
+    w.hero.pos = spot
+    w.hero.in_shop = m.room_of(room)
+    door = eshk.shd
+    assert shk.block_door(w, door[0], door[1]) is None
+
+
+def test_paybill_inherits_on_death_in_the_shop():
+    """paybill: die in the shop with a peaceful keeper and nothing owed
+    -> the keeper gratefully inherits all your possessions (the pack
+    moves to the keeper)."""
+    m, room, w, keeper = _stocked_shop()
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    w.hero.in_shop = m.room_of(room)
+    gear = _item(int(O.SHORT_SWORD), id="inh1")
+    addinv(w, "player", gear)
+    assert keeper.mpeaceful is True
+    events = shk.paybill(w, 1)  # the hero dies
+    msgs = _msgs(events)
+    assert any("gratefully inherits" in x for x in msgs)
+    assert gear.carrier == keeper.id
+    assert gear in keeper.inventory
+    assert gear not in w.hero.inventory
+    assert_item_locations(w)
+
+
+def test_paybill_takes_the_owed_amount():
+    """paybill: the hero is not in the shop but owes a debt (robbed) and
+    carries enough gold -> the keeper takes the owed amount (money2mon),
+    and the paid-in-full keeper is pacified."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    eshk.robbed = 50
+    eshk.following = True
+    keeper.mpeaceful = False
+    gold = _item(int(O.GOLD_PIECE), quan=100, id="pb1")
+    addinv(w, "player", gold)
+    w.hero.in_shop = NO_ROOM  # not in the shop
+    keeper_before = _purse(keeper)
+    events = shk.paybill(w, 1)
+    msgs = _msgs(events)
+    assert any("takes the 50" in x for x in msgs)
+    assert _purse(keeper) == keeper_before + 50
+    assert money_cnt(w.hero) == 50
+    assert eshk.robbed == 0
+    assert keeper.mpeaceful is True  # pacified
+    assert eshk.following is False
+    assert_item_locations(w)
+
+
+def test_paybill_takes_everything_when_in_the_shop():
+    """paybill: die in the shop with an unpaid bill -> the keeper takes
+    all your possessions (the gold moves with the pack, the debt is
+    reduced by the gold)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.POT_HEALING), dknown=True, id="pb2")
+    w.obj_tables.name_known.add(int(O.POT_HEALING))
+    _bill_item(w, keeper, item)
+    gold = _item(int(O.GOLD_PIECE), quan=200, id="pb3")
+    addinv(w, "player", gold)
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    w.hero.in_shop = m.room_of(room)
+    debt = shk.shop_debt(eshk)
+    assert debt > 0
+    keeper_before = _purse(keeper)
+    events = shk.paybill(w, 1)
+    msgs = _msgs(events)
+    assert any("takes all your possessions" in x for x in msgs)
+    # the whole pack (including the gold) moved to the keeper
+    assert item.carrier == keeper.id
+    assert gold.carrier == keeper.id
+    assert not w.hero.inventory
+    assert _purse(keeper) == keeper_before + 200
+    # the gold covered part of the debt
+    assert eshk.robbed == max(0, debt - 200)
+    assert_item_locations(w)
+
+
+def test_paybill_does_nothing_when_there_is_no_keeper():
+    """No shopkeeper on the level: paybill takes nothing."""
+    m, room, w, keeper = _stocked_shop()
+    keeper.alive = False
+    gear = _item(int(O.SHORT_SWORD), id="pb4")
+    addinv(w, "player", gear)
+    events = shk.paybill(w, 1)
+    assert _msgs(events) == []
+    assert gear.carrier == "player"  # the hero keeps the pack
+    assert_item_locations(w)

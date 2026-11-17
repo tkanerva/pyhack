@@ -5,6 +5,82 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The shop: the police (Wave 5, phase 4c)
+
+**Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 4c): 4b
+left a shop you could walk out of with unpaid goods in your pack — the
+`unpaid` flag was set but nothing punished it, the keeper never blocked
+the door, and a dead hero's stolen pack went nowhere.  This session is
+the police half of `src/shk.c`: the robbery, the door block, the anger
+surcharge, the EF_PAY reprice, and the death-time inheritance.
+
+**The choices:**
+
+1. **The leave-robbery is `rob_shop` (C 687-719), fired from the
+   `track_shop` leave hook** (core.step's room-entry hook): leaving a
+   shop with an unsettled bill (`billct` / `debit`) computes
+   `stolen_value` (C 3775, reduced to the 4b model where the bill IS the
+   unpaid goods: the bill total), applies the credit (a credit that
+   covers the bill pays it off, no robbery), `setpaid` (C 399 — the
+   bill / debit / credit / loan cleared and the `unpaid` marks lifted),
+   and when there is a net robbery adds to `eshk.robbed` with the
+   "You escaped the shop without paying!" / "You stole N ..." lines and
+   `hot_pursuit` (C 1461) -> `rile_shk` (C 1374: `mpeaceful = False`,
+   the `surcharge` set, each bill entry marked up by (price+2)//3) +
+   `following = True`.  The Keystone Kops (C: call_kops) are a named
+   skip — the keeper chases alone.  `track_shop` now returns events (the
+   robbery's messages), and core.step adds them.
+2. **The door block is `block_door` (C 5812), checked in core.step's
+   move**: the hero is inside the shop, the square is the shop's own
+   door (eshk.shd), the keeper is alive, at home on its own square, and
+   owed something (debit / billct / robbed) — then "{name} blocks your
+   way!" and the move is refused (the hero does not step onto the door).
+   A closed shop (no keeper at home, or a dead keeper) does not block;
+   the Invis half of the message is a named skip.
+3. **`alter_cost` (C 3258) is the EF_PAY half**, wired into the
+   enchant-weapon / enchant-armor scroll effects (core.scrolls, the C
+   read.c / wield.c call sites): an item whose cost rises on the bill is
+   repriced up to get_cost; the price only goes up (a de-enchantment
+   never refunds the bill).  A lazy `from .shk import alter_cost` keeps
+   the scrolls -> shk edge one-way.
+4. **`paybill` (C 2506) / `inherits` (C 2598) is the death-time
+   inheritance**, hooked into core.step's death path (before the
+   GameOverEvent): the C priority (the resident keeper owed, the
+   resident keeper, a keeper owed, an angry / following keeper, a local
+   keeper) takes the hero's pack — die in the shop with a peaceful
+   keeper and nothing owed -> "gratefully inherits all your
+   possessions"; a debt / robbery -> the owed amount (or all, when the
+   debt exceeds the gold or the hero is in the shop), the gold moves
+   (money2mon), and a paid-in-full keeper is pacified.  The whole-pack
+   move (`_move_pack`) rewrites the carrier directly (a death event, not
+   a pickup / drop) — the item-location invariant still holds.
+5. **No new state fields:** 4c reuses the 4a/4b account (`robbed` /
+   `surcharge` / `following` / `debit` / `credit` / `loan` were already
+   carried, zeroed), and the messages use the bare keeper name (the
+   `shkname` honorific is 4d).  No rng draw anywhere in the police chain
+   (the robbery, the block, the reprice and the inheritance are pure
+   arithmetic / state).
+6. **Named skips:** the Keystone Kop system (call_kops / makekops), the
+   keeper's movement / chase (shk_move / the `following` follow — 4d),
+   the cross-level keeper migration (migrate_to_level / home_shk), and
+   the level-change / teleport leave (u_left_shop's newlev half — the
+   robbery fires on a *tracked* leave, a hero move, so a scroll of
+   teleportation out of a shop is a named escape the police do not see).
+
+**Tests:** tests/test_shop.py's 4c section (17) — stolen_value == the
+bill total; the leave-robbery (robbed, the hostile flip, the surcharge,
+the settlement); the credit cover; rile_shk's markup; the door block
+(held, open when settled, the closed shop, in step); alter_cost (the
+reprice, no decrease, the no-op, the enchant-armor scroll); the closed
+shop; paybill (the inheritance, the owed amount, all in the shop, no
+keeper).
+
+mypy clean over 102 files, flake8 clean, 1333 tests green (17 new);
+the demo's pinned seeds, layouts and messages are unchanged (the demo
+generator never calls makelevel with specials=True, so no shop exists
+and the police are no-ops: `block_door` sees no shop door, `track_shop`
+sees no shop room, and `paybill` finds no keeper).
+
 ## The shop: prices, the bill, and the Pay (Wave 5, phase 4b)
 
 **Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 4b): the

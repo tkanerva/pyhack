@@ -41,7 +41,7 @@ from .potions import quaff
 from .priest import do_offer, do_pray, intemple
 from .rings import tick_rings
 from .scrolls import read_scroll
-from .shk import do_pay, track_shop
+from .shk import block_door, do_pay, paybill, track_shop
 from .stairs import go_stairs
 from .uhitm import uhitm
 from .rules import apply_damage, melee_attack, process_events, tick_actor
@@ -169,6 +169,12 @@ def _do_move(world: World, actor_id: str, dx: int, dy: int, rng) -> List[Event]:
     actor = world.actors[actor_id]
     oldpos = actor.pos
     dest = (actor.pos[0] + dx, actor.pos[1] + dy)
+    if actor.is_hero:
+        # C: the shopkeeper blocks the shop door (shk.block_door) -- a
+        # refused move, the hero does not step onto the door
+        block = block_door(world, dest[0], dest[1])
+        if block is not None:
+            return [block]
     if not world.map.is_walkable(dest):
         if (
             actor.is_hero
@@ -214,9 +220,9 @@ def _room_entry(world: World, oldpos: Pos, newpos: Pos, rng) -> List[Event]:
     message of its own (the dialogue is 4d).
     """
     # the shop tracking (C: check_special_room's u.ushops half) -- a
-    # state update with no events, run on every hero move
-    track_shop(world, newpos)
-    events: List[Event] = []
+    # state update on every hero move; the 4c robbery fires here on a
+    # leave with an unsettled bill (core.shk.track_shop returns its events)
+    events: List[Event] = track_shop(world, newpos)
     old_room = world.map.room_at(oldpos)
     new_room = world.map.room_at(newpos)
     if (
@@ -328,6 +334,9 @@ def _finish(world: World, events: List[Event]) -> List[Event]:
     if not world.over:
         if not world.hero.alive:
             world.over = True
+            # C: paybill -- a shopkeeper may take the dead hero's pack
+            # (shk.paybill, the death-time inventory inheritance)
+            events += paybill(world, 1)
             events.append(GameOverEvent(victory=False, reason="You have died!"))
         else:
             monsters = [m for m in world.actors.values() if not m.is_hero]

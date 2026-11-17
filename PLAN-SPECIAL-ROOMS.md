@@ -2,8 +2,20 @@
 
 **Status: phase 0 (terrain + engraving) + phase 1 (temple) + phase 2
 (the zoo family) + phase 3 (the swamp) + phase 4a (a stocked shop you
-can rob) + phase 4b (prices, the bill, the Pay) LANDED; 4c (the police)
-+ 4d (the dialogue) and 5 (the vault) proposed.**  Phase 4b landed as
+can rob) + phase 4b (prices, the bill, the Pay) + phase 4c (the police:
+the robbery, the door block, the surcharge, the EF_PAY reprice, the
+death-time inheritance) LANDED; 4d (the dialogue) and 5 (the vault)
+proposed.**  Phase 4c landed as the police in core.shk: `stolen_value`
+(the bill total), `rob_shop` (leaving with an unsettled bill becomes
+`eshk.robbed` + the hostile flip via `rile_shk` / `hot_pursuit` + the
+`surcharge`), `setpaid` (the account settlement), `block_door` (the
+keeper holds the shop door while owed), `alter_cost` (the EF_PAY
+reprice, wired into the enchant-weapon / enchant-armor scrolls), and
+`paybill` / `inherits` (the death-time inheritance) — the `track_shop`
+leave hook now returns the robbery events (core.step), the door block is
+checked in core.step's move, and the inheritance is hooked into the
+death path — tests in tests/test_shop.py (the 4c section, 17 tests).
+Phase 4b landed as
 the price chain in core.shk (getprice / get_cost, table-driven), the
 bill model (the BillEntry dict on Eshk + onbill / billable /
 add_one_tobill / sub_one_frombill / shop_debt), the pickup billing hook
@@ -101,7 +113,7 @@ and PLAN-MKOBJ.md (a room full of monsters and treasure needs both), on
 | `stock_room_goodpos` | shknam.c 694-716 | "not the door row, not a wall, not occupied" | `shk.stock_goodpos` (exists, 4a) |
 | `shtypes[]` | shknam.c 209-357 | the 12 shop classes: name, `symb`, probability, per-class item probabilities | **data** → `core/shknam_data.py` (exists, 4a) |
 | `getprice(obj, shk_buying)` | shk.c 4341-4380 | the base price and its per-class adjustments | `shk.getprice` (exists, 4b) + `shk.get_cost` (2898-3009, the bill price) |
-| `add_one_tobill` / `billable` / `sub_one_frombill` / `alter_cost` / `stolen_value` / `paybill` | shk.c 3331 / 3473 / 3683 / 3259 / 3776 / 2507 | the bill | `shk.add_one_tobill` / `billable` / `sub_one_frombill` / `onbill` / `shop_debt` (exist, 4b; the *model* of §2.3); `alter_cost` / `stolen_value` / `paybill` = 4c |
+| `add_one_tobill` / `billable` / `sub_one_frombill` / `alter_cost` / `stolen_value` / `paybill` | shk.c 3331 / 3473 / 3683 / 3259 / 3776 / 2507 | the bill | `shk.add_one_tobill` / `billable` / `sub_one_frombill` / `onbill` / `shop_debt` (exist, 4b; the *model* of §2.3) + `alter_cost` / `stolen_value` / `paybill` (exist, 4c) |
 | `inside_shop` / `inhishop` / `costly_spot` / `onbill` | shk.c | "which shop is this square in / is this shopkeeper at home / may this cost money / is this on a bill" | `shk.inside_shop` (4a) + `shk.inhishop` / `costly_spot` / `onbill` (exist, 4b) |
 | `fill_special_room(croom)` | sp_lev.c 2732-… | the **dispatcher** called for *every* room at the end of `makelevel`: shop → `stock_room`, `VAULT` → gold per square, zoo family → `fill_zoo` | `mkroom.fill_special_room` (exists) |
 | the special-room roll | mklev.c 1347-1378 | one special room per level by depth, with the genocide pre-checks (`G_GONE` on leprechaun / killer bee / soldier / cockatrice) and the `depth(medusa_level)` cap | `mklev._roll_special_room` (exists, needs the two missing conditions) |
@@ -770,12 +782,54 @@ with these notes:
   rows (`shk.getprice` / the bill row) → exists (4b); the DoD 4b-4c
   line; the CHANGES.md entry; the HANDOFF rewrite for 4c.
 
-**4c — the shopkeeper polices it (1-2 sessions, proposed).**
-  `stolen_value` on leaving the shop with unpaid goods, `eshk.robbed`,
-  `surcharge`, the "You stole from me!" path, `alter_cost` (so
-  `scroll of enchant armour` inside a shop adds `EF_PAY`), the door
-  block (a shopkeeper stands in the doorway and `m_move` refuses to let
-  him leave it), `inhishop`'s "closed" state.
+**4c — the shopkeeper polices it (LANDED)** — landed as described,
+with these notes:
+
+1. **The leave-robbery is `rob_shop` (C 687-719), fired from the
+   `track_shop` leave hook** (core.step's room-entry hook): leaving a
+   shop with an unsettled bill (`billct` / `debit`) computes
+   `stolen_value` (C 3775, reduced to the 4b model where the bill IS the
+   unpaid goods: the bill total), applies the credit (a credit that
+   covers the bill pays it off, no robbery), `setpaid` (C 399 — the bill
+   / debit / credit / loan cleared and the `unpaid` marks lifted off the
+   billed items), and when there is a net robbery adds to `eshk.robbed`
+   with the "You escaped the shop without paying!" / "You stole N ..."
+   lines and `hot_pursuit` (C 1461) -> `rile_shk` (C 1374: `mpeaceful`
+   False, the `surcharge` set, and each bill entry marked up by
+   (price+2)//3) + `following = True`.  The Keystone Kops (C: call_kops)
+   are a named skip — the keeper chases alone.
+2. **The door block is `block_door` (C 5812), checked in core.step's
+   move**: the hero is inside the shop, the square is the shop's own
+   door (eshk.shd), the keeper is alive, at home on its own square, and
+   owed something (debit / billct / robbed) — then "{name} blocks your
+   way!" and the move is refused.  A closed shop (no keeper at home, or
+   a dead keeper) does not block; the Invis half of the message is a
+   named skip.
+3. **`alter_cost` (C 3258) is the EF_PAY half**, wired into the
+   enchant-weapon / enchant-armor scroll effects (core.scrolls, the C
+   read.c / wield.c call sites): an item whose cost rises on the bill is
+   repriced up to get_cost; the price only goes up (a de-enchantment
+   never refunds the bill, C: `if (new_price > bp->price || amt < 0)`).
+4. **`paybill` (C 2506) / `inherits` (C 2598) is the death-time
+   inheritance**, hooked into core.step's death path: the priority (the
+   resident keeper owed, the resident keeper, a keeper owed, an angry /
+   following keeper, a local keeper) takes the hero's pack — die in the
+   shop with a peaceful keeper and nothing owed -> "gratefully inherits
+   all your possessions"; a debt / robbery -> the owed amount (or all,
+   when the debt exceeds the gold or the hero is in the shop), the gold
+   moves (money2mon), and a paid-in-full keeper is pacified.
+5. **Named skips:** the Keystone Kop system (call_kops / makekops), the
+   keeper's movement / chase (shk_move / the `following` follow — 4d),
+   the cross-level keeper migration (migrate_to_level / home_shk), and
+   the level-change / teleport leave (u_left_shop's newlev half — the
+   robbery fires on a *tracked* leave, a hero move).
+6. **Tests:** tests/test_shop.py's 4c section (17) — stolen_value == the
+   bill total; the leave-robbery (robbed, the hostile flip, the
+   surcharge, the settlement); the credit cover; rile_shk's markup; the
+   door block (held, open when settled, the closed shop, in step);
+   alter_cost (the reprice, no decrease, the no-op, the enchant-armor
+   scroll); the closed shop; paybill (the inheritance, the owed amount,
+   all in the shop, no keeper).
 
 **4d — behaviour (1-2 sessions, proposed).**
   `shk_talk` subset (the greeting, the bill total, "pay for your
@@ -802,9 +856,12 @@ most of the fun and none of the cost.
 2. **No `priest_talk` service economy** (`cheapskate_count`,
    `intone_time`, `hostile_time`); the epri timers are carried as
    fields and never ticked.
-3. **No shopkeeper credit** (`eshk.credit` stays 0), no repairs
-   (`REPAIR_DELAY`), no robbery ledger (`robbed` is used only for the
-   "you stole" decision), no kops, no `shkdead` inheritance.
+3. **No C-sense shopkeeper credit** (the 4b model: buying *establishes*
+   credit, the plan's override), no repairs (`REPAIR_DELAY`), no kops,
+   and no cross-level keeper migration; `robbed` is the robbery ledger
+   (4c) and `paybill` / `inherits` (4c) is the death-time inheritance —
+   the C `shkdead` bones half (saving the dead hero's bones) is not
+   ported.
 4. **No `saleable`-driven shop inventory subtleties** (the health-food
    shop's `VEGETARIAN_CLASS` pseudo-class is a documented skip in 4a;
    the lighting store's zero-probability "unique" shops are
@@ -918,7 +975,7 @@ adds only prices).
       `add_one_tobill` / `sub_one_frombill` / `shop_debt`), the `Pay`
       command (`p` -> `do_pay`), the pickup billing hook + `in_shop`
       tracking — tested table-driven (tests/test_shop.py 4b section)
-- [ ] shops 4c: policed (`stolen_value`, `eshk.robbed`, `surcharge`,
+- [x] shops 4c: policed (`stolen_value`, `eshk.robbed`, `surcharge`,
       `alter_cost`, the door block, `inhishop`'s "closed" state);
       `paybill` (the death-time inventory inheritance)
 - [x] every STUB in `core/mkroom.py`'s `__all__` either implemented or

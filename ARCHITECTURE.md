@@ -235,7 +235,7 @@ details live in the PLAN-*.md files and the module docstrings):**
   misaligned-altar line -- src/pray.c is out of scope (the plan says so
   loudly).  The priest draws as the human glyph (C S_HUMAN is `@`;
   the legend says so).
-- The shop (PLAN-SPECIAL-ROOMS.md phases 4a+4b, core/shk.py +
+- The shop (PLAN-SPECIAL-ROOMS.md phases 4a+4b+4c, core/shk.py +
   core/shknam_data.py + core.mkroom.mkshop): the shknam.c half of a
   shop, split the way C splits it -- `mkshop` *claims* a room (the
   first ordinary, staircase-free, one-door room with a valid shape;
@@ -268,9 +268,18 @@ details live in the PLAN-*.md files and the module docstrings):**
   deviation from C's buy path: buying *establishes credit* (the plan's
   4b override; `pay_debt` ports the debit/loan/credit branches at
   3903-3931, C's `donate_gold`), so after a clean bill `credit ==
-  total` and the gold also moves to the keeper.  The "you stole from
-  me" police (4c) and the dialogue (4d) remain; the tribute "special
-  spot" and `set_tin_variety(HEALTHY_TIN)` are named skips.
+  total` and the gold also moves to the keeper.  Phase 4c adds the
+  police (core/shk.py): `stolen_value` / `rob_shop` (leaving with an
+  unsettled bill becomes `eshk.robbed` + the hostile flip via
+  `rile_shk` / `hot_pursuit` + the `surcharge`, fired from the
+  `track_shop` leave hook), `setpaid` (the account settlement),
+  `block_door` (the keeper holds the shop door while owed, checked in
+  core.step's move), `alter_cost` (the EF_PAY reprice, wired into the
+  enchant-weapon / enchant-armor scrolls), and `paybill` / `inherits`
+  (the death-time inheritance, hooked into the death path).  Only the
+  shopkeeper's dialogue (4d: `shk_talk` / the `shkname` honorific /
+  `shk_move`) remains; the tribute "special spot" and
+  `set_tin_variety(HEALTHY_TIN)` are named skips.
 - The inventory core (PLAN-INVENT.md phase A, core/invent.py): the
   port of the item half of src/invent.c, and the **single writer** of
   the PACK half of an item's where-state (`addinv` / `freeinv` /
@@ -435,12 +444,15 @@ temple itself has landed with it, queue item 1):
    `onbill` / `billable` / `add_one_tobill` / `sub_one_frombill` /
    `shop_debt`, the pickup hook + `costly_spot` / `inhishop`, the
    `in_shop` tracking + the no_charge enter/leave marks, and the `Pay`
-   command `p` -> `do_pay`; tests/test_shop.py's 4b section).  What is
-   left of the plan is 4c the police (`stolen_value`, `robbed`,
-   `surcharge`, `alter_cost`, the door block, `paybill`) and 4d the
-   dialogue (`shk_talk`, the `shkname` honorific, `shk_move`) -- and,
-   optionally, the vault (phase 5).  shk.c is billing before it is a
-   room, which is why the shop is last and lands in sub-phases.
+   command `p` -> `do_pay`; tests/test_shop.py's 4b section) and the
+   shop's police (4c: the leave-robbery `stolen_value` / `rob_shop` +
+   the hostile flip / `surcharge`, the door block `block_door`, the
+   EF_PAY reprice `alter_cost` (wired into the enchant scrolls), and
+   the death-time inheritance `paybill` / `inherits`;
+   tests/test_shop.py's 4c section).  What is left of the plan is 4d
+   the dialogue (`shk_talk`, the `shkname` honorific, `shk_move`) --
+   and, optionally, the vault (phase 5).  shk.c is billing before it is
+   a room, which is why the shop is last and lands in sub-phases.
 2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),

@@ -10,13 +10,15 @@ their C provenance:
                       (src/wield.c): the +1 / blessed-rnd / spe>=9
                       amount, the soft +/-5 evaporate limit, the glow
                       line, the positive-enchant uncurse, the
-                      high-spe vibration clue
+                      high-spe vibration clue, and the alter_cost
+                      (EF_PAY) reprice of a billed item (4c)
 - SCR_ENCHANT_ARMOR   seffect_enchant_armor (src/read.c) + some_armor
                       (src/do_wear.c): the cloak/suit/shirt ->
                       helmet/gloves/boots/shield 3/4-swap pick, the
                       elven vibration/evaporate warning, the (4-s)/2
                       base power + elven/nonmagical/blessed bonuses,
-                      the BUC transfer, the cap
+                      the BUC transfer, the cap, and the alter_cost
+                      (EF_PAY) reprice of a billed item (4c)
 - SCR_REMOVE_CURSE    seffect_remove_curse (the unconfused branch):
                       a cursed scroll only disintegrates; otherwise
                       every carried item (blessed scroll) or every
@@ -217,6 +219,11 @@ def _chwepon(world: World, mon: Monster, weapon: Item, s: int,
     weapon.spe += s
     if s > 0 and weapon.cursed:
         weapon.cursed = False  # C: chwepon uncurses on a positive enchant
+    # C: alter_cost (wield.c) -- an enchanted item on a shop bill is
+    # repriced (the EF_PAY half, core.shk); a no-op when not billed
+    from .shk import alter_cost
+
+    alter_cost(world, weapon, 0)
 
     # C: the elven / high-spe vibration clue (elven short-circuits the
     # draw, as C's is_elven_weapon test does)
@@ -288,6 +295,11 @@ def _seffect_enchant_armor(world: World, mon: Monster, scroll: Item,
         armor.cursed = False     # C: uncurse(otmp)
     armor.spe += s
     _cap_spe(armor)
+    # C: alter_cost (read.c) -- an enchanted item on a shop bill is
+    # repriced (the EF_PAY half, core.shk); a no-op when not billed
+    from .shk import alter_cost
+
+    alter_cost(world, armor, 0)
 
     # C: the trailing "suddenly vibrate unexpectedly." clue (elven
     # short-circuits the draw, as C does)
