@@ -1,5 +1,7 @@
-"""The shop system -- phases 4a (the stocked shop) and 4b (prices, the
-bill, the Pay) of PLAN-SPECIAL-ROOMS.md.
+"""The shop system -- phases 4a (the stocked shop), 4b (prices, the
+bill, the Pay), 4c (the police) and 4d (the behaviour: the dialogue,
+the honorific, the keeper's movement, the anger state machine) of
+PLAN-SPECIAL-ROOMS.md.
 
 A shop in pyhack is what 4a says it is: a room whose type is
 ``SHOPBASE + i`` (the ``i`` index into core.shknam_data.SHOPTYPES), a
@@ -14,9 +16,13 @@ the keeper turns hostile via ``rile_shk`` / ``hot_pursuit`` / the
 something (``block_door``), an item whose cost changes on the bill is
 repriced (``alter_cost``, the EF_PAY half of the enchant scrolls), and
 a dead hero's pack may pass to a keeper (``paybill`` / ``inherits``).
-Only the shopkeeper's *dialogue* (4d: ``shk_talk`` / the ``shkname``
-honorific / ``shk_move`` the keeper's movement) is not ported; each is
-named where it would go.
+4d adds the behaviour: the keeper's dialogue (the entry greeting
+``shk_entered``, the leave warning ``shk_left``, the one-line comment
+``shk_chat`` behind the ``TalkCommand``), the ``shkname`` honorific
+(Mr. / Ms. for the general names), the keeper's movement (``shk_target``
+: the ``following`` chase after a robbery, the way home), and the anger
+state machine (``angry_shk_exists`` / ``rouse_shk`` / ``pacify_shk`` /
+``make_happy_shk``, around 4c's ``rile_shk``).
 
 C provenance (the spans this module owns, verified against
 nethack_index/symbols):
@@ -33,7 +39,21 @@ nethack_index/symbols):
                 hot_pursuit() 1461-1476, block_door() 5812-5843,
                 alter_cost() 3258-3278, paybill() 2506-2592, inherits()
                 2598-2701, addupbill() 495-507, check_credit() 1290-1307
-                (the credit half of the robbery)
+                (the credit half of the robbery);
+                the 4d behaviour: the anger state machine angry_shk_
+                exists() 1343-1353 / pacify_shk() 1356-1371 /
+                rouse_shk() 1393-1405 / make_happy_shk() 1407-1449
+                (home_shk() 1329-1341 reduced to a square set),
+                u_entered_shop() 750-917 (the greeting; deserted_shop()
+                721-747 the untended-shop line), u_left_shop() 578-625
+                (the "please pay" warning), shk_chat() 5542-5623 (the
+                one-line comment, behind TalkCommand -- C's talk.c
+                dotal target walk reduced to the shopkeeper half),
+                shk_move() 4901-5015 (the movement: the following chase
+                and the way home, the greedy single step)
+  src/shknam.c  shkname() 855-897 + Shknam() 842-850 +
+                shkname_is_pname() 899-905; the Mr. / Ms. honorific is
+                the call-site half (end.c 268-272), applied here
   src/mkroom.c  mkshop() -- the room pick and the shop-type roll; it
                 lives in core.mkroom (it is a room handler), and calls
                 back into this module only through stock_room()
@@ -69,17 +89,54 @@ What this phase deliberately leaves out (each named at its call site):
     / ``hot_pursuit`` / ``surcharge`` / ``alter_cost`` / ``block_door`` /
     ``paybill`` / ``inherits`` / ``setpaid``); what they do NOT reach:
     the Keystone Kop system (C: call_kops / makekops -- no kops in
-    pyhack, the keeper chases alone), the keeper's movement / chase
-    (``shk_move`` / the ``following`` follow, 4d -- ``following`` is
-    carried and read by block_door but the keeper does not move yet),
-    the cross-level keeper migration (C: migrate_to_level / home_shk),
-    and the level-change / teleport leave (C: u_left_shop's newlev / the
-    leavestring half) -- the robbery fires on a *tracked* leave
-    (core.shk.track_shop, a hero move), so a scroll of teleportation out
-    of a shop is a named escape the police do not see;
-  - the 4d dialogue: ``shk_talk`` (the greeting, the "please pay" line),
-    the ``shkname`` honorific (the messages use the bare name), and
-    ``shk_move`` (the keeper's movement).
+    pyhack, the keeper chases alone) and the cross-level keeper
+    migration (C: migrate_to_level / home_shk);
+  - the level-change / teleport leave (C: u_left_shop's newlev / the
+    leavestring half): the robbery and the leave warning fire on a
+    *tracked* leave (core.shk.track_shop, a hero move), so a scroll of
+    teleportation out of a shop is a named escape the police do not see;
+  - the C boundary grace of u_left_shop: C's in_rooms counts the door /
+    edge square as still inside the shop, so the hero steps onto the
+    door, hears the "please pay" warning, and may turn back and pay --
+    the robbery fires only on the next move, fully outside.  pyhack's
+    strictly-inside model (PLAN-SPECIAL-ROOMS.md §5.6) makes the door
+    square *outside*, so the warning and the robbery land on the same
+    move (the warning is the lead-in to the robbery's lines);
+  - the 4d behaviour is IN (``shkname`` / ``shk_entered`` /
+    ``shk_left`` / ``shk_chat`` / ``talk`` / ``shk_target`` /
+    ``angry_shk_exists`` / ``rouse_shk`` / ``pacify_shk`` /
+    ``make_happy_shk``); what they do NOT reach:
+
+    - the M2_GREEDY gold pickup of the keeper (C: the M2_GREEDY half of
+      mondata -- the keeper does not pick up dropped gold, the plan says
+      it can wait);
+    - the C shk_fixes_damage / repair_damage system (no repair system in
+      pyhack -- a damaged item is not repaired by an at-home keeper);
+    - the chase lines of C's shk_move (the "Didn't you forget to pay?"
+      verbalize + the gf.followmsg throttle + the 1-in-9 rile roll) --
+      the follow message has no pyhack call site (the talk answer covers
+      the following branch of shk_chat);
+    - the C shk_move door-stance logic (uondoor / badinv / avoid /
+      satdoor / onlineu: the keeper parking at the door for a pick-axe
+      carrier, the pick-axe / mount "leave it outside" blocking of
+      u_entered_shop and the dochug extra move) -- the greedy single step
+      stands in, as with the other monsters;
+    - the C after_shk_move bill_p sentinel reset + the check_special_room
+      re-check (no bill_p in the dict bill; the hero's in_shop is
+      tracked on the hero's own move, not the keeper's);
+    - the C empty_shops static of u_entered_shop (the once-per-game
+      repeat suppression of the "deserted" line) -- a dead keeper's shop
+      can say it is deserted again on each re-entry;
+    - the Deaf / muteshk alternate lines and the hero-name slot (svp.
+      plname -- pyhack has no player-name system, the lines are the
+      verbalized halves with the name dropped);
+    - the C dopay "after blood, not gold" / 1000-gold-appeasement /
+      partial-compensation branches: the pay-all model pays the full bill
+      *and* the full robbery in one `p`, and make_happy_shk settles the
+      keeper (named in do_pay);
+    - the izchak line of shk_chat (no towns in pyhack);
+    - the alignment adjustment of rob_shop / make_happy_shk (no
+      alignment system yet).
 
 Named divergences (documented, not bugs):
 
@@ -88,19 +145,31 @@ Named divergences (documented, not bugs):
     and no ledger), and the monster's numeric id for C's ``m_id``;
     the "already in use on this level" walk is the level's monster
     list.  The name-prefix gender codes ('-', '_', '+', '|', '=') are
-    carried verbatim; interpreting them is ``shkname()`` (4d).
+    carried verbatim; interpreting them is ``shkname()``.
   - the minetown special case in ``nameshk`` (a lighting-store keeper
     in a town named Izchak) has no pyhack counterpart: there are no
     towns.
+  - ``Eshk.customer`` carries a fixed stand-in (there is no player-name
+    system): the "new customer" reset of u_entered_shop (visitct /
+    following / pacify) fires on the shop's FIRST entry only -- the
+    single-player reduction of C's customer-name comparison, which for
+    one hero never sees a second customer.
+  - C's live messages refer to the keeper by the bare name (Shknam /
+    shkname); the 4d messages use the HONORIFIC ``shkname()`` instead
+    (the HANDOFF's stopgap replacement), and the "{keeper} {shop}"
+    compounds take C's possessive ``s_suffix`` ("in Mr. X's general
+    store").
 """
 
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
+from .display import mon_visible
 from .engrave import E_DUST, make_engr_at
 from .events import Event, MessageEvent
 from .hacklib import distmin
+from .hacklib_inflection import s_suffix
 from .invent import currency, delobj, money_cnt
 from .makemon import makemon, mkclass, mkmonmoney, mongets, set_malign
 from .mkobj import coarse_otype, is_ismnum, mkobj_at, mksobj_at
@@ -136,6 +205,14 @@ from .types import (
     TerrainType,
     World,
 )
+from .vision import m_can_see_u
+
+# C: svp.plname -- pyhack has no player-name system, so the keeper's
+# ``customer`` field (C: char customer[PL_NSIZ]) carries this fixed
+# stand-in; the u_entered_shop "new customer" comparison (C's
+# strncmpi(customer, plname)) reduces to "has the shop been entered
+# before" for one hero.
+_HERO = "hero"
 
 # ============================================================
 # Small predicates
@@ -948,13 +1025,36 @@ def costly_spot(world: World, x: int, y: int) -> bool:
 
 def _shk_bare_name(eshkp: Eshk) -> str:
     """The shopkeeper's name without the gender-prefix code (the
-    '-' / '_' / '+' / '|' / '=' character).  The honorific (Mr. / Ms.)
-    is ``shkname()`` (4d); until then the bare name is what the messages
-    use (do_pay's closing line, the door block, the robbery)."""
+    '-' / '_' / '+' / '|' / '=' character) -- C: the prefix strip of
+    shkname().  The messages use ``shkname()`` (the honorific);
+    this is the internal half it is built from."""
     name = eshkp.shknam
     if name and name[0] in "-_+|=":
         name = name[1:]
     return name
+
+
+def shkname(shkp: Monster) -> str:
+    """C: shknam.c#shkname (855-897) + the call-site honorific (end.c
+    268-272) -- the shopkeeper's display name.
+
+    C's shkname() strips the prefix and returns the bare name; the
+    "Mr. " / "Ms. " honorific is applied at the call site from the
+    prefix codes (shknam.c 21-30): PERSONAL names (the '-' / '+' / '='
+    prefixes) do not receive it, GENERAL names do (the '_' / '|' prefix,
+    or no prefix at all) -- by ``Monster.female``, which nameshk() sets
+    from the same codes.  This port composes the two halves into one
+    function (the HANDOFF's replacement of the ``_shk_bare_name``
+    stopgap in the do_pay closing line, the robbery and the door-block
+    messages).
+    """
+    eshkp = shkp.eshk
+    assert eshkp is not None  # the MM_ESHK of makemon allocated it
+    name = eshkp.shknam
+    if name and name[0] in "-+=":
+        # C: shkname_is_pname -- a personal name takes no honorific
+        return name[1:]
+    return ("Ms. " if shkp.female else "Mr. ") + _shk_bare_name(eshkp)
 
 
 def addupbill(eshkp: Eshk) -> int:
@@ -1018,21 +1118,114 @@ def rile_shk(shkp: Monster) -> None:
             entry.price += (entry.price + 2) // 3
 
 
+def angry_shk_exists(world: World) -> bool:
+    """C: shk.c#angry_shk_exists (1343-1353) -- is any shopkeeper angry
+    (C: ANGRY = !mpeaceful)?  C walks the monster list via next_shkp;
+    here the flat world list filtered by isshk, which is the same read.
+    (The C caller is the kops cleanup, a named skip -- the function
+    exists for the state machine's shape and the tests.)"""
+    for mon in world.actors.values():
+        if mon.isshk and mon.alive and not mon.mpeaceful:
+            return True
+    return False
+
+
+def pacify_shk(shkp: Monster, clear_surcharge: bool) -> None:
+    """C: shk.c#pacify_shk (1356-1371) -- make the shopkeeper peaceful
+    (``NOTANGRY = TRUE``) and, when ``clear_surcharge``, undo the
+    surcharge: the flag is cleared and every bill entry's price reduced
+    by (price + 3) // 4 -- C's undo of the (price + 2) // 3 increase
+    (a 100 -> 133 -> 100 round trip).
+
+    make_happy_shk() passes False (a satisfied keeper keeps the
+    marked-up prices -- the surcharge is the shop's memory of the
+    robbery); the u_entered_shop new-customer reset passes True.
+    """
+    shkp.mpeaceful = True  # C: NOTANGRY(shkp) = TRUE
+    eshkp = shkp.eshk
+    assert eshkp is not None
+    if clear_surcharge and eshkp.surcharge:
+        eshkp.surcharge = False
+        for entry in eshkp.bill.values():
+            entry.price -= (entry.price + 3) // 4
+
+
+def rouse_shk(world: World, shkp: Monster, verbosely: bool = True) -> List[Event]:
+    """C: shk.c#rouse_shk (1393-1405) -- wake the shopkeeper (C: the
+    helpless half: a sleeping / paralyzed keeper can move again).
+
+    pyhack's helpless is the sleep state (the C msleeping half); the
+    paralysis / frozen halves are named skips (no paralysis in pyhack).
+    C's "wakes up" line comes out when ``verbosely`` and the keeper is
+    visible (C: canspotmon -- here the hero's current sight, the same
+    read the console draws monsters with).
+    """
+    if not shkp.sleeping:
+        return []
+    shkp.sleeping = 0
+    if verbosely and mon_visible(world, shkp):
+        return [MessageEvent(f"{shkname(shkp)} wakes up.")]
+    return []
+
+
+def make_happy_shk(world: World, shkp: Monster) -> List[Event]:
+    """C: shk.c#make_happy_shk (1407-1449), reduced -- the keeper is
+    satisfied (paid in full): the anger and the pursuit clear, the
+    robbery is forgiven, and a keeper off its square walks home.
+
+    pacify_shk(shkp, FALSE) -- the surcharge STAYS (the marked-up prices
+    are the shop's memory of the robbery) -- then following = 0, robbed
+    = 0 (C: the adjalign half is a named skip, no alignment system), and
+    when the keeper is not at home it is set on its own square (C:
+    home_shk's mnearto, the RLOC_NOMSG half) with the "calms down" / "
+    returns to its shop" lines (the C vanished / cross-level-migration
+    / kops halves are named skips: pyhack's keeper is on the current
+    level and the kops are not ported).
+    """
+    wasmad = not shkp.mpeaceful
+    eshkp = shkp.eshk
+    assert eshkp is not None
+    events: List[Event] = []
+    pacify_shk(shkp, False)  # C: pacify_shk(shkp, FALSE)
+    eshkp.following = False
+    eshkp.robbed = 0
+    if not inhishop(world, shkp):
+        # C: home_shk -- the keeper goes back to its own square (the
+        # mnearto RLOC_NOMSG half; the square is the keeper's own, so it
+        # is free unless a mimic / monster took it -- then the keeper
+        # waits there, the greedy walk of shk_target will not move an
+        # occupied square)
+        if world.monster_at(eshkp.shk) is None:
+            shkp.pos = eshkp.shk
+            if mon_visible(world, shkp):
+                pronoun = "her" if shkp.female else "his"
+                events.append(
+                    MessageEvent(f"{shkname(shkp)} returns to {pronoun} shop.")
+                )
+    elif wasmad:
+        events.append(MessageEvent(f"{shkname(shkp)} calms down."))
+    return events
+
+
 def hot_pursuit(world: World, shkp: Monster) -> None:
     """C: shk.c#hot_pursuit (1461-1476) -- the shopkeeper gives chase:
     rile_shk (angry + the surcharge) and ``following = True`` (the keeper
-    will pursue the hero; the chase itself is shk_move, 4d).
+    will pursue the hero; the chase itself is 4d's ``shk_target``,
+    called from core.step's monster turn).
 
-    C also clears no_charge for every floor item on the level (shopkeeper
-    networking: a stolen item is not for sale in any shop); the 4b model
-    scopes no_charge to the hero's own gear, so that cross-shop clear is
-    a named skip (the pickup already bills per shop).
+    C also records the customer (``strncpy(customer, plname)`` -- here
+    the fixed stand-in, the hero is the only customer) and clears
+    no_charge for every floor item on the level (shopkeeper networking:
+    a stolen item is not for sale in any shop); the 4b model scopes
+    no_charge to the hero's own gear, so that cross-shop clear is a
+    named skip (the pickup already bills per shop).
     """
     if not shkp.isshk:
         return
     rile_shk(shkp)
     eshkp = shkp.eshk
     assert eshkp is not None
+    eshkp.customer = _HERO  # C: strncpy(ESHK(shkp)->customer, plname, ...)
     eshkp.following = True
 
 
@@ -1052,6 +1245,7 @@ def rob_shop(world: World, shkp: Monster) -> List[Event]:
     eshkp = shkp.eshk
     assert eshkp is not None
     events: List[Event] = []
+    events += rouse_shk(world, shkp, True)  # C: rouse_shk(shkp, TRUE)
     total = stolen_value(world, shkp)
     if eshkp.credit >= total:
         events.append(
@@ -1068,12 +1262,13 @@ def rob_shop(world: World, shkp: Monster) -> List[Event]:
     if not total:
         return events
     eshkp.robbed += total
-    name = _shk_bare_name(eshkp)
+    # C's livelog line (the s_suffix(shkname) possessive): the message
+    # keeps the 4c shape with the 4d honorific
     shop_name = SHOPTYPES[int(eshkp.shoptype) - int(RoomType.SHOPBASE)].name
     events.append(
         MessageEvent(
             f"You stole {total} {currency(total)} worth of merchandise "
-            f"from {name} {shop_name}."
+            f"from {s_suffix(shkname(shkp))} {shop_name}."
         )
     )
     hot_pursuit(world, shkp)
@@ -1118,7 +1313,7 @@ def block_door(world: World, x: int, y: int) -> Optional[MessageEvent]:
         return None  # not the shop's door
     if not (eshkp.debit or eshkp.billct or eshkp.robbed):
         return None  # nothing owed, the way is open
-    return MessageEvent(f"{_shk_bare_name(eshkp)} blocks your way!")
+    return MessageEvent(f"{shkname(shkp)} blocks your way!")
 
 
 def alter_cost(world: World, item: Item, amt: int = 0) -> None:
@@ -1236,7 +1431,7 @@ def inherits(
     hero = world.hero
     events: List[Event] = []
     uinshop = hero.in_shop == eshkp.shoproom
-    name = _shk_bare_name(eshkp)
+    name = shkname(shkp)  # the 4d honorific (4c used the bare name)
 
     if numsk > 1:
         return events  # C: the first shopkeeper already took everything
@@ -1299,6 +1494,280 @@ def inherits(
 
 
 # ============================================================
+# The keeper's behaviour (PLAN-SPECIAL-ROOMS.md phase 4d; C: the
+# dialogue and movement halves of src/shk.c)
+# ============================================================
+
+
+def shk_chat(world: World, shkp: Monster) -> List[Event]:
+    """C: shk.c#shk_chat (5542-5623) -- the keeper's one-line comment
+    (the answer to the ``TalkCommand``).
+
+    C's branch ladder, in C's order: an angry keeper mentions how much
+    it dislikes its customers (non-paying when robbed, else rude); a
+    following keeper asks after the customer it was looking for (a
+    different one drops the pursuit, the same one hears the "forgot to
+    pay" line); a keeper with a bill gives the BILL TOTAL (addupbill +
+    debit); then the debit reminder, the credit encouragement, the
+    robbery complaint, the surcharge warning, and the business is
+    bad / good lines from the keeper's purse (money_cnt under 50 / over
+    4000, C's shkmoney reads), with the shoplifters fallback (the C
+    izchak line is a named skip -- no towns).  A monster of the
+    shopkeeper type that is not actually a keeper (C: an animated
+    shopkeeper statue) asks about untended shops instead.
+
+    The Deaf / muteshk alternate lines and the hero-name slots are named
+    skips (the verbalized halves, the name dropped).
+    """
+    if not shkp.isshk:
+        return [
+            MessageEvent(
+                f"{shkp.name} asks whether you've seen any untended "
+                "shops recently."
+            )
+        ]
+    eshkp = shkp.eshk
+    assert eshkp is not None  # the MM_ESHK of makemon allocated it
+    name = shkname(shkp)
+    if not shkp.mpeaceful:
+        # C: mentions / indicates how much noit_mhe dislikes ...
+        pronoun = "she" if shkp.female else "he"
+        customers = "non-paying" if eshkp.robbed else "rude"
+        return [
+            MessageEvent(
+                f"{name} mentions how much {pronoun} dislikes "
+                f"{customers} customers."
+            )
+        ]
+    if eshkp.following:
+        # C: the customer-name comparison -- for one hero the stored
+        # customer is always the hero (hot_pursuit / the entry hook),
+        # so this is the "forgot to pay" half
+        return [
+            MessageEvent(f"{name} asks, 'Didn't you forget to pay?'")
+        ]
+    if eshkp.billct:
+        total = addupbill(eshkp) + eshkp.debit  # C: the bill total
+        return [
+            MessageEvent(
+                f"{name} says that your bill comes to "
+                f"{total} {currency(total)}."
+            )
+        ]
+    if eshkp.debit:
+        pronoun = "him" if not shkp.female else "her"
+        return [
+            MessageEvent(
+                f"{name} reminds you that you owe {pronoun} "
+                f"{eshkp.debit} {currency(eshkp.debit)}."
+            )
+        ]
+    if eshkp.credit:
+        return [
+            MessageEvent(
+                f"{name} encourages you to use your "
+                f"{eshkp.credit} {currency(eshkp.credit)} of credit."
+            )
+        ]
+    if eshkp.robbed:
+        return [
+            MessageEvent(f"{name} complains about a recent robbery.")
+        ]
+    if eshkp.surcharge:
+        pronoun = "she" if shkp.female else "he"
+        return [
+            MessageEvent(
+                f"{name} warns you that {pronoun} is watching you "
+                "carefully."
+            )
+        ]
+    shkmoney = money_cnt(shkp)
+    if shkmoney < 50:
+        return [MessageEvent(f"{name} complains that business is bad.")]
+    if shkmoney > 4000:
+        return [MessageEvent(f"{name} says that business is good.")]
+    # C: the izchak line (no towns in pyhack) falls through here
+    return [MessageEvent(f"{name} talks about the problem of shoplifters.")]
+
+
+def talk(world: World, rng) -> List[Event]:
+    """C: talk.c's dotal ('t'), reduced to the shopkeeper half -- the
+    target is the keeper of the shop the hero stands in, failing that a
+    keeper adjacent to the hero; the keeper answers with shk_chat.
+
+    C's target walk (any visible monster, each with its own talk.c
+    answer) is a named skip: pyhack has no monster-target selection
+    (PLAN-INVENT.md phase G) and no non-keeper talk answers.
+    """
+    hero = world.hero
+    target: Optional[Monster] = None
+    roomno = inside_shop(world.map, hero.pos)
+    if roomno != NO_ROOM:
+        room = world.map.room_at(hero.pos)
+        target = room_keeper(world, room) if room is not None else None
+        if target is None:
+            target = shop_keeper(world, world.lev, roomno)
+    if target is None or not target.alive:
+        for mon in world.actors.values():
+            if (
+                mon.isshk
+                and mon.alive
+                and mon.lev == world.lev
+                and distmin(mon.pos, hero.pos) == 1
+            ):
+                target = mon
+                break
+    if target is None:
+        return [MessageEvent("No one around to talk to.")]
+    return shk_chat(world, target)
+
+
+def _shop_name(eshkp: Eshk) -> str:
+    """The shop type's name (the shtypes[] row of the keeper's shoptype)."""
+    return SHOPTYPES[int(eshkp.shoptype) - int(RoomType.SHOPBASE)].name
+
+
+def shk_entered(world: World, shkp: Optional[Monster]) -> List[Event]:
+    """C: shk.c#u_entered_shop (750-917), the greeting half -- the keeper
+    greets the hero on entering the shop, fired from track_shop's entry
+    branch.
+
+    A shop with no keeper, a dead one, or a keeper that is not at home
+    (C's !inhishop: chasing the hero, or dead -- C's shkgone clears the
+    resident, pyhack's alive check stands in) is DESERTED: the C
+    deserted_shop() line ("This shop is / seems to be deserted / is
+    untended" by the monster count in the room, the sensed half -- the
+    C empty_shops once-per-game repeat suppression is a named skip).
+    A keeper at home runs C's ladder: the new-customer reset (visitct /
+    following / pacify_shk(TRUE) -- the single-player reduction, the
+    fixed stand-in customer, see the module docstring), then no dialogue
+    while the keeper is asleep or following (the C muteshk / following
+    guard), then the anger / surcharge / robbed / welcome lines by the
+    keeper's state (the welcome carries the visitct " again").  The C
+    Invis half and the pick-axe / mount "leave it outside" blocking are
+    named skips.
+    """
+    map_ = world.map
+    room = map_.room_at(world.hero.pos)
+    if shkp is None or not shkp.alive or not inhishop(world, shkp):
+        # C: the !shkp / !inhishop halves -- an untended shop
+        return [MessageEvent(_deserted_line(world, room))]
+    eshkp = shkp.eshk
+    assert eshkp is not None  # the MM_ESHK of makemon allocated it
+    # C: the new-customer reset (the single-player reduction of the
+    # strncmpi(customer, plname) comparison -- the first entry only)
+    if eshkp.customer != _HERO:
+        eshkp.customer = _HERO
+        eshkp.visitct = 0
+        eshkp.following = False
+        pacify_shk(shkp, True)
+    if shkp.sleeping or eshkp.following:
+        return []  # C: no dialog (muteshk / following)
+    shop = _shop_name(eshkp)
+    possessive = s_suffix(shkname(shkp))  # C: s_suffix(shkname(shkp))
+    if not shkp.mpeaceful:
+        # C: "So, %s, you dare return to %s %s?!" (the plname slot is a
+        # named skip)
+        return [MessageEvent(f"You dare return to {possessive} {shop}?")]
+    if eshkp.surcharge:
+        # C: "The atmosphere at %s %s seems unwelcoming."
+        return [
+            MessageEvent(
+                f"The atmosphere at {possessive} {shop} seems unwelcoming."
+            )
+        ]
+    if eshkp.robbed:
+        # C: "%s mutters imprecations against shoplifters."
+        return [
+            MessageEvent(
+                f"{shkname(shkp)} mutters imprecations against shoplifters."
+            )
+        ]
+    # C: "Welcome%s to %s %s!" -- visitct++ (the " again" of a repeat)
+    again = eshkp.visitct > 0
+    eshkp.visitct += 1
+    tail = " again" if again else ""
+    return [MessageEvent(f"Welcome{tail} to {possessive} {shop}!")]
+
+
+def _deserted_line(world: World, room: Optional[Room]) -> str:
+    """C: shk.c#deserted_shop (721-747) -- the untended-shop line.
+
+    C counts the monsters in the room (n) and the ones the hero senses
+    (m): no monsters -> "is deserted", all sensed -> "is untended",
+    some hidden -> "seems to be untended" (the C Blind feedback-
+    blurring half is a named skip -- no blind feedback here).
+    """
+    n = 0
+    m = 0
+    if room is not None:
+        for mon in world.actors.values():
+            if mon.is_hero or not mon.alive or mon.lev != world.lev:
+                continue
+            if world.map.room_at(mon.pos) is room:
+                n += 1
+                if mon_visible(world, mon):
+                    m += 1
+    if n == 0:
+        return "This shop is deserted."
+    if m < n:
+        return "This shop seems to be untended."
+    return "This shop is untended."
+
+
+def shk_left(world: World, shkp: Monster) -> List[Event]:
+    """C: shk.c#u_left_shop (578-625), the intimidation half -- the
+    keeper's warning on leaving with an unsettled bill, fired from
+    track_shop's leave branch BEFORE the robbery's lines.
+
+    C fires this when the hero steps onto the shop's boundary (still
+    "inside" for C's in_rooms) and may still turn back and pay; the
+    robbery fires on the next move, fully outside.  pyhack's
+    strictly-inside model (PLAN-SPECIAL-ROOMS.md §5.6) makes the door
+    square *outside*, so the warning and the robbery land on the same
+    move (module docstring, the named collapse).  The line is the not-
+    upset / upset pair by the surcharge (the C plname / Deaf / muteshk
+    halves are named skips).
+    """
+    eshkp = shkp.eshk
+    assert eshkp is not None
+    not_upset = not eshkp.surcharge  # C: !eshkp->surcharge
+    if not_upset:
+        return [MessageEvent("Please pay before leaving.")]
+    return [MessageEvent("Don't you leave without paying!")]
+
+
+def shk_target(world: World, shkp: Monster) -> Optional[Pos]:
+    """C: shk.c#shk_move (4901-5015), the target half -- where the
+    keeper moves this turn (core.step's monster turn takes the greedy
+    single step onto it; None = stand still).
+
+    C's ladder, reduced: a FOLLOWING keeper chases the hero (the C
+    holetime / m_move deferral halves collapse into the same target --
+    the greedy chase is m_move in C too); an ANGRY keeper that can see
+    the hero (C: mcansee && m_canseeu) pursues it; every other keeper
+    walks HOME (its own square, C: the gtx/gty = eshk->shk default) and
+    stands once it gets there (C: the GDIST < 3 return 0 for a settled
+    keeper at rest).  The named skips are in the module docstring: the
+    M2_GREEDY gold pickup, the chase lines, the door-stance logic
+    (uondoor / badinv / avoid / satdoor / onlineu), shk_fixes_damage,
+    and after_shk_move.
+    """
+    hero = world.hero
+    if not hero.alive:
+        return None
+    eshkp = shkp.eshk
+    assert eshkp is not None
+    if eshkp.following:
+        return hero.pos  # C: the following chase (any distance)
+    if not shkp.mpeaceful and m_can_see_u(world, shkp):
+        return hero.pos  # C: the angry pursuit (the m_canseeu half)
+    if shkp.pos != eshkp.shk:
+        return eshkp.shk  # the way home
+    return None  # at home and settled: stand still (C: return 0)
+
+
+# ============================================================
 # The hero's shop presence (C: check_special_room's u.ushops half)
 # ============================================================
 
@@ -1309,13 +1778,13 @@ def track_shop(world: World, newpos: Pos) -> List[Event]:
 
     Called from core.step's room-entry hook on every hero move.  On entry
     the hero's carried non-coin gear is marked no_charge (your own gear is
-    never billed, C 3094-3098); on leave the no_charge marks are cleared
-    (unpaid items stay).  The 4c police: leaving with an unpaid bill is a
+    never billed, C 3094-3098) and the keeper greets the hero (4d's
+    shk_entered, the u_entered_shop greeting); on leave the no_charge marks
+    are cleared (unpaid items stay) and an unsettled bill gets the 4d leave
+    warning (shk_left, the u_left_shop "please pay" line) before the 4c
     robbery (rob_shop -- the bill becomes eshk.robbed and the keeper turns
-    hostile).  The C entry / leave *dialogue* (the greeting, "please pay")
-    is the shopkeeper's behaviour half (phase 4d); a level-change /
-    teleport leave does not re-run this hook (a named skip, see the module
-    docstring).
+    hostile).  A level-change / teleport leave does not re-run this hook
+    (a named skip, see the module docstring).
     """
     hero = world.hero
     old_in_shop = hero.in_shop
@@ -1327,7 +1796,9 @@ def track_shop(world: World, newpos: Pos) -> List[Event]:
         # leaving a shop: the no_charge marks are cleared (unpaid stays)
         for it in hero.inventory:
             it.no_charge = False  # C: clear_no_charge
-        # the 4c police: an unsettled bill (billct / debit) is a robbery
+        # the 4d warning + the 4c police: an unsettled bill (billct / debit)
+        # is a robbery (the warning lands first, the named collapse of C's
+        # boundary grace -- module docstring)
         if old_in_shop != NO_ROOM:
             shkp = shop_keeper(world, world.lev, old_in_shop)
             if (
@@ -1336,6 +1807,7 @@ def track_shop(world: World, newpos: Pos) -> List[Event]:
                 and inhishop(world, shkp)
                 and (shkp.eshk.billct or shkp.eshk.debit)
             ):
+                events += shk_left(world, shkp)
                 events += rob_shop(world, shkp)
         hero.in_shop = NO_ROOM
     else:
@@ -1345,6 +1817,8 @@ def track_shop(world: World, newpos: Pos) -> List[Event]:
             # an already-stolen item off the no_charge mark)
             if it.oclass != int(ObjClass.COIN) and not it.unpaid:
                 it.no_charge = True
+        # the 4d greeting (the u_entered_shop half of check_special_room)
+        events += shk_entered(world, shop_keeper(world, world.lev, new_in_shop))
     return events
 
 
@@ -1422,12 +1896,20 @@ def pay_debt(eshkp: Eshk, amount: int) -> None:
 
 def do_pay(world: World, rng) -> List[Event]:
     """C: shk.c#dopay (1758-2043), simplified to pay-all (the plan's
-    4b): the hero pays every item on the bill of the shop they stand in.
+    4b; 4d adds the satisfaction): the hero pays every item on the bill
+    of the shop they stand in -- and, when the keeper is angry or
+    following, the full robbery on top of it (C's "compensate for the
+    losses" branch reduced to pay-all), which settles the keeper
+    (make_happy_shk: the anger / pursuit clear, the robbery is forgiven,
+    a keeper off its square goes home).
 
     The named simplifications: C hunts for the nearest keeper and offers
     an itemized `y` menu; here the keeper is the room keeper of the shop
     room the hero stands in and every entry is paid at once.  No stashed
-    gold, no loan channel, no `$` financial report.
+    gold, no loan channel, no `$` financial report; C's "after blood, not
+    gold" refusal and the 1000-gold-appeasement / partial-compensation
+    branches are named skips (the pay-all model pays the full robbery and
+    the keeper calms).
     """
     hero = world.hero
     roomno = inside_shop(world.map, hero.pos)
@@ -1442,18 +1924,28 @@ def do_pay(world: World, rng) -> List[Event]:
     eshkp = shkp.eshk
     assert eshkp is not None  # the MM_ESHK of makemon allocated it
     total = shop_debt(eshkp)
+    # C's dopay robbery branch (ltmp = eshkp->robbed): an angry /
+    # following keeper wants the robbery made good as well -- the pay-all
+    # model pays it in full (the partial-compensation branch is a named
+    # skip)
+    robbery = 0
+    if eshkp.robbed and (eshkp.following or not shkp.mpeaceful):
+        robbery = eshkp.robbed
+        total += robbery
     if total == 0:
         # C: the shopper_financial_report wording (1033)
         return [MessageEvent("You don't owe any gold here.")]
+    # C 1875: wake a sleeping keeper when someone who owes money pays
+    events: List[Event] = []
+    events += rouse_shk(world, shkp, True)
     money = money_cnt(hero)
     if money + eshkp.credit < total:
         # C 2495-2498, simplified (no menu, no partial pay -- named)
-        return [
+        return events + [
             MessageEvent(
                 "You don't have enough gold to pay for the items on your bill."
             )
         ]
-    events: List[Event] = []
     for item_id, entry in list(eshkp.bill.items()):
         ltmp = entry.price * entry.bquan  # C 2274
         # C 2314: "bought %s for %ld gold piece%s" (the money noun is
@@ -1473,12 +1965,27 @@ def do_pay(world: World, rng) -> List[Event]:
         else:
             eshkp.bill.pop(item_id, None)  # a useup entry: the item is gone
     eshkp.billct = len(eshkp.bill)
+    # C's robbery compensation (1929-1935): the full robbery is paid
+    # (money2mon; the robbed ledger is zeroed by make_happy_shk below)
+    if robbery:
+        events.append(
+            MessageEvent(
+                f"You compensate {shkname(shkp)} for the {robbery} "
+                f"{currency(robbery)} stolen."
+            )
+        )
+        _spend_gold(world, hero, robbery)
+        _give_gold(world, shkp, robbery)
+    # C's dopay make_happy_shk (1908 / 1935 / 1954): a paid-in-full
+    # keeper calms down and, off its square, goes home (silent for a
+    # keeper already at home and peaceful)
+    events += make_happy_shk(world, shkp)
     # C 2029: the closing line (the Deaf / muteshk checks are named
-    # skips; the Mr. / Ms. honorific is 4d, so the bare name)
-    shop_name = SHOPTYPES[int(eshkp.shoptype) - int(RoomType.SHOPBASE)].name
+    # skips; the possessive is C's s_suffix(shkname))
     events.append(
         MessageEvent(
-            f"Thank you for shopping in {_shk_bare_name(eshkp)} {shop_name}!"
+            f"Thank you for shopping in {s_suffix(shkname(shkp))} "
+            f"{_shop_name(eshkp)}!"
         )
     )
     return events
@@ -1489,6 +1996,7 @@ __all__ = [
     "add_one_tobill",
     "addupbill",
     "alter_cost",
+    "angry_shk_exists",
     "billable",
     "block_door",
     "costly_spot",
@@ -1502,16 +2010,24 @@ __all__ = [
     "inhishop",
     "init",
     "inside_shop",
+    "make_happy_shk",
     "mkveggy_at",
     "mkshobj_at",
     "nameshk",
     "onbill",
+    "pacify_shk",
     "paybill",
     "pay_debt",
     "rile_shk",
     "rob_shop",
     "room_keeper",
+    "rouse_shk",
     "setpaid",
+    "shk_chat",
+    "shk_entered",
+    "shk_left",
+    "shk_target",
+    "shkname",
     "shkveg",
     "shop_debt",
     "shop_keeper",
@@ -1519,6 +2035,7 @@ __all__ = [
     "stock_goodpos",
     "stock_room",
     "sub_one_frombill",
+    "talk",
     "track_shop",
     "veggy_item",
 ]

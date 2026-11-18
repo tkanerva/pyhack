@@ -26,6 +26,7 @@ from .commands import (
     ReadCommand,
     StairsCommand,
     TakeOffCommand,
+    TalkCommand,
     WearCommand,
     ZapCommand,
 )
@@ -41,7 +42,7 @@ from .potions import quaff
 from .priest import do_offer, do_pray, intemple
 from .rings import tick_rings
 from .scrolls import read_scroll
-from .shk import block_door, do_pay, paybill, track_shop
+from .shk import block_door, do_pay, paybill, shk_target, talk, track_shop
 from .stairs import go_stairs
 from .uhitm import uhitm
 from .rules import apply_damage, melee_attack, process_events, tick_actor
@@ -131,6 +132,9 @@ def step(world: World, cmd: Command, rng) -> List[Event]:
             events += do_offer(world)
         elif isinstance(cmd, PayCommand):
             events += do_pay(world, rng)
+        elif isinstance(cmd, TalkCommand):
+            # C: 't' -> dotal, the shopkeeper half (core.shk.talk)
+            events += talk(world, rng)
         # WaitCommand: a deliberate pass (no trap re-roll, unlike the old demo)
 
     # --- monster turns ---
@@ -216,8 +220,11 @@ def _room_entry(world: World, oldpos: Pos, newpos: Pos, rng) -> List[Event]:
 
     Phase 4b adds the SHOP half: the hero's `in_shop` is updated and
     the no_charge marks are set / cleared on entering / leaving a shop
-    (core.shk.track_shop) -- C's u.ushops bookkeeping, which has no
-    message of its own (the dialogue is 4d).
+    (core.shk.track_shop) -- C's u.ushops bookkeeping.  Phase 4d adds
+    the shop dialogue on the same hook: the keeper's greeting on entry
+    (core.shk.shk_entered) and the "please pay" warning + the 4c
+    robbery on a leave with an unsettled bill (core.shk.shk_left /
+    rob_shop).
     """
     # the shop tracking (C: check_special_room's u.ushops half) -- a
     # state update on every hero move; the 4c robbery fires here on a
@@ -281,6 +288,19 @@ def _monster_turn(world: World, mon_id: str, rng) -> List[Event]:
         return _melee_combat(world, mon_id, "player", rng)
     if is_stuck(mon):
         return []
+    if mon.isshk:
+        # C: shk_move -- the keeper does not wander: it chases while
+        # following (a robbery) or angry (and it sees the hero), and
+        # otherwise walks back to its own square and stands there (the
+        # greedy single step, as with the other monsters; the named
+        # skips are in core.shk's docstring)
+        target = shk_target(world, mon)
+        if target is not None:
+            d = _step_toward(world, mon, target, rng)
+            if d is not None:
+                mon.pos = (mon.pos[0] + d[0], mon.pos[1] + d[1])
+                return check_traps(world, mon_id, rng)
+        return []  # at home (or blocked): stand still
     if hero.alive and m_can_see_u(world, mon):
         # The monster can see the hero: it steps one tile closer (C:
         # the chase in monmove.c).  STUB: this is the greedy single

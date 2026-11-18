@@ -5,6 +5,109 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The shop: the keeper's behaviour (Wave 5, phase 4d)
+
+**Why:** queue item 1 finished (PLAN-SPECIAL-ROOMS.md phase 4d): 4c
+left a shop that could rob you, block your door and inherit your pack
+— but its keeper never spoke, never moved, and the anger state machine
+around 4c's `rile_shk` was only half in.  This session is the behaviour
+half of `src/shk.c`: the dialogue, the honorific, the keeper's
+movement, and the anger state machine — after this the shop is the
+complete C system except the named skips.
+
+**The choices:**
+
+1. **The dialogue is three producers around `track_shop` and a new
+   `TalkCommand`.**  `shk_entered` (C: u_entered_shop 750-917, the
+   greeting half) fires on a tracked entry: a keeper that is not at
+   home (dead, or off its square) is the DESERTED line (C
+   deserted_shop 721 — "is deserted" / "is untended" / "seems to be
+   untended" by the monster counts, the sensed half via the hero's
+   current sight); a keeper at home runs C's ladder — the new-customer
+   reset (visitct / following / `pacify_shk(TRUE)`; the single-player
+   reduction of C's plname comparison, the fixed stand-in customer),
+   then no dialog while the keeper sleeps or follows, then the anger /
+   surcharge / robbed / welcome lines (the welcome carries the visitct
+   " again").  `shk_left` (C: u_left_shop 578-625) fires on a tracked
+   leave with an unsettled bill BEFORE the 4c robbery's lines ("Please
+   pay before leaving." / "Don't you leave without paying!" by the
+   surcharge) — pyhack's strictly-inside model makes the door square
+   outside, so the warning and the robbery land on the same move (the
+   named collapse of C's boundary grace).  The `TalkCommand` (`t`; a
+   lone `t` — `t`+letter still takes off, like every other letter
+   command) dispatches to `shk.talk` (C: talk.c's dotal reduced to the
+   shopkeeper half: the keeper of the shop the hero stands in, failing
+   that an adjacent keeper), which answers with `shk_chat` (C 5542 —
+   C's branch ladder in C's order: the anger lines, the pursuit, the
+   bill total, the debit, the credit, the robbery, the surcharge, the
+   purse lines under 50 / over 4000, the shoplifters fallback; the
+   animated-statue half for a non-keeper).
+2. **The `shkname` honorific replaces the `_shk_bare_name` stopgap.**
+   C's `shkname()` strips the prefix and the Mr. / Ms. honorific is
+   applied at the call site (end.c 268-272) from the prefix codes
+   (shknam.c 21-30: PERSONAL names take no honorific, GENERAL names
+do); this port composes the two halves into one function, and the 4c
+   messages (the robbery, the door block, the do_pay closing line, the
+   inheritance) now use it — the "in Mr. X's general store" compounds
+   take C's possessive `s_suffix`.
+3. **The keeper moves (C: shk_move 4901-5015, the target half as
+   `shk_target`).**  A FOLLOWING keeper chases the hero (any distance),
+   an ANGRY keeper that can see the hero (the hero's sight, C's
+   mcansee && m_canseeu) pursues it, every other keeper walks HOME (its
+   own square) and stands once it gets there — the greedy single step
+   of core.step's monster turn (a new `isshk` branch before the
+   wander), so a keeper never random-walks.  Named skips: the M2_GREEDY
+   gold pickup, the chase lines (the followmsg throttle + the 1-in-9
+   rile roll), the door-stance logic (uondoor / badinv / avoid /
+   satdoor / onlineu), shk_fixes_damage, and after_shk_move.
+4. **The anger state machine (C 1343-1449) completes around 4c's
+   `rile_shk`.**  `angry_shk_exists` (1343), `pacify_shk` (1356 — the
+   (price+3)//4 undo of the (price+2)//3 markup, a 100 -> 133 -> 100
+   round trip; the new-customer reset passes clear, `make_happy_shk`
+   keeps the markup — the shop's memory of the robbery), `rouse_shk`
+   (1393 — the sleep half of C's helpless; the "wakes up" line when the
+   keeper is visible), and `make_happy_shk` (1407 — the anger and the
+   pursuit clear, the robbery is forgiven, a keeper off its square is
+   set on it again with the "calms down" / "returns to its shop"
+   lines; home_shk reduced to a square set, the vanished / cross-level
+   / kops halves named skips).  `do_pay` ends with it: the 4b pay-all
+   now also pays the full robbery when the keeper is angry / following
+   (C's dopay robbery branch reduced to pay-all, the partial-
+   compensation / 1000-gold branches named) and settles the keeper.
+5. **Two new `Eshk` fields** (the only state 4d adds): `visitct` (the
+   shop-visit counter) and `customer` (C's customer[], the fixed
+   stand-in "hero" — pyhack has no player-name system).  No rng draw
+   anywhere in the behaviour chain (the dialogue, the movement and the
+   anger machine are pure state; the movement's single step reuses the
+   monster turn's existing draw).
+
+**Named skips:** the C dopay "after blood, not gold" / 1000-gold-
+appeasement / partial-compensation branches (the pay-all model pays the
+full robbery and the keeper calms), the C shk_move door-stance logic and
+chase lines, the M2_GREEDY gold pickup, shk_fixes_damage / repair_damage,
+the C empty_shops once-per-game repeat suppression (a dead keeper's shop
+can say it is deserted again on each re-entry), the Deaf / muteshk
+alternate lines and the hero-name slots (the verbalized halves, the name
+dropped), the C u_left_shop newlev / leavestring half (a level-change /
+teleport leave is a named escape the police do not see), and the izchak
+line of shk_chat (no towns).
+
+**Tests:** tests/test_shop.py's 4d section (28) — the honorific
+(general vs personal); the greeting ladder (welcome, welcome again, the
+dare-return, the unwelcoming, the imprecations, the sleeping / following
+guards, the deserted / untended counts, the new-customer reset); the
+leave warning (the calm / upset pair, the ordering before the robbery);
+talk (the shop keeper via step, the adjacent keeper, the no-one line,
+the chat ladder in C's order, the non-keeper); the movement (the
+following chase, the angry pursuit, the way home, the stand-still, via
+step); the anger machine (angry_shk_exists, the pacify round trip, the
+rouse, the make_happy calm / send-home); do_pay with the robbery
+(compensation + the settling).
+
+mypy clean over 102 files, flake8 clean, 1361 tests green (28 new);
+the demo's pinned seeds, layouts and messages are unchanged (no shop
+exists on the demo path, so the behaviour is a no-op).
+
 ## The shop: the police (Wave 5, phase 4c)
 
 **Why:** queue item 1 continued (PLAN-SPECIAL-ROOMS.md phase 4c): 4b

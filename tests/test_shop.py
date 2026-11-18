@@ -17,7 +17,7 @@ square of the room except the row the door stands on.
 from typing import List, Tuple
 
 from core import mkroom, shk
-from core.commands import MoveCommand, PayCommand
+from core.commands import MoveCommand, PayCommand, TalkCommand, WaitCommand
 from core.events import MessageEvent
 from core.hacklib import distmin
 from core.invent import addinv, money_cnt
@@ -54,6 +54,7 @@ from core.types import (
     Tile,
     World,
 )
+from core.vision import vision_recalc
 from conftest import assert_item_locations, make_hero, make_monster
 
 W, H = 40, 20
@@ -1479,3 +1480,469 @@ def test_paybill_does_nothing_when_there_is_no_keeper():
     assert _msgs(events) == []
     assert gear.carrier == "player"  # the hero keeps the pack
     assert_item_locations(w)
+
+
+# ------------------------------------------------------------
+# phase 4d: the keeper's behaviour (the dialogue, the honorific,
+# the movement, the anger state machine)
+# ------------------------------------------------------------
+
+
+def test_shkname_is_the_honorific():
+    """shkname: a general name ('_' / '|' prefix, or none) takes the
+    Mr. / Ms. honorific from the keeper's gender; a personal name
+    ('-' / '+' / '=' prefix) is the bare name (C: the prefix codes of
+    shknam.c 21-30 + the call-site honorific of end.c 268-272)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    cases = [
+        ("_Adele", True, "Ms. Adele"),
+        ("|Brenda", False, "Mr. Brenda"),
+        ("-Lucrezia", True, "Lucrezia"),
+        ("+Dirk", False, "Dirk"),
+        ("=Quinn", True, "Quinn"),
+        ("Asidonhopo", False, "Mr. Asidonhopo"),  # no prefix: general
+    ]
+    for name, female, display in cases:
+        eshk.shknam = name
+        keeper.female = female
+        assert shk.shkname(keeper) == display
+
+
+def test_the_keeper_greets_the_hero_on_entry():
+    """The entry greeting (C: u_entered_shop): a peaceful keeper at home
+    welcomes the hero, the visit is counted and the customer recorded
+    (the fixed stand-in, C's plname slot is a named skip)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    events = shk.track_shop(w, inside)
+    msgs = _msgs(events)
+    assert any("Welcome to " in x for x in msgs)
+    assert eshk.visitct == 1  # the first visit
+    assert eshk.customer != ""  # the customer is recorded
+
+
+def test_a_second_entry_says_welcome_again():
+    """The visitct ' again' of a repeat (C: the visitct++ post-increment
+    of the Welcome line)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    shk.track_shop(w, inside)
+    w.hero.pos = (1, 1)
+    shk.track_shop(w, (1, 1))  # leave (no bill: no robbery)
+    w.hero.pos = inside
+    msgs = _msgs(shk.track_shop(w, inside))
+    assert any("Welcome again to " in x for x in msgs)
+    assert eshk.visitct == 2
+
+
+def test_an_angry_keeper_greets_with_dare_return():
+    """An established account (the customer already recorded -- the
+    new-customer reset would pacify first, as in C): the angry keeper
+    greets with the dare-return line."""
+    m, room, w, keeper = _stocked_shop()
+    keeper.mpeaceful = False
+    keeper.eshk.customer = "hero"  # the established account
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    msgs = _msgs(shk.track_shop(w, inside))
+    assert any("You dare return to " in x for x in msgs)
+
+
+def test_a_surcharge_keeper_greets_unwelcoming():
+    m, room, w, keeper = _stocked_shop()
+    keeper.eshk.customer = "hero"  # the established account
+    keeper.eshk.surcharge = True
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    msgs = _msgs(shk.track_shop(w, inside))
+    assert any("seems unwelcoming" in x for x in msgs)
+
+
+def test_a_robbed_keeper_mutters_imprecations():
+    m, room, w, keeper = _stocked_shop()
+    keeper.eshk.robbed = 30
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    msgs = _msgs(shk.track_shop(w, inside))
+    assert any("mutters imprecations against shoplifters" in x for x in msgs)
+
+
+def test_a_sleeping_keeper_does_not_greet():
+    """C: u_entered_shop's no-dialog guard (muteshk, which for a keeper
+    is the helpless = sleep state): the reset still records the
+    customer, but no line comes out."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    keeper.sleeping = 5
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    events = shk.track_shop(w, inside)
+    assert _msgs(events) == []
+    assert eshk.customer != ""  # the customer IS recorded
+
+
+def test_a_following_keeper_does_not_greet():
+    """C: u_entered_shop's no-dialog guard, the following half: an
+    established account still in pursuit (the customer already
+    recorded) does not talk on re-entry."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    eshk.customer = "hero"  # the established account (no reset)
+    eshk.following = True
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    assert _msgs(shk.track_shop(w, inside)) == []
+
+
+def test_a_dead_keeper_s_shop_is_deserted():
+    """C: u_entered_shop's !inhishop half (the dead keeper, shkgone):
+    no monster left in the room -> the 'is deserted' line."""
+    m, room, w, keeper = _stocked_shop()
+    for mon in _mons(w, 1):  # the mimics too: an empty shop
+        mon.alive = False
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    msgs = _msgs(shk.track_shop(w, inside))
+    assert msgs == ["This shop is deserted."]
+
+
+def test_a_keeper_off_its_square_leaves_the_shop_untended():
+    """C: deserted_shop's monster counts: a keeper off its square is
+    not at home, and a monster in the room is sensed as untended
+    (visible) or 'seems to be untended' (not yet seen -- no vision
+    recalc yet)."""
+    m, room, w, keeper = _stocked_shop()
+    keeper.pos = (1, 1)  # off its square (the shop is closed)
+    intruder = make_monster(kind="goblin", pos=(room.hx - 1, room.hy - 1))
+    w.actors[intruder.id] = intruder
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    msgs = _msgs(shk.shk_entered(w, keeper))
+    assert msgs == ["This shop seems to be untended."]  # no vision yet
+    vision_recalc(w)
+    msgs = _msgs(shk.shk_entered(w, keeper))
+    assert msgs == ["This shop is untended."]
+
+
+def test_leaving_with_a_bill_gets_the_warning_first():
+    """The leave warning (C: u_left_shop) lands BEFORE the 4c robbery's
+    lines (the named collapse of C's boundary grace: pyhack's door
+    square is outside, so both fire on the same move)."""
+    m, room, w, keeper = _stocked_shop()
+    item = _item(int(O.APPLE), dknown=True, id="warn1")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    shk.track_shop(w, inside)  # enter
+    w.hero.pos = (1, 1)
+    msgs = _msgs(shk.track_shop(w, (1, 1)))  # leave with the bill
+    assert any("Please pay before leaving." in x for x in msgs)
+    warn_i = next(i for i, x in enumerate(msgs) if "Please pay" in x)
+    rob_i = next(i for i, x in enumerate(msgs) if "stole" in x)
+    assert warn_i < rob_i  # the warning is the lead-in
+
+
+def test_a_surcharged_leave_gets_the_upset_warning():
+    """C: u_left_shop's upset half: a keeper that is already watching
+    (the surcharge) says the 'Don't you leave without paying!' line."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.APPLE), dknown=True, id="warn2")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    eshk.surcharge = True
+    w.hero.pos = _inside_shop_pos(room)
+    w.hero.in_shop = m.room_of(room)
+    msgs = _msgs(shk.track_shop(w, (1, 1)))  # leave with the bill
+    assert any("Don't you leave without paying!" in x for x in msgs)
+    assert any("stole" in x for x in msgs)
+
+
+def test_talk_answers_from_the_keeper_of_the_shop():
+    """C: 't' -> dotal, the shopkeeper half: inside the shop the keeper
+    answers (a peaceful keeper with a full account talks shoplifting);
+    a turn is spent, as C's talk does."""
+    m, room, w, keeper = _stocked_shop()
+    w.hero.pos = (10, 8)  # inside, not adjacent to keeper or mimics
+    w.hero.in_shop = m.room_of(room)
+    events = step(w, TalkCommand(), _rng())
+    msgs = _msgs(events)
+    assert any("talks about the problem of shoplifters" in x for x in msgs)
+
+
+def test_talk_finds_an_adjacent_keeper_outside_the_shop():
+    """Outside the shop (the door square is strictly outside), a keeper
+    adjacent to the hero answers."""
+    m, room, w, keeper = _stocked_shop()
+    door = keeper.eshk.shd  # the door square, outside the shop
+    w.hero.pos = door
+    msgs = _msgs(shk.talk(w, _rng()))
+    assert len(msgs) == 1
+    assert "talks about the problem of shoplifters" in msgs[0]
+
+
+def test_talk_with_no_keeper_says_no_one():
+    m, room, w, keeper = _stocked_shop()
+    w.hero.pos = (1, 1)  # outside the shop, far from every keeper
+    assert _msgs(shk.talk(w, _rng())) == ["No one around to talk to."]
+
+
+def test_shk_chat_follows_the_anger_ladder():
+    """shk_chat's branch ladder in C's order: the anger lines
+    (non-paying when robbed, else rude), the pursuit, the bill total,
+    the debit, the credit, the robbery, the surcharge, the purse lines
+    (under 50 / over 4000) and the shoplifters fallback."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    purse = next(
+        it for it in keeper.inventory if it.oclass == int(ObjClass.COIN)
+    )
+
+    def chat() -> str:
+        msgs = _msgs(shk.shk_chat(w, keeper))
+        assert len(msgs) == 1
+        return msgs[0]
+
+    keeper.mpeaceful = False
+    eshk.robbed = 40
+    assert "dislikes non-paying customers" in chat()
+    eshk.robbed = 0
+    assert "dislikes rude customers" in chat()
+    keeper.mpeaceful = True
+    eshk.following = True
+    assert "Didn't you forget to pay?" in chat()
+    eshk.following = False
+    item = _item(int(O.APPLE), dknown=True, id="chat1")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    total = shk.addupbill(eshk) + eshk.debit
+    assert f"your bill comes to {total}" in chat()
+    shk.sub_one_frombill(eshk, item)
+    eshk.debit = 33
+    assert "you owe him 33" in chat()  # the keeper is male
+    eshk.debit = 0
+    eshk.credit = 77
+    assert "use your 77" in chat()
+    eshk.credit = 0
+    eshk.robbed = 12
+    assert "complains about a recent robbery" in chat()
+    eshk.robbed = 0
+    eshk.surcharge = True
+    assert "watching you carefully" in chat()
+    eshk.surcharge = False
+    purse.quan = 10
+    assert "business is bad" in chat()
+    purse.quan = 5000
+    assert "business is good" in chat()
+    purse.quan = 3340  # the seeded capital: in between
+    assert "talks about the problem of shoplifters" in chat()
+    assert_item_locations(w)
+
+
+def test_shk_chat_for_a_non_keeper():
+    """C: shk_chat's !isshk half (the animated shopkeeper statue):
+    a shopkeeper-typed monster that is not a keeper asks about
+    untended shops."""
+    m, room, w, keeper = _stocked_shop()
+    statue = make_monster(kind="goblin", pos=(13, 9))
+    w.actors[statue.id] = statue
+    msgs = _msgs(shk.shk_chat(w, statue))
+    assert len(msgs) == 1
+    assert "asks whether you've seen any untended shops" in msgs[0]
+
+
+def test_a_following_keeper_chases_the_hero():
+    """C: shk_move's following half: after a robbery the keeper pursues
+    the hero (core.step's greedy single step on the monster turn)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    eshk.following = True
+    keeper.mpeaceful = False
+    hero_pos = (10, 8)
+    w.hero.pos = hero_pos
+    before = distmin(keeper.pos, hero_pos)
+    step(w, WaitCommand(), _rng())
+    assert distmin(keeper.pos, hero_pos) == before - 1
+
+
+def test_an_angry_keeper_pursues_a_hero_it_can_see():
+    """C: shk_move's anger half: an angry keeper that can see the hero
+    (the hero's sight, recalculated in step) pursues it."""
+    m, room, w, keeper = _stocked_shop()
+    keeper.mpeaceful = False  # angry, not following
+    hero_pos = (10, 8)
+    w.hero.pos = hero_pos
+    before = distmin(keeper.pos, hero_pos)
+    step(w, WaitCommand(), _rng())
+    assert distmin(keeper.pos, hero_pos) == before - 1
+
+
+def test_a_displaced_keeper_walks_home():
+    """C: shk_move's way home: a settled keeper off its own square walks
+    back to it (the greedy single step)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    keeper.pos = (12, 8)
+    w.hero.pos = (10, 8)  # not adjacent (the keeper would attack)
+    before = distmin(keeper.pos, eshk.shk)
+    step(w, WaitCommand(), _rng())
+    assert distmin(keeper.pos, eshk.shk) == before - 1
+
+
+def test_a_keeper_at_home_stands_still():
+    """C: shk_move's rest: a settled keeper on its own square does not
+    wander (unlike the other monsters, which random-walk)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    assert keeper.pos == eshk.shk
+    w.hero.pos = (10, 8)
+    step(w, WaitCommand(), _rng())
+    assert keeper.pos == eshk.shk  # no wander
+
+
+def test_angry_shk_exists_tracks_the_anger():
+    """angry_shk_exists (C 1343): any shopkeeper with NOTANGRY FALSE."""
+    m, room, w, keeper = _stocked_shop()
+    assert shk.angry_shk_exists(w) is False
+    shk.rile_shk(keeper)
+    assert shk.angry_shk_exists(w) is True
+    shk.pacify_shk(keeper, True)
+    assert shk.angry_shk_exists(w) is False
+
+
+def test_pacify_shk_round_trips_the_surcharge():
+    """rile_shk's (price + 2) // 3 markup is undone by pacify_shk's
+    (price + 3) // 4 reduction (a 100 -> 133 -> 100 round trip)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    item = _item(int(O.APPLE), dknown=True, id="pc1")
+    w.obj_tables.name_known.add(int(O.APPLE))
+    _bill_item(w, keeper, item)
+    base = eshk.bill[item.id].price
+    shk.rile_shk(keeper)
+    marked = eshk.bill[item.id].price
+    assert marked == base + (base + 2) // 3
+    shk.pacify_shk(keeper, True)  # the new-customer reset's clear
+    assert eshk.bill[item.id].price == base
+    assert eshk.surcharge is False
+    # make_happy_shk's pacify keeps the markup (the shop's memory)
+    shk.rile_shk(keeper)
+    marked = eshk.bill[item.id].price
+    shk.make_happy_shk(w, keeper)
+    assert eshk.bill[item.id].price == marked
+    assert eshk.surcharge is True
+    assert_item_locations(w)
+
+
+def test_rouse_shk_wakes_a_sleeping_keeper():
+    """C: rouse_shk: a sleeping keeper wakes; the 'wakes up' line comes
+    out when the keeper is visible (the hero's current sight)."""
+    m, room, w, keeper = _stocked_shop()
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    vision_recalc(w)
+    keeper.sleeping = 5
+    msgs = _msgs(shk.rouse_shk(w, keeper, True))
+    assert len(msgs) == 1
+    assert "wakes up" in msgs[0]
+    assert keeper.sleeping == 0
+    assert _msgs(shk.rouse_shk(w, keeper, True)) == []  # already awake
+    # an unseen keeper (the closed door blocks the sight) wakes silently
+    keeper.sleeping = 5
+    w.hero.pos = (1, 1)  # outside the room, the door is closed
+    vision_recalc(w)
+    assert _msgs(shk.rouse_shk(w, keeper, True)) == []
+    assert keeper.sleeping == 0
+
+
+def test_make_happy_shk_calmes_a_keeper_at_home():
+    """C: make_happy_shk, the at-home half: the anger and the pursuit
+    clear, the robbery is forgiven, and the angry keeper calms down."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    keeper.mpeaceful = False
+    eshk.following = True
+    eshk.robbed = 40
+    assert keeper.pos == eshk.shk
+    msgs = _msgs(shk.make_happy_shk(w, keeper))
+    assert any("calms down" in x for x in msgs)
+    assert keeper.mpeaceful is True
+    assert eshk.following is False
+    assert eshk.robbed == 0
+    assert keeper.pos == eshk.shk
+
+
+def test_make_happy_shk_sends_a_keeper_home():
+    """C: make_happy_shk's home_shk half (reduced to a square set): a
+    satisfied keeper off its square is set on it again, with the
+    'returns to ... shop' line (the vanished / cross-level / kops
+    halves are named skips)."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    keeper.mpeaceful = False
+    keeper.pos = (1, 1)  # OUTSIDE the shop (inhishop False: the chase)
+    w.hero.pos = _inside_shop_pos(room)
+    vision_recalc(w)
+    assert w.monster_at(eshk.shk) is None  # the home square is free
+    msgs = _msgs(shk.make_happy_shk(w, keeper))
+    assert keeper.pos == eshk.shk
+    assert any("returns to " in x for x in msgs)
+    assert keeper.mpeaceful is True
+
+
+def test_do_pay_compensates_a_robbery_and_calmes_the_keeper():
+    """The 4d satisfaction of do_pay (C's dopay robbery branch, reduced
+    to pay-all): a following / robbed keeper is paid the full bill AND
+    the full robbery, and make_happy_shk settles the keeper."""
+    m, room, w, keeper, eshk, it1, it2 = _billed_shop()
+    eshk.robbed = 50
+    eshk.following = True
+    keeper.mpeaceful = False
+    gold = _item(int(O.GOLD_PIECE), quan=1000, id="payrob1")
+    addinv(w, "player", gold)
+    total = shk.shop_debt(eshk) + eshk.robbed
+    money_before = money_cnt(w.hero)
+    purse_before = _purse(keeper)
+    events = shk.do_pay(w, _rng())
+    msgs = _msgs(events)
+    assert any("You compensate " in x and "50" in x for x in msgs)
+    assert any("calms down" in x for x in msgs)
+    assert any("Thank you for shopping" in x for x in msgs)
+    assert keeper.mpeaceful is True  # pacified
+    assert eshk.following is False
+    assert eshk.robbed == 0
+    assert eshk.billct == 0  # the bill is settled
+    assert money_cnt(w.hero) == money_before - total
+    assert _purse(keeper) == purse_before + total
+    assert_item_locations(w)
+
+
+def test_a_new_customer_resets_the_keeper():
+    """C: u_entered_shop's new-customer reset (the single-player
+    reduction of the plname comparison): the first entry of a fresh
+    account clears the pursuit and the surcharge (pacify_shk with the
+    surcharge cleared) and restarts the visit counter."""
+    m, room, w, keeper = _stocked_shop()
+    eshk = keeper.eshk
+    eshk.robbed = 40  # the robbery ledger survives the reset (C's)
+    eshk.following = True
+    eshk.surcharge = True
+    eshk.visitct = 7
+    keeper.mpeaceful = False
+    eshk.customer = ""  # a fresh customer (C: the plname comparison)
+    inside = _inside_shop_pos(room)
+    w.hero.pos = inside
+    events = shk.track_shop(w, inside)
+    assert eshk.following is False
+    assert eshk.surcharge is False
+    assert eshk.visitct == 0
+    assert keeper.mpeaceful is True
+    # the ladder lands on the robbed line (the welcome is later)
+    assert any("mutters imprecations against shoplifters" in x
+               for x in _msgs(events))

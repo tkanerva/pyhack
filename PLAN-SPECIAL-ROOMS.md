@@ -4,8 +4,22 @@
 (the zoo family) + phase 3 (the swamp) + phase 4a (a stocked shop you
 can rob) + phase 4b (prices, the bill, the Pay) + phase 4c (the police:
 the robbery, the door block, the surcharge, the EF_PAY reprice, the
-death-time inheritance) LANDED; 4d (the dialogue) and 5 (the vault)
-proposed.**  Phase 4c landed as the police in core.shk: `stolen_value`
+death-time inheritance) + phase 4d (the behaviour: the dialogue, the
+honorific, the keeper's movement, the anger state machine) LANDED; 5
+(the vault) proposed.**  Phase 4d landed as the behaviour in core.shk:
+`shkname` (the Mr. / Ms. honorific, replacing the `_shk_bare_name`
+stopgap in the 4c messages), the entry greeting `shk_entered` (C
+u_entered_shop — the deserted / untended line, the new-customer reset,
+the welcome ladder) and the leave warning `shk_left` (C u_left_shop,
+before the 4c robbery on a tracked leave), the `TalkCommand` (`t`) ->
+`shk.talk` -> `shk_chat` (C 5542's branch ladder), the keeper's
+movement `shk_target` (C shk_move — the following chase, the angry
+pursuit, the way home; the greedy single step in core.step's monster
+turn), and the anger state machine `angry_shk_exists` / `rouse_shk` /
+`pacify_shk` / `make_happy_shk` (around 4c's `rile_shk`; `do_pay` now
+pays the full robbery and settles the keeper) — tests in
+tests/test_shop.py (the 4d section, 28 tests).  Phase 4c landed as the
+police in core.shk: `stolen_value`
 (the bill total), `rob_shop` (leaving with an unsettled bill becomes
 `eshk.robbed` + the hostile flip via `rile_shk` / `hot_pursuit` + the
 `surcharge`), `setpaid` (the account settlement), `block_door` (the
@@ -115,6 +129,11 @@ and PLAN-MKOBJ.md (a room full of monsters and treasure needs both), on
 | `getprice(obj, shk_buying)` | shk.c 4341-4380 | the base price and its per-class adjustments | `shk.getprice` (exists, 4b) + `shk.get_cost` (2898-3009, the bill price) |
 | `add_one_tobill` / `billable` / `sub_one_frombill` / `alter_cost` / `stolen_value` / `paybill` | shk.c 3331 / 3473 / 3683 / 3259 / 3776 / 2507 | the bill | `shk.add_one_tobill` / `billable` / `sub_one_frombill` / `onbill` / `shop_debt` (exist, 4b; the *model* of §2.3) + `alter_cost` / `stolen_value` / `paybill` (exist, 4c) |
 | `inside_shop` / `inhishop` / `costly_spot` / `onbill` | shk.c | "which shop is this square in / is this shopkeeper at home / may this cost money / is this on a bill" | `shk.inside_shop` (4a) + `shk.inhishop` / `costly_spot` / `onbill` (exist, 4b) |
+| `u_entered_shop` / `u_left_shop` / `deserted_shop` | shk.c 750 / 578 / 721 | the entry greeting + the new-customer reset; the leave warning; the untended-shop line | `shk.shk_entered` / `shk_left` (exist, 4d) |
+| `shk_chat` | shk.c 5542-5623 | the keeper's one-line comment (C's talk.c dotal reduced to the shopkeeper half, behind the TalkCommand) | `shk.shk_chat` / `shk.talk` (exist, 4d) |
+| `shk_move` | shk.c 4901-5015 | the keeper's movement: the following chase, the angry pursuit, the way home, the door stance | `shk.shk_target` (the target half; the greedy single step in core.step's monster turn; exist, 4d) |
+| `angry_shk_exists` / `pacify_shk` / `rouse_shk` / `make_happy_shk` / `home_shk` | shk.c 1343 / 1356 / 1393 / 1407 / 1329 | the anger state machine around `rile_shk` (4c) | same names (exist, 4d; `home_shk` reduced to a square set) |
+| `shkname` | shknam.c 855-905 | the name + the Mr. / Ms. honorific from the prefix codes (the call-site half, end.c 268-272) | `shk.shkname` (exist, 4d) |
 | `fill_special_room(croom)` | sp_lev.c 2732-… | the **dispatcher** called for *every* room at the end of `makelevel`: shop → `stock_room`, `VAULT` → gold per square, zoo family → `fill_zoo` | `mkroom.fill_special_room` (exists) |
 | the special-room roll | mklev.c 1347-1378 | one special room per level by depth, with the genocide pre-checks (`G_GONE` on leprechaun / killer bee / soldier / cockatrice) and the `depth(medusa_level)` cap | `mklev._roll_special_room` (exists, needs the two missing conditions) |
 
@@ -417,7 +436,7 @@ Not this plan's work, but this plan cannot test anything without them:
    tests updated: the shop is the one unstocked special room left
    (tests/test_mklev.py, tests/test_mkroom.py).
 
-### Phase 4 — shops (4a LANDED; 4b specified; 4c-4d proposed; the `L` in `M→L`)
+### Phase 4 — shops (4a-4d LANDED; the `L` in `M→L`)
 
 **4a — a stocked room you can rob (LANDED)** — landed as described,
 with these notes:
@@ -548,7 +567,7 @@ with these notes:
      `money + credit >= total` gate, the per-entry "You bought ..." +
      `pay_debt` + the gold move (the money2mon source/destination halves,
      no rng draw), and the "Thank you for shopping in ..." closing line
-     (the honorific is 4d, so the bare name).
+     (the 4d honorific applies to it now).
   6. **The credit model — the one deliberate deviation from C's buy
      path.**  The plan's 4b overrides the 4a "credit stays 0" note:
      buying *establishes* credit.  `pay_debt` ports the debit / loan /
@@ -831,12 +850,103 @@ with these notes:
    scroll); the closed shop; paybill (the inheritance, the owed amount,
    all in the shop, no keeper).
 
-**4d — behaviour (1-2 sessions, proposed).**
-  `shk_talk` subset (the greeting, the bill total, "pay for your
-  items", the "please leave" line), `nameshk`-driven `shkname` (the
-  honorific and the prefix stripping), `shk_move` (the greedy pickup of
-  gold `M2_GREEDY` behaviour can wait), `angry_shopkeeper`, and kops
-  **deferred** (no Keystone Kop system yet).
+**4d — behaviour (LANDED)** — landed as described, with these notes:
+
+1. **The dialogue is `shk_entered` (C: u_entered_shop 750-917) on a
+   tracked entry and `shk_left` (C: u_left_shop 578-625) on a tracked
+   leave**, both fired from `track_shop` (core.step's room-entry hook):
+   a keeper that is not at home (dead, or off its square) is the
+   DESERTED line (C deserted_shop 721 — "is deserted" / "is untended" /
+   "seems to be untended" by the monster counts, the sensed half via the
+   hero's current sight; the C empty_shops once-per-game repeat
+   suppression is a named skip); a keeper at home runs C's ladder — the
+   new-customer reset (visitct / following / `pacify_shk(TRUE)`; the
+   single-player reduction of C's plname comparison — the fixed
+   stand-in customer, so it fires on the shop's first entry only), then
+   no dialog while the keeper sleeps or follows (C: muteshk, which for
+   a keeper is the helpless = sleep state), then the anger / surcharge /
+   robbed / welcome lines (the welcome carries the visitct " again").
+   The leave warning lands BEFORE the 4c robbery's lines ("Please pay
+   before leaving." / "Don't you leave without paying!" by the
+   surcharge) — pyhack's strictly-inside model (§5.6) makes the door
+   square *outside*, so the warning and the robbery land on the same
+   move (the named collapse of C's boundary grace, where the hero steps
+   onto the door, hears the warning, and may turn back and pay).
+2. **The `TalkCommand` (`t`) is C's talk.c dotal reduced to the
+   shopkeeper half** (core.step dispatch, the console binds a lone `t`
+   — `t`+letter still takes off, like every other letter command):
+   `shk.talk` targets the keeper of the shop the hero stands in, failing
+   that an adjacent keeper (C's any-visible-monster walk and the
+   non-keeper talk answers are named skips — no monster-target
+   selection, PLAN-INVENT.md phase G), and the keeper answers with
+   `shk_chat` (C 5542-5623): C's branch ladder in C's order — the anger
+   lines (non-paying when robbed, else rude), the following's "Didn't
+   you forget to pay?" (the customer-name comparison collapses: for one
+   hero the stored customer is always the hero), the BILL TOTAL
+   (addupbill + debit), the debit reminder, the credit encouragement, the
+   robbery complaint, the surcharge warning, the purse lines (money_cnt
+   under 50 / over 4000), the shoplifters fallback (the izchak line is a
+   named skip — no towns), and the animated-statue half for a
+   shopkeeper-typed monster that is not a keeper.  The Deaf / muteshk
+   alternate lines and the hero-name slots (svp.plname) are named skips
+   (the verbalized halves with the name dropped).
+3. **The `shkname` honorific replaces the `_shk_bare_name` stopgap**
+   (shknam.c 855 + the call-site half, end.c 268-272): C's shkname()
+   strips the prefix and the Mr. / Ms. honorific is applied from the
+   prefix codes (shknam.c 21-30: PERSONAL names — '-' / '+' / '=' — take
+   none, GENERAL names — '_' / '|' or no prefix — do, by
+   `Monster.female` which nameshk set from the same codes).  The port
+   composes the two halves into one function, and the 4c messages (the
+   robbery, the door block, the do_pay closing line, the inheritance)
+   now use it — the "in Mr. X's general store" compounds take C's
+   possessive `s_suffix`.
+4. **The keeper moves (C: shk_move 4901-5015, the target half as
+   `shk_target`, the greedy single step in core.step's monster turn — a
+   new `isshk` branch before the wander, so a keeper never
+   random-walks)**: a FOLLOWING keeper chases the hero (any distance; C's
+   holetime / m_move deferral halves collapse into the same target), an
+   ANGRY keeper that can see the hero (C: mcansee && m_canseeu — the
+   hero's sight, recalculated in step) pursues it, every other keeper
+   walks HOME (its own square, C: the gtx/gty = eshk->shk default) and
+   stands once it gets there (C: the GDIST < 3 return 0).  Named skips:
+   the M2_GREEDY gold pickup (the plan says it can wait), the chase
+   lines (the followmsg throttle + the 1-in-9 rile roll — the talk
+   answer covers the following branch of shk_chat), the door-stance
+   logic (uondoor / badinv / avoid / satdoor / onlineu),
+   shk_fixes_damage / repair_damage (no repair system), and
+   after_shk_move (no bill_p in the dict bill).
+5. **The anger state machine (C 1343-1449) completes around 4c's
+   `rile_shk`**: `angry_shk_exists` (1343 — any NOTANGRY FALSE; the C
+   caller is the kops cleanup, a named skip), `pacify_shk` (1356 — the
+   (price+3)//4 undo of the (price+2)//3 markup, a 100 -> 133 -> 100
+   round trip; the new-customer reset passes clear, `make_happy_shk`
+   passes keep — the marked-up prices are the shop's memory of the
+   robbery), `rouse_shk` (1393 — the sleep half of C's helpless; the
+   "wakes up" line when the keeper is visible; the paralysis / frozen
+   halves are named skips — no paralysis in pyhack), and `make_happy_shk`
+   (1407 — the anger and the pursuit clear, the robbery is forgiven,
+   a keeper off its square is set on it again with the "calms down" /
+   "returns to its shop" lines; home_shk reduced to a square set, the
+   vanished / cross-level-migration / kops halves named skips).  `do_pay`
+   ends with it: the 4b pay-all now also pays the full robbery when the
+   keeper is angry / following (C's dopay robbery branch reduced to
+   pay-all — the partial-compensation / 1000-gold-appeasement / "after
+   blood, not gold" branches are named skips) and settles the keeper.
+6. **Two new `Eshk` fields** (the only state 4d adds): `visitct` (the
+   shop-visit counter) and `customer` (C's customer[], the fixed
+   stand-in "hero" — pyhack has no player-name system).  No rng draw
+   anywhere in the behaviour chain.
+7. **Tests:** tests/test_shop.py's 4d section (28) — the honorific
+   (general vs personal); the greeting ladder (welcome, welcome again,
+   the dare-return, the unwelcoming, the imprecations, the sleeping /
+   following guards, the deserted / untended counts, the new-customer
+   reset); the leave warning (the calm / upset pair, the ordering before
+   the robbery); talk (the shop keeper via step, the adjacent keeper,
+   the no-one line, the chat ladder in C's order, the non-keeper); the
+   movement (the following chase, the angry pursuit, the way home, the
+   stand-still, via step); the anger machine (angry_shk_exists, the
+   pacify round trip, the rouse, the make_happy calm / send-home); do_pay
+   with the robbery (the compensation + the settling).
 
 ### Phase 5 — the vault (~1 session, optional here)
 
@@ -978,6 +1088,13 @@ adds only prices).
 - [x] shops 4c: policed (`stolen_value`, `eshk.robbed`, `surcharge`,
       `alter_cost`, the door block, `inhishop`'s "closed" state);
       `paybill` (the death-time inventory inheritance)
+- [x] shops 4d: the keeper's behaviour (`shkname` the honorific, the
+      entry greeting / the leave warning on `track_shop`, the
+      `TalkCommand` -> `shk.talk` / `shk_chat`, `shk_target` the
+      following chase / the way home in core.step's monster turn, and
+      the anger state machine `angry_shk_exists` / `rouse_shk` /
+      `pacify_shk` / `make_happy_shk` around `rile_shk` — tested in
+      tests/test_shop.py's 4d section, 28 tests)
 - [x] every STUB in `core/mkroom.py`'s `__all__` either implemented or
       documented as deferred **with the C span** (only `cmap_to_type`
       is left, and it names the defsym table it waits for)

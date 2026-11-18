@@ -143,6 +143,18 @@ class PayCommand:
     """
 
 
+@dataclass(frozen=True)
+class TalkCommand:
+    """Talk (C: 't' -> dotal, src/talk.c), reduced to the shopkeeper half.
+
+    The target is the keeper of the shop the hero stands in, failing that
+    a keeper adjacent to the hero; the keeper answers with its one-line
+    comment (core.shk.shk_chat: the anger line, the bill total, the
+    credit / robbery / business lines, the shoplifters fallback).
+    A turn is spent, as C's talk does.
+    """
+
+
 Command = Union[
     MoveCommand,
     WaitCommand,
@@ -160,4 +172,5 @@ Command = Union[
     PrayCommand,
     OfferCommand,
     PayCommand,
+    TalkCommand,
 ]

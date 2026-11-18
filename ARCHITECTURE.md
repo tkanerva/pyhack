@@ -276,10 +276,24 @@ details live in the PLAN-*.md files and the module docstrings):**
   `block_door` (the keeper holds the shop door while owed, checked in
   core.step's move), `alter_cost` (the EF_PAY reprice, wired into the
   enchant-weapon / enchant-armor scrolls), and `paybill` / `inherits`
-  (the death-time inheritance, hooked into the death path).  Only the
-  shopkeeper's dialogue (4d: `shk_talk` / the `shkname` honorific /
-  `shk_move`) remains; the tribute "special spot" and
-  `set_tin_variety(HEALTHY_TIN)` are named skips.
+  (the death-time inheritance, hooked into the death path).  Phase 4d
+  adds the behaviour (core/shk.py): the dialogue (`shk_entered` the
+  entry greeting — the deserted / untended line, the new-customer
+  reset, the welcome ladder — and `shk_left` the leave warning, both
+  on the `track_shop` hook, the warning before the 4c robbery on a
+  tracked leave), the `TalkCommand` (`t`) -> `shk.talk` / `shk_chat`
+  (C 5542's branch ladder; C's talk.c dotal reduced to the
+  shopkeeper half), the `shkname` honorific (Mr. / Ms. from the
+  prefix codes, replacing the bare-name stopgap in the 4c messages),
+  the keeper's movement (`shk_target`: the `following` chase, the
+  angry pursuit, the way home — the greedy single step in
+  core.step's monster turn, a keeper never random-walks), and the
+  anger state machine (`angry_shk_exists` / `rouse_shk` /
+  `pacify_shk` / `make_happy_shk` around `rile_shk`; `do_pay` pays
+  the full robbery and settles the keeper); the named skips (kops,
+  M2_GREEDY, the door-stance logic, the Deaf / muteshk / plname
+  halves) are in the module docstring.  The tribute "special spot"
+  and `set_tin_variety(HEALTHY_TIN)` are named skips.
 - The inventory core (PLAN-INVENT.md phase A, core/invent.py): the
   port of the item half of src/invent.c, and the **single writer** of
   the PACK half of an item's where-state (`addinv` / `freeinv` /
@@ -449,10 +463,15 @@ temple itself has landed with it, queue item 1):
    the hostile flip / `surcharge`, the door block `block_door`, the
    EF_PAY reprice `alter_cost` (wired into the enchant scrolls), and
    the death-time inheritance `paybill` / `inherits`;
-   tests/test_shop.py's 4c section).  What is left of the plan is 4d
-   the dialogue (`shk_talk`, the `shkname` honorific, `shk_move`) --
-   and, optionally, the vault (phase 5).  shk.c is billing before it is
-   a room, which is why the shop is last and lands in sub-phases.
+   tests/test_shop.py's 4c section) and the shop's behaviour
+   (4d: the dialogue `shk_entered` / `shk_left` on the `track_shop`
+   hook, the `TalkCommand` -> `shk.talk` / `shk_chat`, the `shkname`
+   honorific, the keeper's movement `shk_target` in core.step's
+   monster turn, and the anger state machine `angry_shk_exists` /
+   `rouse_shk` / `pacify_shk` / `make_happy_shk`; tests/test_shop.py's
+   4d section).  What is left of the plan is, optionally, the vault
+   (phase 5).  shk.c is billing before it is a room, which is why the
+   shop is last and lands in sub-phases.
 2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),

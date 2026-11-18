@@ -25,6 +25,7 @@ from core.commands import (
     ReadCommand,
     StairsCommand,
     TakeOffCommand,
+    TalkCommand,
     WaitCommand,
     WearCommand,
     ZapCommand,
@@ -107,10 +108,12 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     one class, `*` for what is worn / wielded, `$` for the wallet --
     listings, so they cost no turn), `>` to go down the stairs / `<` to
     climb up (C: the '>' / '<' commands), `p` to pay the shop bill
-    (C: 'p' -> dopay, src/shk.c -- pay all, no menu), `#pray` /
-    `#offer` for the shrine commands (C: the extended commands,
-    src/cmd.c do_extcmd -- both refuse until src/pray.c lands);
-    anything else is a wait.
+    (C: 'p' -> dopay, src/shk.c -- pay all, no menu), a lone `t` to talk
+    (C: 't' -> dotal, the shopkeeper half: the keeper of the shop you
+    stand in answers, else an adjacent keeper -- `t<letter>` still takes
+    off), `#pray` / `#offer` for the shrine commands (C: the extended
+    commands, src/cmd.c do_extcmd -- both refuse until src/pray.c
+    lands); anything else is a wait.
     """
     if world.occupation is not None:
         # C: while an occupation runs the bottom line shows the
@@ -147,6 +150,10 @@ def read_command(world: World, prompt: str = "Move: ") -> Optional[Command]:
     # shop you stand in (PLAN-SPECIAL-ROOMS.md phase 4b)
     if key == "p":
         return PayCommand()
+    # the talk command (C: 't' -> dotal): the lone `t` (the t+letter
+    # take-off is matched below, like every other letter command)
+    if key == "t":
+        return TalkCommand()
     # the close command (C: doclose, one step in a direction): 'x' +
     # an axis letter ('c' already casts, so close moved to 'x'); a
     # lone 'x' is a wait, like a lone 'q'
