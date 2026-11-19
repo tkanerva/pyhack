@@ -469,9 +469,13 @@ temple itself has landed with it, queue item 1):
    honorific, the keeper's movement `shk_target` in core.step's
    monster turn, and the anger state machine `angry_shk_exists` /
    `rouse_shk` / `pacify_shk` / `make_happy_shk`; tests/test_shop.py's
-   4d section).  What is left of the plan is, optionally, the vault
-   (phase 5).  shk.c is billing before it is a room, which is why the
-   shop is last and lands in sub-phases.
+   4d section) and the vault (phase 5: `create_vault`'s 2x2
+   reservation in makerooms, makelevel's sealed lit VAULT block --
+   the double-filled hoard, the vtele niche, the shop roll's
+   `++room_threshold`; tests/test_vault.py).  The plan is complete
+   (the vault.c guard stays a separate system).  shk.c is billing
+   before it is a room, which is why the shop is last and lands in
+   sub-phases.
 2. **The genesis residue** (independent of 1, interleavable):
    phase E's `m_initweap` / `m_initinv` species tables (monster
    inventories; the `mongets` / `mkmonmoney` mechanism is in),

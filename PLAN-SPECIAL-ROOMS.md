@@ -5,8 +5,19 @@
 can rob) + phase 4b (prices, the bill, the Pay) + phase 4c (the police:
 the robbery, the door block, the surcharge, the EF_PAY reprice, the
 death-time inheritance) + phase 4d (the behaviour: the dialogue, the
-honorific, the keeper's movement, the anger state machine) LANDED; 5
-(the vault) proposed.**  Phase 4d landed as the behaviour in core.shk:
+honorific, the keeper's movement, the anger state machine) + phase 5
+(the vault: the sealed 2x2 room, the double-filled hoard, the vtele
+entrance) LANDED -- the plan is complete.**  Phase 5 landed as the
+vault in core.mklev: `create_vault` (C's mklev.c 53 *macro* --
+`create_room(-1, -1, 2, 2, -1, -1, VAULT, TRUE)` -- reserving the 2x2
+spot out of the free rectangles in makerooms, no room, no terrain),
+the vault block of makelevel (C 1319-1345 -- check_room at the
+reserved spot, the one fresh try, `add_room` the sealed lit 2x2 VAULT
+as the level's last room, `flags.has_vault`, the immediate
+fill_special_room gold, makevtele the 2-in-3 time, and the
+`++room_threshold` the shop roll reads), and C's double fill kept
+(needfill never cleared; mkgold merges the two draws per square).
+Phase 4d landed as the behaviour in core.shk:
 `shkname` (the Mr. / Ms. honorific, replacing the `_shk_bare_name`
 stopgap in the 4c messages), the entry greeting `shk_entered` (C
 u_entered_shop — the deserted / untended line, the new-customer reset,
@@ -135,7 +146,8 @@ and PLAN-MKOBJ.md (a room full of monsters and treasure needs both), on
 | `angry_shk_exists` / `pacify_shk` / `rouse_shk` / `make_happy_shk` / `home_shk` | shk.c 1343 / 1356 / 1393 / 1407 / 1329 | the anger state machine around `rile_shk` (4c) | same names (exist, 4d; `home_shk` reduced to a square set) |
 | `shkname` | shknam.c 855-905 | the name + the Mr. / Ms. honorific from the prefix codes (the call-site half, end.c 268-272) | `shk.shkname` (exist, 4d) |
 | `fill_special_room(croom)` | sp_lev.c 2732-… | the **dispatcher** called for *every* room at the end of `makelevel`: shop → `stock_room`, `VAULT` → gold per square, zoo family → `fill_zoo` | `mkroom.fill_special_room` (exists) |
-| the special-room roll | mklev.c 1347-1378 | one special room per level by depth, with the genocide pre-checks (`G_GONE` on leprechaun / killer bee / soldier / cockatrice) and the `depth(medusa_level)` cap | `mklev._roll_special_room` (exists, needs the two missing conditions) |
+| the vault (create_vault + the makelevel block) | mklev.c 53 (the macro) / 1319-1345 (the block), sp_lev.c 1502-1579 (create_room's vault path) | the 2x2 VAULT room: reserved in makerooms (from 6 rooms, 50/50, once per level), re-added after the corridors (sealed, lit, the level's last room), the gold per square (twice — inline + the end-of-level loop, merged by mkgold), the vtele niche, the `++room_threshold` the shop roll reads | `mklev.create_vault` + the `_add_vault` block in `mklev.makelevel` (exists, phase 5) |
+| the special-room roll | mklev.c 1347-1378 | one special room per level by depth, with the genocide pre-checks (`G_GONE` on leprechaun / killer bee / soldier / cockatrice), the `depth(medusa_level)` cap and the `room_threshold` room count (4 when a vault is present) | `mklev._roll_special_room` (exists; the conditions completed in phase 2, the threshold in phase 5) |
 
 ---
 
@@ -948,13 +960,76 @@ with these notes:
    pacify round trip, the rouse, the make_happy calm / send-home); do_pay
    with the robbery (the compensation + the settling).
 
-### Phase 5 — the vault (~1 session, optional here)
+### Phase 5 — the vault (LANDED) — landed as described, with these notes
 
-`create_vault` + the `VAULT` fill branch (phase 2.4) gives the room and
-the hoard. The **guard** (`src/vault.c`, 1,292 L: `invault`,
-`gd_move`, `fakecorr[]`, `paygd`) is a separate system and stays out of
-scope — without it a vault is "a secret room full of gold", which is
-most of the fun and none of the cost.
+1. **`create_vault` is C's macro, not a function** (mklev.c 53:
+   `#define create_vault() create_room(-1, -1, 2, 2, -1, -1, VAULT,
+   TRUE)`) — the function index never lists it, and the plan's "the
+   vault is `create_vault` (src/mkroom.c)" was stale on both counts
+   (it is in mklev.c, and it is not a function).  The vault path runs
+   through create_room (sp_lev.c 1485): `dx = dy = 1` (a 2x2 interior
+   — create_room's rooms are dx + 1 wide), `xlim++` / `ylim++` for the
+   VAULT rtype (1502-1505, and check_room's vault margin), the 100-try
+   loop (the `rnd_rect()` NULL is an immediate FALSE, "No more
+   rects..."), and — instead of add_room — `split_rects` reserves the
+   bounding box and the position is the scratch-slot write (C:
+   `svr.rooms[svn.nroom].lx = xabs`, the slot's `hx` set to -1 by the
+   caller).  No room record, no terrain: the reservation is rectangle
+   bookkeeping only.
+2. **makerooms() takes the attempt** (C 403-410): from
+   MAXNROFROOMS / 6 rooms, once per level (the `tried_vault` local),
+   on the `rn2(2)` test — C's short-circuit order kept, so the rn2(2)
+   draw is taken on every iteration from the sixth room on, the
+   attempt only on the first nonzero answer.  makerooms() returns the
+   reservation (or None), and makelevel() does the rest.
+3. **The vault block of makelevel (C 1319-1345)**, after make_niches
+   and before the special-room roll: check_room at the reserved spot
+   (the vault margin — the 2x2 box cannot shrink, so any non-STONE in
+   the margin is a refusal), failing that one fresh try (the
+   `rnd_rect() && create_vault()` half, abandoned on the second
+   refusal); then the `fill_vault` half in C's order — `add_room(lit,
+   VAULT)` (the room is the level's LAST: after the sort and the
+   corridors, so nothing is ever dug into it), `flags.has_vault`,
+   `needfill = FILL_NORMAL`, the IMMEDIATE fill_special_room (the
+   gold), and makevtele() the 2-in-3 time (the SCORR niche with its
+   TELEPORTATION trap behind a secret door: the way into an otherwise
+   sealed vault — ported with phase 2's niche machinery, wired here).
+   Named skip: mk_knox_portal (the Fort Ludios portal — pyhack has no
+   dungeon branch system; its rn2(3) draw is not taken).
+4. **C fills the vault twice.**  The inline fill + the end-of-level
+   fill loop (needfill is never cleared anywhere in C — verified by
+   grep), and mkgold merges into the existing pile: the hoard is the
+   sum of TWO `rn1(depth * 100, 51)` draws per square (the 2x2 room =
+   four piles).  The port reproduces the double fill — the rng stands
+   where C leaves it, and the hoard is fuller for it.
+5. **`++room_threshold`** (C 1331) feeds the special-room roll: a
+   level with a vault needs FOUR rooms for the shop roll, not three.
+   Threaded as `_roll_special_room`'s `threshold` argument (3 / 4
+   from the vault block's answer).
+6. **Grid size decides:** the vault needs a level with six or more
+   rooms — the 40x20 demo grid usually makes 2..6 and never reaches
+   the threshold (0 vaults in 60 seeds), the C-sized 80x21 makes
+   ~8 and vaults 40% of the time (24 in 60).  Faithful to C at each
+   size; the tests run on 80x21.
+7. **The vault.c guard stays out of scope** (1,292 L: `invault`,
+   `gd_move`, `fakecorr[]`, `paygd` — the guard that watches the
+   gold, digs the fake corridors, and collects payment): a separate
+   system.  Without it the vault is "a secret room full of gold",
+   reachable through the vtele niche — most of the fun and none of
+   the cost.  `mvault_tele` (the teleport-into-the-vault half,
+   teleport.c) and `uleftvault` wait for it.
+8. **Tests:** tests/test_vault.py (9) — the reservation's no-room /
+   no-terrain shape and the cleared bounding box, the size / empty-
+   rectangle refusals, makerooms's once-per-level attempt (C-sized
+   grid), makelevel's sealed lit 2x2 vault (the last room, FILL_NORMAL
+   kept, no door, the stone ring, the double-filled gold 102..2*(lev
+   * 100 + 50) per pile), makevtele's niche directly (SCORR + SDOOR +
+   TELEPORTATION), the vault block directly (the one-fill range, the
+   entrance on the 2-in-3 roll), the no-reservation refusal, and the
+   room-threshold raise (the same 3-room level shops at threshold 3,
+   refuses at 4); tests/test_mklev.py's three structural tests gained
+   the sealed-vault exception (the room type, the reachability, the
+   door count).
 
 ---
 
@@ -1043,7 +1118,7 @@ most of the fun and none of the cost.
 | unblocked | was |
 |---|---|
 | `_roll_special_room`'s depth ladder | `NotImplementedError` for shop/temple/swamp |
-| the vault room type + hoard | STUB |
+| the vault (the room + the hoard + the vtele entrance) | STUB (LANDED, phase 5 — the vault.c guard stays out) |
 | `#pray`, `#offer`, `#pay`, `#donate` commands | non-existent |
 | special levels' `des.room({type="zoo"})`, `des.altar({type="shrine"})` | PLAN-SPLEV.md |
 | the shop as a *system* (`shk.c` behaviours) | this plan's 4b-4d |
@@ -1098,5 +1173,11 @@ adds only prices).
 - [x] every STUB in `core/mkroom.py`'s `__all__` either implemented or
       documented as deferred **with the C span** (only `cmap_to_type`
       is left, and it names the defsym table it waits for)
+- [x] the vault (phase 5): `create_vault` (C's mklev.c 53 macro — the
+      2x2 reservation in makerooms, no room, no terrain) + the
+      makelevel vault block (the sealed lit 2x2 VAULT room, the
+      double-filled hoard — mkgold merges C's two fills per square —,
+      the vtele niche, the `++room_threshold` the shop roll reads;
+      the vault.c guard stays out of scope — tests/test_vault.py)
 - [x] `PROGRESS`/`CHANGES.md`: a `## Wave 5: special rooms` section
       (CHANGES.md carries one section per phase)

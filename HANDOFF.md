@@ -3,209 +3,145 @@
 ## 1. Task & scope
 Port NetHack (C, cloned at `../NetHack`) to pyhack, following the
 PLAN-*.md specs and ARCHITECTURE.md's "Suggested next steps" queue.
-This session executed queue item 1's seventh staging: **Wave 5, phase
-4d (PLAN-SPECIAL-ROOMS.md) — the shop's behaviour: the dialogue, the
-`shkname` honorific, the keeper's movement, and the anger state
-machine.**  That closes the `shk.c` port: the keeper now speaks
-(`shk_entered` / `shk_left` on the `track_shop` hook, `shk_chat` behind
-the `TalkCommand`), is addressed by honorific (Mr. / Ms. from the
-name-prefix gender codes, replacing the `_shk_bare_name` stopgap in the
-4c messages), moves (the `following` chase after a robbery, the angry
-pursuit, the way home — the greedy single step in core.step's monster
-turn), and is settled by the anger state machine
-(`angry_shk_exists` / `rouse_shk` / `pacify_shk` / `make_happy_shk`
-around 4c's `rile_shk`; `do_pay` pays the full robbery and calms the
-keeper).  Only the vault (phase 5, optional) remains of the plan.
+This session executed queue item 1's last staging: **Wave 5, phase 5
+(PLAN-SPECIAL-ROOMS.md) — the vault: the sealed 2x2 room, the
+double-filled hoard, the vtele entrance.**  That completes the plan:
+every room type in the special-room roll is now a real, stocked,
+walkable system (temple, zoo family, swamp, shop 4a-4d, vault), and
+the next session is a new queue item, not a new phase of Wave 5.
 
 ## 2. Status
-**Done (this session, to commit):** `core/shk.py` gained the behaviour
-section (the C spans are in the module docstring): `shkname` (shknam.c
-855 + the call-site honorific, end.c 268-272 — the prefix codes
-shknam.c 21-30: PERSONAL names take no honorific, GENERAL names do, by
-`Monster.female`; the 4c messages — the robbery, the door block, the
-do_pay closing line, the inheritance — now use it, the "in Mr. X's
-general store" compounds take C's possessive `s_suffix`), `shk_entered`
-(C: u_entered_shop 750-917 — the DESERTED line (C deserted_shop 721:
-"is deserted" / "is untended" / "seems to be untended" by the monster
-counts, the sensed half via the hero's sight), the new-customer reset
-(visitct / following / `pacify_shk(TRUE)`, the single-player reduction
-of the plname comparison), no dialog while sleeping / following, then
-the anger / surcharge / robbed / welcome lines (the welcome carries the
-visitct " again")), `shk_left` (C: u_left_shop 578-625 — "Please pay
-before leaving." / "Don't you leave without paying!" by the surcharge;
-fires on a tracked leave BEFORE the 4c robbery's lines), `shk.talk`
-(C: talk.c's dotal reduced to the shopkeeper half: the keeper of the
-shop the hero stands in, failing that an adjacent keeper) + `shk_chat`
-(C 5542-5623 — C's branch ladder in C's order: the anger lines, the
-pursuit, the BILL TOTAL, the debit, the credit, the robbery, the
-surcharge, the purse lines under 50 / over 4000, the shoplifters
-fallback, the animated-statue half for a non-keeper), `shk_target` (C:
-shk_move 4901-5015, the target half: the following chase, the angry
-pursuit when the keeper sees the hero, the way home, stand still at
-home), and the anger state machine `angry_shk_exists` (1343) /
-`pacify_shk` (1356 — the (price+3)//4 undo of the (price+2)//3 markup,
-a 100 -> 133 -> 100 round trip) / `rouse_shk` (1393 — the sleep half of
-C's helpless) / `make_happy_shk` (1407 — the anger and the pursuit
-clear, the robbery is forgiven, a keeper off its square is set on it
-again with the "calms down" / "returns to its shop" lines; home_shk
-reduced to a square set).  `track_shop` fires the greeting / the leave
-warning; `core/step.py`: the `TalkCommand` dispatch and the `isshk`
-branch of the monster turn (the greedy single step onto
-`shk_target`, before the wander — a keeper never random-walks);
-`do_pay` ends with `make_happy_shk` (the 4b pay-all now also pays the
-full robbery when the keeper is angry / following — C's dopay robbery
-branch reduced to pay-all); `core/commands.py` + `ui/console.py`: the
-`TalkCommand` (`t`; a lone `t` — `t`+letter still takes off);
-`core/types.py`: the two new `Eshk` fields (`visitct` / `customer`, the
-fixed stand-in "hero").  Tests — 28 new in tests/test_shop.py's 4d
-section.  Docs (the plan's 4d record + status header + the §1 rows +
-the DoD 4d line + the stale 4b note, CHANGES, the ARCHITECTURE shop
-bullet + queue item 1, the module docstring).  1361 tests green, mypy
-clean over 102 files, flake8 clean.  The demo path is untouched (it
-never calls makelevel with specials=True, so no shop exists and the
-new hooks are no-ops).
+**Done (this session, to commit):** `core/mklev.py` gained the vault
+(the C spans are in the module docstring and the function
+docstrings): `create_vault` (C: the mklev.c 53 *macro*
+`create_room(-1, -1, 2, 2, -1, -1, VAULT, TRUE)`, running through
+create_room's vault path — `dx = dy = 1`, the `xlim++` / `ylim++`
+margin, the 100-try loop — reserving the 2x2 spot out of the free
+rectangles, split_rects only: no room record, no terrain, the
+position is the scratch-slot write), the vault attempt in
+`makerooms` (C 403-410: from MAXNROFROOMS / 6 rooms, the
+`tried_vault` once-per-level local, the `rn2(2)` test in C's
+short-circuit order; the return is the reservation or None),
+`check_room`'s `vault` margin parameter (C: `xlim = XLIM + (vault ?
+1 : 0)`), the `_add_vault` block of makelevel (C 1319-1345:
+check_room at the reserved spot, the one fresh try, `add_room` the
+sealed lit 2x2 VAULT as the level's LAST room, `flags.has_vault`,
+`needfill = FILL_NORMAL`, the IMMEDIATE fill_special_room gold,
+makevtele the 2-in-3 time), `makevtele` (C: makeniche with the
+TELEPORTATION trap), and `_roll_special_room`'s `threshold` argument
+(C's `++room_threshold`: 4 when a vault is present, 3 otherwise).
+C's double fill kept: the inline fill + the end-of-level loop
+(needfill never cleared in C), mkgold merging the two
+`rn1(depth * 100, 51)` draws per square.  Named skips: the vault.c
+guard (`invault` / `gd_move` / `fakecorr` / `paygd`) and
+`mk_knox_portal` (no dungeon branch system; its rn2(3) draw not
+taken).  Tests — 9 new in tests/test_vault.py (on the C-sized 80x21
+grid; the 40x20 demo grid never reaches the six-room threshold) +
+the sealed-vault exception in tests/test_mklev.py's three
+structural tests.  Docs (the plan's phase-5 record + status header +
+§1 rows + DoD, the ARCHITECTURE queue item 1, CHANGES, this
+HANDOFF).  1370 tests green, mypy clean over 103 files, flake8
+clean.  The demo path is untouched (0 vaults in 60 seeds on 40x20).
 
 **Done (earlier, committed):** phase 1 — the temple (core/priest.py);
-phase 2 — the zoo family; phase 3 — the swamp (+ core.engrave); phase
-4a — a stocked shop (core/shknam_data.py + core/shk.py + mkshop);
-phase 4b — the billing half (the price chain, the bill model, the Pay
-command); phase 4c — the police (the robbery, the door block, the
-surcharge, the EF_PAY reprice, the death-time inheritance).
+phase 2 — the zoo family; phase 3 — the swamp (+ core.engrave);
+phase 4a — a stocked shop (core/shknam_data.py + core/shk.py +
+mkshop); phase 4b — the billing half (the price chain, the bill
+model, the Pay command); phase 4c — the police (the robbery, the
+door block, the surcharge, the EF_PAY reprice, the death-time
+inheritance); phase 4d — the behaviour (the dialogue, the honorific,
+the keeper's movement, the anger state machine).
 
-**Not done (the rest of Wave 5, in the plan's order):**
-- **Phase 5 — the vault** (~1 session, optional here): `create_vault`
-  + the `VAULT` fill branch (phase 2.4) gives the room and the hoard;
-  the **guard** (`src/vault.c`: `invault`, `gd_move`, `fakecorr[]`,
-  `paygd`) is a separate system and stays out of scope — without it a
-  vault is "a secret room full of gold", which is most of the fun and
-  none of the cost.
+**Not done (the rest of Wave 5):** nothing — the plan is complete.
+- Out of scope by name, whenever it wants to land: the vault.c
+  guard (a separate system: `invault`, `gd_move`, `fakecorr[]`,
+  `paygd` — without it the vault is "a secret room full of gold",
+  reachable through the vtele niche), and `mvault_tele` /
+  `uleftvault` (teleport.c — wait for the guard).
 - Interleaveable from the ARCHITECTURE queue: item 2 (the genesis
   residue — `m_initweap` / `m_initinv`, `splitobj` + merge rules, the
-  mkobj_erosions residue), item 4 (wire QuaffCommand), item 5 (scrolls
-  STUBs).
+  mkobj_erosions residue), item 4 (wire QuaffCommand), item 5
+  (scrolls STUBs), item 6 (the full `mmove()`).
 
 ## 3. Files to read first
-1. `PLAN-SPECIAL-ROOMS.md` — the status header + **phase 4d as
-   rewritten (the record of what landed and why, including the named
-   skips)** + phase 5 (the next work) + §5 (the deliberate
+1. `PLAN-SPECIAL-ROOMS.md` — the status header (the plan is
+   complete) + **phase 5 as rewritten (the record of what landed and
+   why, including the named skips)** + §5 (the deliberate
    divergences) + §6 (the traps).
-2. `core/shk.py` — the behaviour section (`shkname` from the police
-   section on: `shk_chat` / `talk` / `shk_entered` / `_deserted_line` /
-   `shk_left` / `shk_target`, the anger machine `angry_shk_exists` /
-   `rouse_shk` / `pacify_shk` / `make_happy_shk` around `rile_shk`, the
-   `track_shop` greeting / leave warning, the `do_pay` settling) + the
-   module docstring's "what this phase deliberately leaves out" list
-   (now the 4d skip list).
-3. `core/step.py` — the two 4d hooks: the `TalkCommand` dispatch and
-   the `isshk` branch of `_monster_turn` (the `shk_target` step before
-   the wander).
-4. `tests/test_shop.py` — the 4d section (28 tests) and the 4a/4b/4c
-   shapes (`_room_map` / `_FixedRng` / `_stocked_shop` / `_billed_shop`
-   / `_inside_shop_pos` / `_bill_item`).
-5. The C spans — via the c_function_index tooling, never a C file
-   whole: the vault is `src/mkroom.c` `create_vault` (the room) +
-   `src/vault.c` (the guard, out of scope); `fill_special_room`'s VAULT
-   gold branch already exists in core.mkroom (phase 2).
+2. `core/mklev.py` — `create_vault` + `makerooms` (the vault
+   attempt), `check_room` (the `vault` margin), `_add_vault` +
+   `makevtele` + `makelevel` (the vault block is step 6 of
+   makelevel's documented order), and the module docstring's STUB
+   list (the vault's guard + Knox are the named skips).
+3. `tests/test_vault.py` — the 9 tests (the reservation shape, the
+   refusals, the once-per-level attempt, the sealed vault + hoard,
+   the vtele niche, the block directly, the threshold raise).
+4. The C spans — via the c_function_index tooling, never a C file
+   whole: `create_room` (sp_lev.c 1485, the vault path at
+   1502-1579), the mklev.c 53 macro, the makelevel vault block
+   (1319-1345); the guard is `src/vault.c` (out of scope).
 
 ## 4. Key discoveries
-- **The new-customer reset PACIFIES first.**  C's u_entered_shop fires
-  the reset (`visitct = 0`, `following = 0`, `pacify_shk(TRUE)`) when
-  the customer is new — BEFORE the greeting ladder — so a FRESH account
-  entering an angry shop is welcomed, not dared-at (the dare-return /
-  unwelcoming lines need an ESTABLISHED account, the customer already
-  recorded — the fixed stand-in, so after the first entry / a robbery).
-  The tests set `eshk.customer` accordingly; the reset test asserts the
-  ladder lands on the robbed line (the robbery ledger survives the
-  reset, as in C).
-- **The leave warning and the robbery land on the SAME move** (the
-  named collapse of C's boundary grace): C's in_rooms counts the door
-  square as still inside, so the hero hears "Please pay before leaving"
-  on the door and may turn back; pyhack's strictly-inside model
-  (§5.6) makes the door square outside, so `track_shop`'s leave branch
-  fires `shk_left` and then `rob_shop` in one move (the warning is the
-  lead-in to the robbery's lines — the ordering is tested).
-- **`shk_target` is the target half of C's shk_move; the movement is
-  core.step's.**  The `isshk` branch of `_monster_turn` runs the greedy
-  single step (`_step_toward`) onto the target — the same machinery as
-  the other monsters' chase, so the keeper never random-walks.  C's
-  ladder, reduced: a FOLLOWING keeper chases the hero (any distance),
-  an ANGRY keeper that can see the hero (C: mcansee && m_canseeu — the
-  hero's sight, `vision_recalc`d in step) pursues it, every other
-  keeper walks HOME and stands once it gets there (C: the GDIST < 3
-  return 0).  Named skips: M2_GREEDY gold pickup, the chase lines
-  (followmsg throttle + the 1-in-9 rile roll), the door-stance logic
-  (uondoor / badinv / avoid / satdoor / onlineu), shk_fixes_damage,
-  after_shk_move.
-- **The honorific is one composed function.**  C strips the prefix in
-  `shkname()` and applies Mr. / Ms. at the call site (end.c 268-272)
-  from the prefix codes (PERSONAL '-' / '+' / '=' take none, GENERAL
-  '_' / '|' or no prefix do, by `Monster.female` — which nameshk set
-  from the same codes); the port composes both halves (the
-  HANDOFF's stopgap replacement), and the 4c messages use it.
-  `_shk_bare_name` remains as the internal half it is built from.
-- **`make_happy_shk` keeps the markup; the new-customer reset clears
-  it.**  `pacify_shk` takes the flag: the reset passes True (the
-  (price+3)//4 undo, a 100 -> 133 -> 100 round trip),
-  `make_happy_shk` passes False (the marked-up prices are the shop's
-  memory of the robbery — a satisfied keeper does not forget).
-- **`do_pay`'s satisfaction (the 4d end of the 4b pay-all):** a
-  following / robbed keeper is paid the full bill AND the full robbery
-  in one `p` (C's dopay robbery branch reduced to pay-all — the
-  partial-compensation / 1000-gold-appeasement / "after blood, not
-  gold" branches are named skips), and `make_happy_shk` settles the
-  keeper (the anger / pursuit clear, the robbery is forgiven, a keeper
-  off its square goes home).
-- **The seeded `_stocked_shop` test world has TWO mimics** (mon_4 at
-  (5,5), mon_12 at (6,7)) and the keeper "Asidonhopo" (no prefix -> the
-  general-name honorific "Mr. Asidonhopo", purse 3340 — in between the
-  50 / 4000 purse lines, so the chat ladder's fallback is the
-  shoplifters line).  The movement / talk tests keep the hero at
-  (10,8) — not adjacent to keeper or mimics (a monster adjacent to the
-  hero attacks instead of moving) — and the "returns home" test needs
-  the keeper's own square (5,4) free, which it is.
-- **The untended counts are the hero's sight.**  `_deserted_line`
-  counts the monsters in the room (n) and the ones the hero can see
-  (m, `mon_visible` — `could_see` from the hero's tile): n == 0 ->
-  "is deserted", m < n -> "seems to be untended", m == n -> "is
-  untended".  Before a `vision_recalc` nothing is seen (m == 0), which
-  is how the test pins both halves without moving the hero.
-- **No rng draw in the behaviour chain** (the dialogue, the movement's
-  target choice and the anger machine are pure state; the movement's
-  single step reuses the monster turn's existing `rng.choice`).  Two
-  new `Eshk` fields only: `visitct` / `customer`.
-- **Named skips (4d):** the C dopay "after blood, not gold" /
-  1000-gold-appeasement / partial-compensation branches (the pay-all
-  model pays the full robbery and the keeper calms), the C shk_move
-  door-stance logic and chase lines, the M2_GREEDY gold pickup,
-  shk_fixes_damage / repair_damage (no repair system), the C empty_shops
-  once-per-game repeat suppression (a dead keeper's shop can say it is
-  deserted again on each re-entry), the Deaf / muteshk alternate lines
-  and the hero-name slots (svp.plname — the verbalized halves with the
-  name dropped), the C u_left_shop newlev / leavestring half (a
-  level-change / teleport leave is a named escape the police do not
-  see), and the izchak line of shk_chat (no towns).
+- **`create_vault` is C's macro, not a function** (mklev.c 53:
+  `#define create_vault() create_room(-1, -1, 2, 2, -1, -1, VAULT,
+  TRUE)`) — the function index never lists it, and the plan's
+  "the vault is `create_vault` (src/mkroom.c)" was stale on both
+  counts (it is in mklev.c, and it is not a function).  Read the
+  span before porting (the plan's trap, again).
+- **The vault is the one room C does NOT add to the level in
+  makerooms.**  The reservation is split_rects + the scratch-slot
+  write (`svr.rooms[svn.nroom].lx = xabs`, the slot's `hx` set to -1
+  by the caller) — no room record, no terrain.  makelevel re-adds
+  it as the level's LAST room (after the sort and the corridors),
+  which is why nothing is ever dug into it: the room's `doorct` is
+  0 and its ring is stone.
+- **C fills the vault twice, and mkgold makes it one pile per
+  square.**  The inline fill + the end-of-level fill_special_room
+  loop (needfill is never cleared anywhere in C — verified by
+  grep); mkgold merges into the existing pile, so each of the four
+  interior squares is the sum of TWO `rn1(depth * 100, 51)` draws
+  (102..2*(depth*100+50) at depth 5).  The port reproduces the
+  double fill: the rng stands where C leaves it.
+- **The grid size decides whether a vault exists.**  The vault
+  attempt starts at MAXNROFROOMS / 6 rooms — the 40x20 demo grid
+  usually makes 2..6 and never reaches the threshold (0 vaults in
+  60 seeds), the C-sized 80x21 makes ~8 and vaults ~40% (24 in
+  60).  The tests run on 80x21; the demo is untouched by
+  construction.
+- **The vault margin is one square wider all round** (C: `xlim++` /
+  `ylim++` for the VAULT rtype at 1502-1505, and `xlim = XLIM +
+  (vault ? 1 : 0)` in check_room) — the extra room for the wall ring
+  and the vtele niche that may be dug into a room next to the
+  vault.  Here check_room() takes it as a parameter; create_vault()
+  uses the widened constants directly (the documented
+  simplification in the module docstring).
+- **`++room_threshold` (C 1331) is a shop-roll condition, not a
+  flag.**  A level with a vault needs FOUR rooms for the shop roll,
+  not three — threaded as `_roll_special_room`'s `threshold`
+  argument (3 / 4 from the vault block's answer).  The test pins
+  the same 3-room level: it shops at threshold 3 and refuses at 4.
+- **The vtele niche reuses phase 2's niche machinery:** makevtele =
+  makeniche(TRAP_TELEPORTATION) — the SCORR niche with its
+  TELEPORTATION trap behind a secret door, the only way into an
+  otherwise sealed vault.  `makeniche` skips non-OROOM rooms, so
+  the niche is always dug into an ordinary room next to the vault.
 - The pytest tool's `paths` are relative to the workspace root and
-  currently resolve to a container mount that doesn't see the files —
-  run the full suite with no paths (as always).
+  currently resolve to a container mount that doesn't see the files
+  — run the full suite with no paths (as always).
 
 ## 5. Next steps
-1. **Wave 5, phase 5: the vault** (PLAN-SPECIAL-ROOMS.md §Phase 5,
-   ~1 session, optional): `create_vault` (src/mkroom.c) + the `VAULT`
-   fill branch (the gold per square; the dispatcher half already
-   exists in core.mkroom.fill_special_room, phase 2).  The **guard**
-   (src/vault.c: `invault`, `gd_move`, `fakecorr[]`, `paygd`) is a
-   separate system and stays out of scope — without it a vault is "a
-   secret room full of gold".  Verify the vault's room shape against
-   the span before porting (the plan's trap: read the span, not the
-   session summaries).
-2. Same commit: the plan's phase-5 record + status header + DoD line,
-   the CHANGES.md entry, and this HANDOFF rewritten for what follows
-   (the queue items below).
-3. Interleaveable: the genesis residue (queue item 2 — `m_initweap` /
-   `m_initinv`, `splitobj` + the merge rules, the mkobj_erosions
-   residue), the QuaffCommand wire-up (item 4 — `q` quits, so the quaff
-   key is to choose), the scrolls STUBs (item 5 — SCR_DESTROY_ARMOR
-   around the already-real `worn.disintegrate_arm`, SCR_LIGHT,
-   SCR_CONFUSE_MONSTER).
-4. Keep HANDOFF.md updated per the 5 sections above; keep every PLAN
-   status header in sync in the same commit.
+1. **The queue moves on** (ARCHITECTURE.md, in dependency order):
+   item 2 the genesis residue (interleavable — `m_initweap` /
+   `m_initinv`, `splitobj` + the merge rules, the
+   mkobj_erosions residue), item 4 the QuaffCommand wire-up (`q`
+   quits, so the quaff key is to choose), item 5 the scrolls STUBs
+   (SCR_DESTROY_ARMOR around the already-real
+   `worn.disintegrate_arm`, SCR_LIGHT, SCR_CONFUSE_MONSTER), item 6
+   the full `mmove()`.
+2. If the vault's guard ever lands (src/vault.c, 1,292 L:
+   `invault`, `gd_move`, `fakecorr[]`, `paygd` — the guard that
+   watches the gold, digs the fake corridors, and collects
+   payment), it brings `mvault_tele` (teleport.c) and `uleftvault`
+   with it; without it the vault is "a secret room full of gold".
+3. Keep HANDOFF.md updated per the 5 sections above; keep every
+   PLAN status header in sync in the same commit.

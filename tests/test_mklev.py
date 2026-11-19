@@ -235,9 +235,10 @@ def test_makelevel_builds_rooms_and_corridors(seed):
     world, m = _gen(seed)
     assert m.rooms, "the generator must make rooms"
     assert m.flags.is_cavernous_lev is False
-    # every room is a real rectangle of standable floor
+    # every room is a real rectangle of standable floor (the vault is
+    # the one non-ordinary room: PLAN-SPECIAL-ROOMS.md phase 5)
     for room in m.rooms:
-        assert room.rtype == RoomType.OROOM
+        assert room.rtype in (RoomType.OROOM, RoomType.VAULT)
         # the corner is ROOM floor -- or one of the furniture kinds
         # fill_ordinary_room() places, because find_okay_roompos() draws
         # somexyspace() over the whole room rectangle, corners included
@@ -273,6 +274,10 @@ def test_every_room_is_reachable_from_the_hero_side(seed):
     assert stairs, "the level must have staircases"
     reach = _reachable(m, stairs[0])
     for room in m.rooms:
+        if room.rtype == RoomType.VAULT:
+            # C: the sealed vault -- "not connected to the rest", the
+            # way in is the teleport niche (phase 5), not a corridor
+            continue
         inside = [
             (x, y)
             for x in range(room.lx, room.hx + 1)
@@ -285,14 +290,24 @@ def test_every_room_is_reachable_from_the_hero_side(seed):
 
 @pytest.mark.parametrize("seed", [1, 2, 3, 42, 1337])
 def test_every_room_is_entered_through_a_door(seed):
-    """Rooms connect through doors, not through holes in the wall."""
+    """Rooms connect through doors, not through holes in the wall.
+
+    The vault is the exception on both counts: C's vault has no door
+    at all (nothing is dug into it -- the entrance is the vtele
+    niche), so the level-wide door count is short by one when a
+    vault is present.
+    """
     world, m = _gen(seed)
     for room in m.rooms:
+        if room.rtype == RoomType.VAULT:
+            assert room.doorct == 0, "the vault has no door (C)"
+            continue
         assert room.doorct >= 1, f"room {room.lx},{room.ly} has no door"
         for door in room.doors:
             assert m.tile_at(door).typ in (TerrainType.DOOR, TerrainType.SDOOR)
     # doors are level-wide bookkeeping too (C: svd.doors[])
-    assert len(m.doors) >= len(m.rooms)
+    vaults = sum(1 for r in m.rooms if r.rtype == RoomType.VAULT)
+    assert len(m.doors) >= len(m.rooms) - vaults
 
 
 @pytest.mark.parametrize("seed", [1, 2, 3, 42, 1337])

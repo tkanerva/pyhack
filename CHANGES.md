@@ -5,6 +5,93 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The vault (Wave 5, phase 5)
+
+**Why:** the last staging of queue item 1 (PLAN-SPECIAL-ROOMS.md
+phase 5): the shop is complete (4a-4d) and the vault was the only
+item of the plan left — a secret room of gold, sealed off from the
+level.  After this, Wave 5 is done.
+
+**The choices:**
+
+1. **`create_vault` is C's macro, not a function** (mklev.c 53:
+   `create_room(-1, -1, 2, 2, -1, -1, VAULT, TRUE)`) — the function
+   index never lists it, and the plan's "`create_vault` (src/
+   mkroom.c)" was stale on both counts (mklev.c, and a macro).  The
+   vault path runs through create_room (sp_lev.c 1485): `dx = dy = 1`
+   (a 2x2 interior — create_room's rooms are dx + 1 wide), `xlim++` /
+   `ylim++` for the VAULT rtype (1502-1505, and check_room's vault
+   margin), the 100-try loop (the `rnd_rect()` NULL is an immediate
+   FALSE, "No more rects..."), and — instead of add_room —
+   `split_rects` reserves the bounding box and the position is the
+   scratch-slot write (C: `svr.rooms[svn.nroom].lx = xabs`, the
+   slot's `hx` set to -1 by the caller).  No room record, no
+   terrain: the reservation is rectangle bookkeeping only.  Here
+   check_room() takes the vault margin as a parameter and
+   create_vault() uses the widened constants directly (the
+   documented simplification in the module docstring).
+2. **makerooms() takes the attempt** (C 403-410): from
+   MAXNROFROOMS / 6 rooms, once per level (the `tried_vault` local),
+   on the `rn2(2)` test — C's short-circuit order kept, so the rn2(2)
+   draw is taken on every iteration from the sixth room on, the
+   attempt only on the first nonzero answer.  makerooms() returns the
+   reservation (or None), and makelevel() does the rest.
+3. **The vault block of makelevel (C 1319-1345)** — `_add_vault`,
+   after make_niches and before the special-room roll: check_room at
+   the reserved spot (the vault margin — the 2x2 box cannot shrink,
+   so any non-STONE in the margin is a refusal), failing that one
+   fresh try (the `rnd_rect() && create_vault()` half, abandoned on
+   the second refusal); then the `fill_vault` half in C's order —
+   `add_room(lit, VAULT)` (the room is the level's LAST: after the
+   sort and the corridors, so nothing is ever dug into it),
+   `flags.has_vault`, `needfill = FILL_NORMAL`, the IMMEDIATE
+   fill_special_room (the gold), and makevtele() the 2-in-3 time
+   (the SCORR niche with its TELEPORTATION trap behind a secret
+   door: the way into an otherwise sealed vault — phase 2's niche
+   machinery, wired here).
+4. **C fills the vault twice, and the port keeps it.**  The inline
+   fill + the end-of-level fill_special_room loop (needfill is never
+   cleared anywhere in C — verified by grep), and mkgold merges into
+   the existing pile: each of the four interior squares is the sum
+   of TWO `rn1(depth * 100, 51)` draws (the rng stands where C
+   leaves it, and the hoard is fuller for it).
+5. **`++room_threshold` (C 1331) feeds the shop roll:** a level with
+   a vault needs FOUR rooms for the shop roll, not three — threaded
+   as `_roll_special_room`'s `threshold` argument (3 / 4 from the
+   vault block's answer).
+6. **Grid size decides:** the vault needs a level with six or more
+   rooms — the 40x20 demo grid usually makes 2..6 and never reaches
+   the threshold (0 vaults in 60 seeds), the C-sized 80x21 makes
+   ~8 and vaults ~40% of the time (24 in 60).  Faithful to C at each
+   size; the tests run on 80x21.
+
+**Named skips:** the vault.c guard (1,292 L: `invault`, `gd_move`,
+`fakecorr[]`, `paygd` — the guard that watches the gold, digs the
+fake corridors, and collects payment: a separate system, without it
+the vault is "a secret room full of gold" reachable through the
+vtele niche — `mvault_tele` and `uleftvault` wait for it), and
+`mk_knox_portal` (the Fort Ludios portal — pyhack has no dungeon
+branch system; its rn2(3) draw is not taken).
+
+**Tests:** tests/test_vault.py (9, on the C-sized 80x21 grid) — the
+reservation's no-room / no-terrain shape and the cleared bounding
+box, the size / empty-rectangle refusals, makerooms's
+once-per-level attempt, makelevel's sealed lit 2x2 vault (the last
+room, FILL_NORMAL kept, no door, the stone ring, the double-filled
+hoard 102..2*(lev*100+50) per pile), makevtele's niche directly
+(SCORR + SDOOR + TELEPORTATION), the vault block directly (the
+one-fill range, the entrance on the 2-in-3 roll), the
+no-reservation refusal, and the shop-threshold raise (the same
+3-room level shops at threshold 3, refuses at 4);
+tests/test_mklev.py's three structural tests gained the
+sealed-vault exception (the room type, the reachability, the door
+count).
+
+mypy clean over 103 files, flake8 clean, 1370 tests green (9 new);
+the demo's pinned seeds, layouts and messages are unchanged (the
+40x20 demo grid never reaches the vault's six-room threshold, so no
+vault exists on the demo path and the new block is a no-op).
+
 ## The shop: the keeper's behaviour (Wave 5, phase 4d)
 
 **Why:** queue item 1 finished (PLAN-SPECIAL-ROOMS.md phase 4d): 4c

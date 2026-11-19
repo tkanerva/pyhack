@@ -33,16 +33,22 @@ C provenance:
 
 Included: the whole rooms/corridors/doors pipeline, in the C draw
 order, so a later port of the stocking half does not have to re-derive
-the sequence.
+the sequence -- and the vault (PLAN-SPECIAL-ROOMS.md phase 5):
+create_vault() reserves the 2x2 VAULT room out of the free rectangles
+in makerooms(), and the vault block of makelevel() re-adds it after
+the corridors (sealed, lit, FILL_NORMAL -- the gold comes from the
+end-of-level fill_special_room loop, the entrance from makevtele).
 
 STUBs (announced where they are, never silently skipped):
 
   - the Lua themed-room hook of makerooms() (themerms_generate and
     friends): C loads dat/*.lua per dungeon; pyhack has no Lua and no
     themed rooms, so makerooms() is the plain rectangle loop.
-  - the vault (create_vault() / do_vault() / mk_knox_portal()): needs
-    the special-room stocking (fill_special_room, mkgold) plus the
-    portal machinery.  makelevel() never asks for one.
+  - the vault's guard (src/vault.c: the gd_move / fakecorr / paygd
+    system) and the Knox portal (mk_knox_portal, the Fort Ludios
+    branch): a separate system, out of scope for phase 5 -- without it
+    the vault is a sealed room of gold reachable through the vtele
+    niche.  mk_knox_portal's rn2(3) draw is not taken.
   - fill_ordinary_room()'s contents: the monster comes from the real
     distribution (core.makemon -- the old three-demo-kind subset is
     gone) and the traps from the demo trap kit (mktrap() below).  The
@@ -71,8 +77,10 @@ Simplifications (documented, not bugs):
   - the level's size comes from the Map, not COLNO/ROWNO: the C
     expressions are evaluated on map.width / map.height, so the demo
     grid stays 40x20 and a bigger grid needs no change.
-  - `create_room`'s xlim/ylim are only widened for VAULT in C; with no
-    vault the two constants are XLIM / YLIM throughout.
+  - `create_room`'s xlim/ylim are widened by one for the vault (C:
+    sp_lev.c 1502-1505); here check_room() takes the vault margin as
+    a parameter and create_vault() uses the widened constants
+    directly.
   - C's impossible() calls become refusals (None / False): a generated
     level must never abort the game over a geometry edge case, and
     every refusal is commented with the C branch it stands for.
@@ -106,6 +114,7 @@ from .monst import G_GONE, PM_COCKATRICE, PM_KILLER_BEE, PM_LEPRECHAUN, PM_SOLDI
 from .monst_defs import align2amask
 from .types import (
     FILL_NONE,
+    FILL_NORMAL,
     LevelFlags,
     MAXNROFROOMS,
     ROOMOFFSET,
@@ -496,7 +505,13 @@ def sort_rooms(map_: Map) -> None:
 
 
 def check_room(
-    map_: Map, lowx: int, lowy: int, ddx: int, ddy: int, rng
+    map_: Map,
+    lowx: int,
+    lowy: int,
+    ddx: int,
+    ddy: int,
+    rng,
+    vault: bool = False,
 ) -> Optional[Tuple[int, int, int, int]]:
     """C: sp_lev.c#check_room -- is the (lowx, lowy) + (ddx, ddy) box
     clear of everything else?
@@ -505,6 +520,11 @@ def check_room(
     should use, or None when the spot is taken.  C shrinks the box
     around the offending terrain and re-checks, with a 1-in-3 bail-out
     each time -- that is why rooms can end up smaller than asked for.
+
+    `vault` keeps one more square of margin all round (C: `xlim =
+    XLIM + (vault ? 1 : 0)` -- the vault wants the extra room for its
+    wall ring and the teleport niche that may be dug into a room next
+    to it).
     """
     width, height = map_.width, map_.height
     hix = lowx + ddx
@@ -517,15 +537,17 @@ def check_room(
         hix = width - 3
     if hiy > height - 3:
         hiy = height - 3
+    xlim = XLIM + (1 if vault else 0)
+    ylim = YLIM + (1 if vault else 0)
     while True:
         if hix <= lowx or hiy <= lowy:
             return None
         shrunk = False
-        for x in range(lowx - XLIM, hix + XLIM + 1):
+        for x in range(lowx - xlim, hix + xlim + 1):
             if x <= 0 or x >= width:
                 continue
-            y0 = max(lowy - YLIM, 0)
-            ymax = min(hiy + YLIM, height - 1)
+            y0 = max(lowy - ylim, 0)
+            ymax = min(hiy + ylim, height - 1)
             for y in range(y0, ymax + 1):
                 if map_.tiles[y][x].typ == TerrainType.STONE:
                     continue
@@ -534,13 +556,13 @@ def check_room(
                 if not rng.rn2(3):
                     return None
                 if x < lowx:
-                    lowx = x + XLIM + 1
+                    lowx = x + xlim + 1
                 else:
-                    hix = x - XLIM - 1
+                    hix = x - xlim - 1
                 if y < lowy:
-                    lowy = y + YLIM + 1
+                    lowy = y + ylim + 1
                 else:
-                    hiy = y - YLIM - 1
+                    hiy = y - ylim - 1
                 shrunk = True
                 break
             if shrunk:
@@ -706,17 +728,96 @@ def create_room(
     return room
 
 
-def makerooms(map_: Map, rects: RectManager, rng, depth: int, smeq: List[int]) -> None:
+def create_vault(map_: Map, rects: RectManager, rng) -> Optional[Pos]:
+    """C: mklev.c's `create_vault()` macro (mklev.c 53) --
+    `create_room(-1, -1, 2, 2, -1, -1, VAULT, TRUE)`: reserve a spot
+    for the 2x2 vault out of a random free rectangle.
+
+    The vault is the one room C does NOT add to the level here: it
+    reserves its rectangle (split_rects) and remembers only the
+    top-left of its 2x2 interior (C: the scratch write
+    `svr.rooms[svn.nroom].lx = xabs`, the slot's `hx` set to -1 by the
+    caller).  makelevel() re-adds the room in the vault block -- after
+    the corridors, so nothing is ever dug into it -- when it comes to
+    it.  Returns the interior's top-left, or None when no free
+    rectangle fits it (C: "No more rects..." / the 100-try give-up).
+
+    The size is C's: `dx = dy = 1` in create_room's vocabulary, i.e.
+    a 2x2 interior (create_room's rooms are dx + 1 wide), with the
+    kept margin one square wider all round (C: create_room's `xlim++`
+    for the VAULT rtype, and check_room's vault margin).  The
+    bottom-edge nudge of C's random branch is kept draw for draw (its
+    `dy > 1` shrink is never true for the vault, dy is 1).
+    """
+    width, height = map_.width, map_.height
+    xlim = XLIM + 1  # C: create_room's `xlim++` for the VAULT rtype
+    ylim = YLIM + 1
+    dx = dy = 1  # C: the vault is a 2x2 room (create_room's dx + 1)
+    xabs = yabs = 0
+    r1: Optional[Rect] = None
+    r2 = Rect(0, 0, 0, 0)
+    for _trycnt in range(1, 101):
+        r1 = rects.rnd_rect(rng)
+        if r1 is None:
+            return None  # C: "No more rects..."
+        hx, hy, lx, ly = r1.hx, r1.hy, r1.lx, r1.ly
+        xborder = 2 * xlim if (lx > 0 and hx < width - 1) else xlim + 1
+        yborder = 2 * ylim if (ly > 0 and hy < height - 1) else ylim + 1
+        if hx - lx < dx + 3 + xborder or hy - ly < dy + 3 + yborder:
+            continue
+        xbase = lx if lx > 0 else 3
+        ybase = ly if ly > 0 else 2
+        xabs = lx + (xlim if lx > 0 else 3) + rng.rn2(hx - xbase - dx - xborder + 1)
+        yabs = ly + (ylim if ly > 0 else 2) + rng.rn2(hy - ybase - dy - yborder + 1)
+        if (
+            ly == 0
+            and hy >= height - 1
+            and (not map_.rooms or not rng.rn2(len(map_.rooms)))
+            and yabs + dy > height // 2
+        ):
+            yabs = rng.rn1(3, 2)
+            # C: `if (svn.nroom < 4 && dy > 1) dy--;` -- never true for
+            # the vault (dy is 1), so the shrink is not ported
+        res = check_room(map_, xabs, yabs, dx, dy, rng, vault=True)
+        if res is None:
+            continue
+        xabs, yabs, dx, dy = res
+        r2 = Rect(xabs - 1, yabs - 1, xabs + dx + 1, yabs + dy + 1)
+        break
+    else:
+        return None  # C: 100 tries, "creation of room failed?"
+    rects.split_rects(r1, r2)
+    return (xabs, yabs)  # C: the scratch-slot write; no room, no terrain
+
+
+def makerooms(
+    map_: Map, rects: RectManager, rng, depth: int, smeq: List[int]
+) -> Optional[Pos]:
     """C: mklev.c#makerooms -- fill the level with rooms.
 
-    C first gives the dungeon's Lua themed-room script a chance on every
-    iteration and takes a detour into the vault once (create_vault);
-    neither is ported (see the module docstring), so this is the plain
-    `while there is free space: create_room()` loop.
+    C gives the dungeon's Lua themed-room script a chance on every
+    iteration (not ported, see the module docstring) and, once the
+    level has MAXNROFROOMS / 6 rooms, the vault one chance (the
+    `tried_vault` local, the `rn2(2)` test): create_vault() reserves
+    its 2x2 spot out of the free rectangles WITHOUT adding a room --
+    makelevel() re-adds it after the corridors, so nothing connects to
+    it.  The return is the vault's top-left, or None.
     """
+    tried_vault = False
+    vault_pos: Optional[Pos] = None
     while len(map_.rooms) < MAXNROFROOMS - 1 and rects.rnd_rect(rng) is not None:
+        if len(map_.rooms) >= MAXNROFROOMS // 6:
+            # C: `svn.nroom >= (MAXNROFROOMS / 6) && rn2(2) && !tried_vault`
+            # -- the rn2(2) draw is taken on every iteration from the
+            # sixth room on (short-circuit order kept), the attempt only
+            # on the first nonzero answer.
+            if rng.rn2(2) and not tried_vault:
+                tried_vault = True
+                vault_pos = create_vault(map_, rects, rng)
+                continue
         if create_room(map_, rects, rng, depth, smeq=smeq) is None:
             break
+    return vault_pos
 
 
 # ============================================================
@@ -1840,7 +1941,13 @@ def _gone(world: World, mndx: int) -> bool:
 
 
 def _roll_special_room(
-    world: World, map_: Map, rng, depth: int, stairs: List[Stairway], lev: int
+    world: World,
+    map_: Map,
+    rng,
+    depth: int,
+    stairs: List[Stairway],
+    lev: int,
+    threshold: int = 3,
 ) -> None:
     """C: the special-room roll of makelevel() -- at most one special
     room per level, its type chosen by depth.
@@ -1857,10 +1964,13 @@ def _roll_special_room(
     (core.mkroom.fill_zoo / core.shk.stock_room), and the swamp
     is fully ported (core.mkroom.mkswamp -- the pools + eels / fungus,
     PLAN-SPECIAL-ROOMS.md phase 3).
+
+    `threshold` is C's `room_threshold` (the minimum number of rooms
+    for the shop roll: 3, raised to 4 by the vault block's
+    `++room_threshold` -- a level with a vault needs four rooms).
     """
     traps = [t for t in world.traps.values() if t.lev == lev]
     nrooms = len(map_.rooms)
-    threshold = 3
     # C: `u_depth < depth(&medusa_level)` -- the shop only rolls above
     # the medusa level.  pyhack has no dungeon branches, so the cap is
     # faked as world.max_lev - 5 (PLAN-SPECIAL-ROOMS.md decision 10).
@@ -1894,27 +2004,100 @@ def _roll_special_room(
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.COCKNEST)
 
 
+def _add_vault(
+    world: World,
+    map_: Map,
+    rects: RectManager,
+    rng,
+    depth: int,
+    lev: int,
+    vault_pos: Optional[Pos],
+) -> bool:
+    """C: the vault block of mklev.c#makelevel (1319-1345) -- turn the
+    2x2 spot reserved in makerooms() into a real, sealed, lit VAULT
+    room.
+
+    C's order: check_room at the reserved position (the vault margin),
+    failing that one fresh try (the `rnd_rect() && create_vault()`
+    half); then the `fill_vault` half -- add_room (the room is the
+    level's LAST, after the sort and the corridors, so nothing is ever
+    dug into it), flags.has_vault, the needfill and the IMMEDIATE
+    fill_special_room (the gold), and makevtele() the 2-in-3 time (the
+    teleport niche: the way into an otherwise sealed vault).
+
+    C then fills the vault a SECOND time in the end-of-level
+    fill_special_room loop (needfill is never cleared), and mkgold
+    merges the two draws per square -- the hoard is the sum of two
+    rn1(depth * 100, 51) draws per square, and that is what this port
+    reproduces (the rng stands where C leaves it).
+
+    Named skip: mk_knox_portal (the Fort Ludios portal -- pyhack has
+    no dungeon branch system; its rn2(3) draw is not taken).
+
+    Returns whether a vault room was added: C answers the
+    `++room_threshold` with it (a level with a vault needs four rooms
+    for the shop roll, not three).
+    """
+    if vault_pos is None:
+        return False
+    w = h = 1
+    res = check_room(map_, vault_pos[0], vault_pos[1], w, h, rng, vault=True)
+    if res is None:
+        # C: `else if (rnd_rect() && create_vault())` -- one fresh try
+        if rects.rnd_rect(rng) is None:
+            return False
+        vault_pos = create_vault(map_, rects, rng)
+        if vault_pos is None:
+            return False
+        res = check_room(
+            map_, vault_pos[0], vault_pos[1], w, h, rng, vault=True
+        )
+        if res is None:
+            return False  # C: the scratch slot's `hx = -1` (abandon)
+    # C: add_room(vault_x, vault_y, vault_x + w, vault_y + h, TRUE,
+    # VAULT, FALSE) -- the check_room-updated box (w = ddx).
+    room = add_room(
+        map_, res[0], res[1], res[0] + res[2], res[1] + res[3],
+        True, RoomType.VAULT,
+    )
+    map_.flags.has_vault = True
+    room.needfill = FILL_NORMAL
+    traps = [t for t in world.traps.values() if t.lev == lev]
+    fill_special_room(world, rng, map_, traps, room, lev)
+    # C: mk_knox_portal(vault_x + w, vault_y + h) -- named skip (no
+    # dungeon branch system; the draw is not taken).
+    if not map_.flags.noteleport and not rng.rn2(3):
+        makevtele(world, map_, rng, depth, lev)
+    return True
+
+
 def makelevel(world: World, map_: Map, rng, lev: int, specials: bool = False) -> Map:
     """C: mklev.c#makelevel + mklev() -- generate one rooms+corridors
     level into `map_` (which arrives all STONE).
 
     The order is C's and is the interesting part of this function:
 
-      1. makerooms()      -- rooms out of the free rectangles
+      1. makerooms()      -- rooms out of the free rectangles (and the
+                             vault's 2x2 spot reserved, PLAN-SPECIAL-
+                             ROOMS.md phase 5)
       2. sort_rooms()     -- left to right, so neighbours get corridors
       3. generate_stairs()-- INSIDE rooms, before the corridors exist
       4. makecorridors()  -- the doors and the corridors between them
       5. make_niches()    -- the alcoves in the outer walls
-      6. [special room]   -- at most one, by depth (the temple, the
+      6. [the vault]      -- the reserved spot becomes a sealed, lit
+                             VAULT room (the gold, the vtele niche;
+                             raises the shop roll's room threshold)
+      7. [special room]   -- at most one, by depth (the temple, the
                              zoo family, the shop and the swamp are in,
                              see _roll_special_room)
-      7. fill_ordinary_room() for every room -- monsters and traps
-      8. fill_special_room() for every room -- the end-of-level
+      8. fill_ordinary_room() for every room -- monsters and traps
+      9. fill_special_room() for every room -- the end-of-level
          stocking loop (C: "Fill all special rooms now"): the vault's
-         gold-per-square, the zoo family through fill_zoo, the flags
-      9. level_finalize_topology() -- stamp the room numbers
+         gold-per-square (its second fill -- mkgold merges the two),
+         the zoo family through fill_zoo, the flags
+      10. level_finalize_topology() -- stamp the room numbers
 
-    Steps 7 and 8 are in that order only because C splits them between
+    Steps 8 and 9 are in that order only because C splits them between
     makelevel() and mklev(); filling does not need the room numbers.
     """
     clear_level_structures(world, map_, lev)
@@ -1922,7 +2105,7 @@ def makelevel(world: World, map_: Map, rng, lev: int, specials: bool = False) ->
     rects = RectManager(map_)
     smeq: List[int] = []
     stairs: List[Stairway] = []
-    makerooms(map_, rects, rng, depth, smeq)
+    vault_pos = makerooms(map_, rects, rng, depth, smeq)
     if not map_.rooms:
         # C panics; a level with no rooms cannot be walked on
         raise RuntimeError("makelevel: no rooms were created")
@@ -1930,13 +2113,22 @@ def makelevel(world: World, map_: Map, rng, lev: int, specials: bool = False) ->
     generate_stairs(map_, stairs, rng, lev, world.max_lev)
     makecorridors(map_, rng, depth, smeq)
     make_niches(world, map_, rng, depth, lev)
+    # C: the vault block -- the reserved 2x2 becomes a real, sealed,
+    # lit VAULT room; the answer raises the shop roll's room threshold
+    # (C: `++room_threshold`).
+    has_vault = _add_vault(world, map_, rects, rng, depth, lev, vault_pos)
     if specials:
-        _roll_special_room(world, map_, rng, depth, stairs, lev)
+        _roll_special_room(
+            world, map_, rng, depth, stairs, lev,
+            threshold=4 if has_vault else 3,
+        )
     for room in list(map_.rooms):
         fill_ordinary_room(world, map_, rng, room, lev, depth)
     # C: "Fill all special rooms now, regardless of whether this is a
     # special level, proto level, or ordinary level."  The traps list
     # is rebuilt here so the zoo fill sees the ordinary rooms' traps.
+    # The vault's room is here too: its second gold fill (mkgold
+    # merges it into the inline fill's pile).
     traps = [t for t in world.traps.values() if t.lev == lev]
     for room in list(map_.rooms):
         fill_special_room(world, rng, map_, traps, room, lev)
@@ -1974,6 +2166,7 @@ __all__ = [
     "count_level_features",
     "create_room",
     "create_subroom",
+    "create_vault",
     "dig_corridor",
     "do_room_or_subroom",
     "dodoor",
