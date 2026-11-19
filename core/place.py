@@ -57,12 +57,33 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from .mondata import (amorphous, is_clinger, is_floater, is_flyer,
-                      is_swimmer, likes_lava, passes_walls, throws_rocks)
+from .mondata import (
+    amorphous,
+    is_clinger,
+    is_floater,
+    is_flyer,
+    is_swimmer,
+    likes_lava,
+    passes_walls,
+    throws_rocks,
+)
 from .monst import PM_FLOATING_EYE, PerMonst, S_EEL
-from .types import (GP_ALLOW_U, GP_ALLOW_XY, GP_AVOID_MONPOS, GP_CHECKSCARY,
-                    MM_IGNORELAVA, MM_IGNOREWATER, Map, Pos, World,
-                    accessible, is_door, is_lava, is_pool, is_wall)
+from .types import (
+    GP_ALLOW_U,
+    GP_ALLOW_XY,
+    GP_AVOID_MONPOS,
+    GP_CHECKSCARY,
+    MM_IGNORELAVA,
+    MM_IGNOREWATER,
+    Map,
+    Pos,
+    World,
+    accessible,
+    is_door,
+    is_lava,
+    is_pool,
+    is_wall,
+)
 
 # C: teleport.c MAX_GOOD -- how many candidates enexto_core() collects on
 # the ring it settles on before it stops looking.
@@ -72,6 +93,7 @@ MAX_GOOD = 15
 # ------------------------------------------------------------
 # Small predicates (C: teleport.c / hack.h macros)
 # ------------------------------------------------------------
+
 
 def m_in_air(mdat: PerMonst) -> bool:
     """C: m_in_air -- the monster is off the ground.  STUB: the C
@@ -101,8 +123,7 @@ def closed_door(map_: Map, pos: Pos) -> bool:
     return is_door(tile.typ) and not tile.is_door_open()
 
 
-def onscary(world: World, map_: Map, lev: int, pos: Pos,
-            mdat: PerMonst) -> bool:
+def onscary(world: World, map_: Map, lev: int, pos: Pos, mdat: PerMonst) -> bool:
     """C: onscary -- is `pos` a square this monster is afraid of?
 
     STUB: the two sources are a scroll of scare monster lying on the
@@ -129,9 +150,16 @@ def _boulder_at(world: World, lev: int, pos: Pos) -> bool:
 # goodpos (C: src/teleport.c goodpos)
 # ------------------------------------------------------------
 
-def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
-            mdat: Optional[PerMonst] = None,
-            gpflags: int = 0) -> bool:
+
+def goodpos(
+    world: World,
+    rng,
+    map_: Map,
+    lev: int,
+    pos: Pos,
+    mdat: Optional[PerMonst] = None,
+    gpflags: int = 0,
+) -> bool:
     """Is `pos` a good position for a monster of type `mdat` (or, with
     mdat None, for an object)?  C: teleport.c#goodpos.
 
@@ -171,8 +199,7 @@ def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
             # water is not ACCESSIBLE.  C's hero case is not modelled;
             # water levels are unported, so the Is_waterlevel /
             # is_waterwall tests are constantly false.
-            return is_swimmer(mdat) or (not is_waterwall(pos)
-                                        and m_in_air(mdat))
+            return is_swimmer(mdat) or (not is_waterwall(pos) and m_in_air(mdat))
         elif mdat.mlet == S_EEL and rng.rn2(13) and not ignorewater:
             # an eel out of water is refused 12 times in 13 (C draws
             # this, which is why goodpos() takes the level's rng)
@@ -193,12 +220,10 @@ def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
     # C: accessible() -- ACCESSIBLE() *and* not a closed door, which is
     # what stops a land monster being put behind one (monmove.c)
     if not accessible(typ) or closed_door(map_, pos):
-        if not (is_pool(typ) and ignorewater) \
-                and not (is_lava(typ) and ignorelava):
+        if not (is_pool(typ) and ignorewater) and not (is_lava(typ) and ignorelava):
             return False
 
-    if _boulder_at(world, lev, pos) \
-            and (mdat is None or not throws_rocks(mdat)):
+    if _boulder_at(world, lev, pos) and (mdat is None or not throws_rocks(mdat)):
         return False
 
     # C: `is_exclusion_zone(LR_MONGEN, x, y)` when avoid_monpos -- a
@@ -210,8 +235,10 @@ def goodpos(world: World, rng, map_: Map, lev: int, pos: Pos,
 # enexto (C: src/teleport.c enexto / enexto_gpflags / enexto_core)
 # ------------------------------------------------------------
 
-def enexto(world: World, rng, map_: Map, lev: int, origin: Pos,
-           mdat: Optional[PerMonst] = None) -> Optional[Pos]:
+
+def enexto(
+    world: World, rng, map_: Map, lev: int, origin: Pos, mdat: Optional[PerMonst] = None
+) -> Optional[Pos]:
     """The nearest good square to `origin` for a monster of type `mdat`,
     or None.  C: enexto -- GP_CHECKSCARY first, then without it.
 
@@ -224,21 +251,32 @@ def enexto(world: World, rng, map_: Map, lev: int, origin: Pos,
     return enexto_core(world, rng, map_, lev, origin, mdat, 0)
 
 
-def enexto_gpflags(world: World, rng, map_: Map, lev: int, origin: Pos,
-                   mdat: Optional[PerMonst] = None,
-                   entflags: int = 0) -> Optional[Pos]:
+def enexto_gpflags(
+    world: World,
+    rng,
+    map_: Map,
+    lev: int,
+    origin: Pos,
+    mdat: Optional[PerMonst] = None,
+    entflags: int = 0,
+) -> Optional[Pos]:
     """C: enexto_gpflags -- like enexto with caller flags, both passes
     keeping them (the scary check is added to the first)."""
-    got = enexto_core(world, rng, map_, lev, origin, mdat,
-                      GP_CHECKSCARY | entflags)
+    got = enexto_core(world, rng, map_, lev, origin, mdat, GP_CHECKSCARY | entflags)
     if got is not None:
         return got
     return enexto_core(world, rng, map_, lev, origin, mdat, entflags)
 
 
-def enexto_core(world: World, rng, map_: Map, lev: int, origin: Pos,
-                mdat: Optional[PerMonst] = None,
-                entflags: int = 0) -> Optional[Pos]:
+def enexto_core(
+    world: World,
+    rng,
+    map_: Map,
+    lev: int,
+    origin: Pos,
+    mdat: Optional[PerMonst] = None,
+    entflags: int = 0,
+) -> Optional[Pos]:
     """C: enexto_core -- walk the square rings around `origin` outwards
     and take a random one of the good squares on the first ring that has
     any (at most MAX_GOOD of them, which is also where C stops).
@@ -291,8 +329,7 @@ def enexto_core(world: World, rng, map_: Map, lev: int, origin: Pos,
 
     if not good:
         # C: the caller may allow <xx,yy> itself as the last resort
-        if allow_xx_yy and goodpos(world, rng, map_, lev, origin, mdat,
-                                   entflags):
+        if allow_xx_yy and goodpos(world, rng, map_, lev, origin, mdat, entflags):
             return origin
         return None
     # C: i = rn2(good_ptr - good) -- one of the candidates, at random
@@ -300,8 +337,18 @@ def enexto_core(world: World, rng, map_: Map, lev: int, origin: Pos,
 
 
 __all__ = [
-    "GP_ALLOW_XY", "GP_ALLOW_U", "GP_CHECKSCARY", "GP_AVOID_MONPOS",
+    "GP_ALLOW_XY",
+    "GP_ALLOW_U",
+    "GP_CHECKSCARY",
+    "GP_AVOID_MONPOS",
     "MAX_GOOD",
-    "closed_door", "enexto", "enexto_core", "enexto_gpflags", "goodpos",
-    "is_waterwall", "m_in_air", "may_passwall", "onscary",
+    "closed_door",
+    "enexto",
+    "enexto_core",
+    "enexto_gpflags",
+    "goodpos",
+    "is_waterwall",
+    "m_in_air",
+    "may_passwall",
+    "onscary",
 ]

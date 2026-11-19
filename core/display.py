@@ -71,16 +71,35 @@ Stubs (marked STUB; each needs machinery that is not ported yet):
     `dark_room` display option (S_darkroom is defined but never
     written: an unlit floor draws as stone -- the no-color build).
 """
+
 from __future__ import annotations
 
 from typing import Dict, Optional
 
-from .glyph import (CMAP_CHARS, GLYPH_CMAP_OFF, GLYPH_OBJ_OFF, Cmap,
-                    cmap_to_glyph, glyph_is_cmap, glyph_is_object,
-                    objclass_to_glyph)
+from .glyph import (
+    CMAP_CHARS,
+    GLYPH_CMAP_OFF,
+    GLYPH_OBJ_OFF,
+    Cmap,
+    cmap_to_glyph,
+    glyph_is_cmap,
+    glyph_is_object,
+    objclass_to_glyph,
+)
 from .objects import class_glyph
-from .types import (DoorMask, Item, Monster, Pos, STAIR_DOWN, TerrainType,
-                    Tile, Trap, TrapType, World, is_wall)
+from .types import (
+    DoorMask,
+    Item,
+    Monster,
+    Pos,
+    STAIR_DOWN,
+    TerrainType,
+    Tile,
+    Trap,
+    TrapType,
+    World,
+    is_wall,
+)
 from .vision import can_see, vision_recalc
 
 # ============================================================
@@ -229,11 +248,9 @@ def back_to_glyph(world: World, pos: Pos) -> int:
     elif typ in (TerrainType.POOL, TerrainType.MOAT):
         idx = Cmap.S_pool
     elif typ == TerrainType.STAIRS:
-        idx = (Cmap.S_dnstair if tile.stair_dir == STAIR_DOWN
-               else Cmap.S_upstair)
+        idx = Cmap.S_dnstair if tile.stair_dir == STAIR_DOWN else Cmap.S_upstair
     elif typ == TerrainType.LADDER:
-        idx = (Cmap.S_dnladder if tile.stair_dir == STAIR_DOWN
-               else Cmap.S_upladder)
+        idx = Cmap.S_dnladder if tile.stair_dir == STAIR_DOWN else Cmap.S_upladder
     elif typ == TerrainType.FOUNTAIN:
         idx = Cmap.S_fountain
     elif typ == TerrainType.SINK:
@@ -282,6 +299,7 @@ def obj_to_glyph(item: Item) -> int:
 # Recording what is at a location (C: the map_* routines)
 # ============================================================
 
+
 def map_background(world: World, pos: Pos) -> None:
     """C: map_background -- the real background becomes the memory (the
     hero can see the location)."""
@@ -298,8 +316,9 @@ def map_trap(world: World, pos: Pos, trap: Trap) -> None:
     world.map.tile_at(pos).glyph = trap_to_glyph(trap)
 
 
-def map_location(world: World, pos: Pos, item: Optional[Item] = None,
-                 trap: Optional[Trap] = None) -> None:
+def map_location(
+    world: World, pos: Pos, item: Optional[Item] = None, trap: Optional[Trap] = None
+) -> None:
     """C: map_location -- record whatever is at a location the hero can
     see: an object, else a known trap, else the background (an
     engraving sits between the trap and the background in C; there are
@@ -316,8 +335,8 @@ def map_location(world: World, pos: Pos, item: Optional[Item] = None,
 # newsym / docrt (C: the workhorses)
 # ============================================================
 
-def _newsym(world: World, pos: Pos, item: Optional[Item],
-            trap: Optional[Trap]) -> None:
+
+def _newsym(world: World, pos: Pos, item: Optional[Item], trap: Optional[Trap]) -> None:
     """C: newsym -- update one location, given what is on it."""
     if not can_see(world, pos):
         # C: out of sight -- the memory (lev->glyph) is what shows.  In
@@ -379,11 +398,11 @@ def docrt(world: World) -> None:
     vision_recalc(world)
     objects: Dict[Pos, Item] = {}
     for item in world.items.values():
-        if (item.pos is not None and item.carrier is None
-                and item.lev == world.lev):
+        if item.pos is not None and item.carrier is None and item.lev == world.lev:
             objects[item.pos] = item
-    traps: Dict[Pos, Trap] = {t.pos: t for t in world.traps.values()
-                              if t.lev == world.lev}
+    traps: Dict[Pos, Trap] = {
+        t.pos: t for t in world.traps.values() if t.lev == world.lev
+    }
     m = world.map
     for y in range(m.height):
         for x in range(m.width):
@@ -395,6 +414,7 @@ def docrt(world: World) -> None:
 # Queries for the window port
 # ============================================================
 
+
 def mon_visible(world: World, mon: Monster) -> bool:
     """C: mon_visible() / canseemon() -- does this monster show on the
     map right now?  STUB: invisibility, mimicry, infravision and the
@@ -402,8 +422,7 @@ def mon_visible(world: World, mon: Monster) -> bool:
     the square it stands on".  The level filter is pyhack's own (a
     monster on another level is frozen there and must never ghost onto
     this map)."""
-    return bool(mon.alive and mon.lev == world.lev
-                and can_see(world, mon.pos))
+    return bool(mon.alive and mon.lev == world.lev and can_see(world, mon.pos))
 
 
 def glyph_to_char(glyph: int) -> str:

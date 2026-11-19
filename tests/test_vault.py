@@ -20,6 +20,7 @@ The 80x21 grid is C's dungeon size: the 40x20 demo grid usually makes
 fewer than six rooms, and the vault attempt only starts at
 MAXNROFROOMS / 6 (the C-sized grid makes ~8).
 """
+
 from core.mklev import (
     Rect,
     RectManager,
@@ -171,9 +172,7 @@ def test_makelevel_builds_a_sealed_vault_with_gold():
         gold = [
             it
             for it in w.items.values()
-            if it.lev == 5
-            and it.otyp == int(O.GOLD_PIECE)
-            and it.pos in set(squares)
+            if it.lev == 5 and it.otyp == int(O.GOLD_PIECE) and it.pos in set(squares)
         ]
         assert len(gold) == 4
         for pile in gold:
@@ -240,9 +239,7 @@ def test_add_vault_adds_the_room_and_maybe_the_entrance():
         gold = [
             it
             for it in w.items.values()
-            if it.lev == 5
-            and it.otyp == int(O.GOLD_PIECE)
-            and it.pos in set(squares)
+            if it.lev == 5 and it.otyp == int(O.GOLD_PIECE) and it.pos in set(squares)
         ]
         assert len(gold) == 4
         for pile in gold:

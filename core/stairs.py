@@ -22,6 +22,7 @@ visit (worldgen.generate_level, C: mklev()) and kept in memory
 afterwards (world.levels, the getlev() equivalent: "coming back up"
 restores everything exactly).
 """
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -29,7 +30,7 @@ from typing import List, Optional
 
 from .events import Event, GameOverEvent, LevelChangeEvent, MessageEvent
 from .hacklib import is_stuck
-from .types import (Monster, Pos, STAIR_UP, Stairway, TerrainType, World)
+from .types import Monster, Pos, STAIR_UP, Stairway, TerrainType, World
 from .vision import vision_recalc, vision_reset
 
 
@@ -47,8 +48,7 @@ def rebuild_stairs(world: World) -> None:
         for x in range(world.map.width):
             tile = world.map.tiles[y][x]
             if tile.typ == TerrainType.STAIRS:
-                stairs.append(Stairway(pos=(x, y),
-                                       up=tile.stair_dir == STAIR_UP))
+                stairs.append(Stairway(pos=(x, y), up=tile.stair_dir == STAIR_UP))
     world.stairs = stairs
 
 
@@ -67,8 +67,7 @@ def _monster_at(world: World, pos: Pos) -> Optional[Monster]:
     own tile World.monster_at (an actor scan) cannot be used.
     """
     for m in world.actors.values():
-        if (m.alive and not m.is_hero and m.lev == world.lev
-                and m.pos == pos):
+        if m.alive and not m.is_hero and m.lev == world.lev and m.pos == pos:
             return m
     return None
 
@@ -111,8 +110,7 @@ def _u_collide_m(world: World, mon: Monster, rng) -> None:
         mon.alive = False
 
 
-def goto_level(world: World, target_lev: int, at_stairs: bool,
-               rng) -> List[Event]:
+def goto_level(world: World, target_lev: int, at_stairs: bool, rng) -> List[Event]:
     """C: do.c goto_level (demo subset) -- the level transition.
 
     Order mirrors C: (1) the on_level / range guard, (2) save the
@@ -159,7 +157,7 @@ def goto_level(world: World, target_lev: int, at_stairs: bool,
     if m is None:
         m = generate_level(world, target_lev, rng)  # C: mklev()
     else:
-        del world.levels[target_lev]                # C: getlev()
+        del world.levels[target_lev]  # C: getlev()
     world.map = m
 
     rebuild_stairs(world)
@@ -174,8 +172,9 @@ def goto_level(world: World, target_lev: int, at_stairs: bool,
         stair = next((s for s in world.stairs if s.up == want_up), None)
         assert stair is not None, "no matching staircase on the new level"
         world.hero.pos = stair.pos
-        world.stairs = [replace(s, traversed=True) if s is stair else s
-                        for s in world.stairs]  # C: u_traversed
+        world.stairs = [
+            replace(s, traversed=True) if s is stair else s for s in world.stairs
+        ]  # C: u_traversed
 
     # C: if ((mtmp = m_at(u.ux, u.uy)) != 0) u_collide_m(mtmp);
     mon = _monster_at(world, world.hero.pos)
@@ -188,17 +187,21 @@ def goto_level(world: World, target_lev: int, at_stairs: bool,
 
     events.append(LevelChangeEvent(lev=target_lev, first_visit=first_visit))
     # the C message lines, verbatim (the demo log keeps them plain)
-    events.append(MessageEvent("You climb up the stairs." if up
-                               else "You descend the stairs."))
+    events.append(
+        MessageEvent("You climb up the stairs." if up else "You descend the stairs.")
+    )
     if first_visit:
-        events.append(MessageEvent(
-            f"You are now on level {target_lev} of {world.max_lev}."))
+        events.append(
+            MessageEvent(f"You are now on level {target_lev} of {world.max_lev}.")
+        )
     # the demo's goal: the bottom level is the win (decision 4.8)
     if target_lev == world.max_lev:
         world.over = True
-        events.append(GameOverEvent(
-            victory=True, reason="You have reached the bottom of the "
-                                 "dungeon!"))
+        events.append(
+            GameOverEvent(
+                victory=True, reason="You have reached the bottom of the " "dungeon!"
+            )
+        )
     return events
 
 
@@ -231,6 +234,7 @@ def go_stairs(world: World, up: bool, rng) -> List[Event]:
         # C: the bottom level has no down stairs and level 1 no up
         # stairs, so the lookup above already refuses in the main
         # dungeon; this keeps the guard total for constructed worlds
-        return [MessageEvent("You can't go up here." if up
-                             else "You can't go down here.")]
+        return [
+            MessageEvent("You can't go up here." if up else "You can't go down here.")
+        ]
     return goto_level(world, target, True, rng)

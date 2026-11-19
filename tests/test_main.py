@@ -13,6 +13,7 @@ The rng choice itself is pinned in tests/test_worldgen_generators.py
 (``main.make_rng`` per generator); here the question is that the
 program runs from `python main.py <flags>` to the last frame.
 """
+
 import os
 import sys
 
@@ -29,6 +30,7 @@ def play(monkeypatch):
     The screen-clear call is stubbed out so the captured output is the
     game text, not an escape sequence per turn.
     """
+
     def run(argv, commands):
         keys = list(commands)
 
@@ -47,8 +49,10 @@ def play(monkeypatch):
 def test_main_plays_the_first_turns_on_every_generator(play, capsys, argv):
     """No argument is the pinned demo cave; --mklev and --cavern are the
     ported generators (the rng each one needs is make_rng's)."""
-    play(argv, [MoveCommand(1, 0), MoveCommand(0, 1), WaitCommand(),
-                StairsCommand(up=False)])
+    play(
+        argv,
+        [MoveCommand(1, 0), MoveCommand(0, 1), WaitCommand(), StairsCommand(up=False)],
+    )
     out = capsys.readouterr().out
     assert "🎮 PyHack" in out
     assert "Level 1 of 3" in out, "the level renders"
@@ -61,11 +65,10 @@ def test_main_draws_the_last_frame_when_the_input_ends(play, capsys):
     play([], [])
     out = capsys.readouterr().out
     assert out.count("Level 1 of 3") >= 2, "the world screen and the exit"
-    assert ("You survive the cave" in out or "Thanks for playing" in out)
+    assert "You survive the cave" in out or "Thanks for playing" in out
 
 
-def test_main_shows_an_inventory_listing_without_stepping(play, capsys,
-                                                          monkeypatch):
+def test_main_shows_an_inventory_listing_without_stepping(play, capsys, monkeypatch):
     """`i` is answered by the console from the world (C: ECMD_OK), so
     main prints the list -- the class headings of let_to_name and one
     line per item, with the worn / wielded suffixes -- and redraws

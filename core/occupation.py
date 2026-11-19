@@ -68,6 +68,7 @@ bite in doeat), so the first tick is PRIMED with a next() (which runs
 to the first yield and consumes no game round; its yield value is
 discarded) and every tick afterwards is a send(rng).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -89,6 +90,7 @@ class Occupation:
     The task state is in ``gen``'s frame; ``text`` is the context
     string ("eating the food ration") the "You stop ..." message and
     the UI status line use."""
+
     gen: Generator[List[Event], None, List[Event]]
     text: str
     started: bool = field(default=False)  # primed (first next() done)
@@ -100,11 +102,15 @@ def _monster_nearby(world) -> bool:
     included).  The C version is a plain proximity test; the line-of-
     sight half of that name is a misnomer in C too."""
     hero = world.hero
-    return any(m.alive and not m.is_hero and m.lev == world.lev
-               and abs(m.pos[0] - hero.pos[0]) <= 1
-               and abs(m.pos[1] - hero.pos[1]) <= 1
-               and (m.pos[0] != hero.pos[0] or m.pos[1] != hero.pos[1])
-               for m in world.actors.values())
+    return any(
+        m.alive
+        and not m.is_hero
+        and m.lev == world.lev
+        and abs(m.pos[0] - hero.pos[0]) <= 1
+        and abs(m.pos[1] - hero.pos[1]) <= 1
+        and (m.pos[0] != hero.pos[0] or m.pos[1] != hero.pos[1])
+        for m in world.actors.values()
+    )
 
 
 def start_occupation(world, gen, text: str) -> None:

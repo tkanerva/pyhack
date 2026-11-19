@@ -1,9 +1,10 @@
 """The imperative shell: a ~40-line game loop around the pure core.
 
-    keys in   ->  read_command()
-    command   ->  step(world, cmd, rng)
-    events    ->  message log + screen
+keys in   ->  read_command()
+command   ->  step(world, cmd, rng)
+events    ->  message log + screen
 """
+
 from __future__ import annotations
 
 import os
@@ -46,8 +47,9 @@ def make_rng(generator: str) -> Union[random.Random, Rng]:
 def main() -> None:
     # the level generator (WAVE3.md): --mklev / --cavern, the default
     # is the pinned demo cave; the rng follows the generator
-    generator = MKLEV if "--mklev" in sys.argv else (
-        CAVERN if "--cavern" in sys.argv else DEMO)
+    generator = (
+        MKLEV if "--mklev" in sys.argv else (CAVERN if "--cavern" in sys.argv else DEMO)
+    )
     rng = make_rng(generator)
     # the wall clock enters the game exactly here (C: midnight() /
     # ubirthday); World.midnight and World.birth stay fixed for the
@@ -59,7 +61,9 @@ def main() -> None:
     print("🎮 PyHack — functional core, events out")
     print("   (start with --mklev or --cavern for a generated level: rooms")
     print("   and corridors with doors, or a cavern)")
-    print("   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | q<letter> quaff | x<n/s/e/w> close door | Q to quit")
+    print(
+        "   WASD/Arrows to move | g pick up | w<letter> wear | t<letter> take off | q<letter> quaff | x<n/s/e/w> close door | Q to quit"
+    )
     print("   > go down the stairs | < climb back up: the dungeon has 3")
     print("   levels; level 2+ generates on first visit and stays intact when")
     print("   you come back.  Reaching the bottom level wins!")
@@ -67,7 +71,7 @@ def main() -> None:
     print("   The floor carries a healing potion: pick it up (g) and")
     print("   drink it with q<letter>.  Capital Q still quits.")
     print("   i lists everything you carry (C: ddoinv); a class glyph")
-    print("   lists just that class: ) weapons, [ armour, \" amulets,")
+    print('   lists just that class: ) weapons, [ armour, " amulets,')
     print("   = rings, ( tools.  * shows what you wear and wield, and $")
     print("   your wallet.  A listing costs no turn.")
     print("   Every carried item keeps its own letter (C: invlet_constant):")
@@ -78,13 +82,17 @@ def main() -> None:
     print("   instant): a monster that comes near interrupts it, and eating")
     print("   the same item again resumes where you left off.")
     print("   (zaps and beam spells ask for the direction: n/s/e/w/ne/nw/se/sw)")
-    print("   The floor scrolls (enchant weapon/armor, remove curse, "
-          "teleportation, blank paper) are read with r<letter> -- the "
-          "cursed cloak needs a remove curse scroll before it can come off.")
-    print("   The floor wands (striking, cold) and books (magic missile, "
-          "cone of cold, healing) are the zap-port demo kit: the wand of "
-          "cold and the cone of cold book run the SAME effect (the shared "
-          "zap registry).")
+    print(
+        "   The floor scrolls (enchant weapon/armor, remove curse, "
+        "teleportation, blank paper) are read with r<letter> -- the "
+        "cursed cloak needs a remove curse scroll before it can come off."
+    )
+    print(
+        "   The floor wands (striking, cold) and books (magic missile, "
+        "cone of cold, healing) are the zap-port demo kit: the wand of "
+        "cold and the cone of cold book run the SAME effect (the shared "
+        "zap registry)."
+    )
     print("   Bump into a monster to attack it!")
     print("   Traps trigger when you step on them (30% chance).")
     print("   The AC on the status line is the computed effective AC")

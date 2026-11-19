@@ -6,18 +6,41 @@ with depth) and the *creation* rules (makemon places a legal monster,
 honours its MM_ flags, and answers None instead of raising when it
 cannot).
 """
+
 import pytest
 
 from core import makemon, mkobj
-from core.makemon import (MongenOrder, adj_lev, makemon as spawn,
-                          mbirth_limit, mkclass, mkclass_aligned,
-                          monmax_difficulty, monmin_difficulty, mongen_order,
-                          newmonhp, peace_minded, rndmonst, set_malign,
-                          uncommon)
+from core.makemon import (
+    MongenOrder,
+    adj_lev,
+    makemon as spawn,
+    mbirth_limit,
+    mkclass,
+    mkclass_aligned,
+    monmax_difficulty,
+    monmin_difficulty,
+    mongen_order,
+    newmonhp,
+    peace_minded,
+    rndmonst,
+    set_malign,
+    uncommon,
+)
 from core.mklev import blank_map, makelevel
-from core.monst import (A_LAWFUL, G_GENOD, MONS, PM_GIANT_ANT, PM_GOBLIN,
-                        PM_KILLER_BEE, PM_SOLDIER, S_ANT, S_HUMAN,
-                        S_MIMIC_DEF, PerMonst, monsndx)
+from core.monst import (
+    A_LAWFUL,
+    G_GENOD,
+    MONS,
+    PM_GIANT_ANT,
+    PM_GOBLIN,
+    PM_KILLER_BEE,
+    PM_SOLDIER,
+    S_ANT,
+    S_HUMAN,
+    S_MIMIC_DEF,
+    PerMonst,
+    monsndx,
+)
 from core.rnd import Rng
 from core.rules import level_difficulty
 from core.types import MmFlags, World
@@ -47,6 +70,7 @@ def _world(lev: int = 1, width: int = 12, height: int = 8):
 # level_difficulty and the difficulty band
 # ------------------------------------------------------------
 
+
 def test_level_difficulty_is_the_level_number():
     """The one depth helper: pyhack's dungeon is linear, so it is
     world.lev -- and every caller reads it through the helper."""
@@ -63,6 +87,7 @@ def test_the_difficulty_band_macros_are_the_c_ones():
 # ------------------------------------------------------------
 # selecting a species
 # ------------------------------------------------------------
+
 
 @pytest.mark.parametrize("seed", range(1, 6))
 def test_rndmonst_stays_inside_the_difficulty_band(seed):
@@ -139,6 +164,7 @@ def test_mkclass_aligned_respects_the_alignment():
 # how strong
 # ------------------------------------------------------------
 
+
 def test_adj_lev_grows_with_depth():
     ptr = _mon(PM_GIANT_ANT)
     shallow = adj_lev(_world(lev=1), ptr)
@@ -167,6 +193,7 @@ def test_mbirth_limit_is_the_population_cap():
 # ------------------------------------------------------------
 # creating one
 # ------------------------------------------------------------
+
 
 def test_makemon_places_a_specific_monster():
     w = _world()
@@ -221,8 +248,7 @@ def test_makemon_does_not_need_a_placed_hero():
 
 def test_makemon_honours_mm_asleep_and_mm_angry():
     w = _world()
-    asleep = spawn(w, _rng(2), _mon(PM_GIANT_ANT), (2, 2),
-                   MmFlags.ASLEEP)
+    asleep = spawn(w, _rng(2), _mon(PM_GIANT_ANT), (2, 2), MmFlags.ASLEEP)
     assert asleep is not None and asleep.sleeping
     w2 = _world()
     angry = spawn(w2, _rng(2), _mon(PM_GIANT_ANT), (2, 2), MmFlags.ANGRY)
@@ -240,8 +266,7 @@ def test_makemon_mm_adjacentok_moves_off_an_occupied_square():
     first = spawn(w, _rng(4), _mon(PM_GIANT_ANT), (4, 4))
     assert first is not None
     assert spawn(w, _rng(5), _mon(PM_GIANT_ANT), (4, 4)) is None
-    second = spawn(w, _rng(5), _mon(PM_GIANT_ANT), (4, 4),
-                   MmFlags.ADJACENTOK)
+    second = spawn(w, _rng(5), _mon(PM_GIANT_ANT), (4, 4), MmFlags.ADJACENTOK)
     assert second is not None and second.pos != (4, 4)
 
 
@@ -255,8 +280,7 @@ def test_makemon_gives_a_monster_money_and_gear():
     """The inventory mechanism (C: mongets / mkmonmoney) -- the species
     tables of m_initweap are phase E, the plumbing is here."""
     w = _world()
-    mon = spawn(w, _rng(7), _mon(PM_SOLDIER), (3, 3),
-                MmFlags.NO_MINVENT)
+    mon = spawn(w, _rng(7), _mon(PM_SOLDIER), (3, 3), MmFlags.NO_MINVENT)
     assert mon is not None
     assert mon.inventory == []
     makemon.mkmonmoney(w, _rng(8), mon, 40)
@@ -270,6 +294,7 @@ def test_makemon_gives_a_monster_money_and_gear():
 # ------------------------------------------------------------
 # mood
 # ------------------------------------------------------------
+
 
 def test_peace_minded_follows_the_always_flags():
     w = _world()
@@ -291,6 +316,7 @@ def test_set_malign_records_the_c_score():
 # ------------------------------------------------------------
 # the level generator now uses all of it
 # ------------------------------------------------------------
+
 
 @pytest.mark.parametrize("seed", [1, 2, 3])
 def test_a_generated_level_is_populated_from_the_real_table(seed):

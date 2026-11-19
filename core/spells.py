@@ -43,6 +43,7 @@ Simplifications (documented, not bugs):
 - the book is the power source (C: the spellbook's pages): one charge
   per successful cast, consumed at 0
 """
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -51,8 +52,16 @@ from .energy import drain_energy, spell_lev_pw
 from .events import Event, MessageEvent
 from .invent import consume_obj_charge, useup
 from .rules import apply_damage, heal, roll
-from .types import (DamageType, Direction, Item, Monster, ObjectType,
-                    SpellType, ZapEffect, World)
+from .types import (
+    DamageType,
+    Direction,
+    Item,
+    Monster,
+    ObjectType,
+    SpellType,
+    ZapEffect,
+    World,
+)
 from .zap import ZAP_EFFECTS, ZapSpec, zap
 
 HEALING_POWER = 12  # the demo's flat healing (C: the healing spell's rnd)
@@ -150,19 +159,18 @@ def _fireball(world: World, caster: Monster, rng) -> List[Event]:
     for m in world.actors.values():
         if m.is_hero or not m.alive or m.pos == caster.pos:
             continue
-        if (abs(m.pos[0] - caster.pos[0]) <= 1
-                and abs(m.pos[1] - caster.pos[1]) <= 1):
+        if abs(m.pos[0] - caster.pos[0]) <= 1 and abs(m.pos[1] - caster.pos[1]) <= 1:
             dmg = roll(rng, 6)
-            events += apply_damage(world, m.id, dmg, DamageType.FIRE,
-                                   "spell:fireball")
+            events += apply_damage(world, m.id, dmg, DamageType.FIRE, "spell:fireball")
             hit_anyone = True
     if not hit_anyone:
         events.append(MessageEvent("The fireball bursts harmlessly."))
     return events
 
 
-def cast_spell(world: World, caster_id: str, book_id: str,
-               direction: Optional[Direction], rng) -> List[Event]:
+def cast_spell(
+    world: World, caster_id: str, book_id: str, direction: Optional[Direction], rng
+) -> List[Event]:
     """C: the spelleffects() pipeline (see the module docstring for
     the check order): find the book, check the Pw, roll the failure
     check, cast (the effect through the shared ZAP_EFFECTS registry,
@@ -182,31 +190,47 @@ def cast_spell(world: World, caster_id: str, book_id: str,
     # 1. C: spelleffects_check -- `if (*energy > u.uen)` -- no time,
     # no draw, no charge
     if caster.uen < cost:
-        return [MessageEvent("You don't have enough energy to cast that!"
-                             if caster.is_hero
-                             else f"{caster.name} doesn't have enough energy!")]
+        return [
+            MessageEvent(
+                "You don't have enough energy to cast that!"
+                if caster.is_hero
+                else f"{caster.name} doesn't have enough energy!"
+            )
+        ]
 
     # C: spelleffects_check -- `if (u.uhunger <= 10)` (the hunger
     # port; the SPE_DETECT_FOOD exception is irrelevant, the demo
     # books carry no such spell) -- no time, no draw, no page
     if caster.uhunger <= 10:
-        return [MessageEvent("You are too hungry to cast that spell."
-                             if caster.is_hero
-                             else f"{caster.name} is too hungry to cast that spell.")]
+        return [
+            MessageEvent(
+                "You are too hungry to cast that spell."
+                if caster.is_hero
+                else f"{caster.name} is too hungry to cast that spell."
+            )
+        ]
 
     # 2. C: the failure roll -- `rnd(100) > percent_success(spell)` --
     # a fizzle costs the turn, NOT the energy (the drain in C is in
     # spelleffects, after the check) and no book page
     chance = spell_success_chance(caster, lev)
     if rng.randint(1, 100) > chance:
-        return [MessageEvent("You fail to cast the spell correctly."
-                             if caster.is_hero
-                             else f"{caster.name} fails to cast the spell correctly.")]
+        return [
+            MessageEvent(
+                "You fail to cast the spell correctly."
+                if caster.is_hero
+                else f"{caster.name} fails to cast the spell correctly."
+            )
+        ]
 
     # 3. the cast
-    events: List[Event] = [MessageEvent(
-        f"You cast {spell_name}." if caster.is_hero
-        else f"{caster.name} casts {spell_name}.")]
+    events: List[Event] = [
+        MessageEvent(
+            f"You cast {spell_name}."
+            if caster.is_hero
+            else f"{caster.name} casts {spell_name}."
+        )
+    ]
 
     if st == SpellType.FIREBALL:
         # area effect (C: the SPE_FIREBALL explode; no direction --
@@ -219,25 +243,32 @@ def cast_spell(world: World, caster_id: str, book_id: str,
         # HERE (the caster side), carried in the spec, applied by the
         # shared effect the wands use too
         effect = SPELL_ZAPS[st]
-        spec = ZapSpec(effect=effect,
-                       power=caster.ulevel // 2 + 1,
-                       damage_bonus=spell_damage_bonus(caster),
-                       source=book)
+        spec = ZapSpec(
+            effect=effect,
+            power=caster.ulevel // 2 + 1,
+            damage_bonus=spell_damage_bonus(caster),
+            source=book,
+        )
         if direction is None:
             # C: the zapyourself path -- a directional spell cast
             # without a direction hits the caster
-            spec = ZapSpec(effect=effect,
-                           power=caster.ulevel // 2 + 1,
-                           damage_bonus=spell_damage_bonus(caster),
-                           source=book, noun="spell")
+            spec = ZapSpec(
+                effect=effect,
+                power=caster.ulevel // 2 + 1,
+                damage_bonus=spell_damage_bonus(caster),
+                source=book,
+                noun="spell",
+            )
             events += ZAP_EFFECTS[effect](world, caster, caster, spec, rng)
         else:
-            noun = ("ray" if st in (SpellType.SLEEP, SpellType.POLYMORPH)
-                    else "spell")
-            spec = ZapSpec(effect=effect,
-                           power=caster.ulevel // 2 + 1,
-                           damage_bonus=spell_damage_bonus(caster),
-                           source=book, noun=noun)
+            noun = "ray" if st in (SpellType.SLEEP, SpellType.POLYMORPH) else "spell"
+            spec = ZapSpec(
+                effect=effect,
+                power=caster.ulevel // 2 + 1,
+                damage_bonus=spell_damage_bonus(caster),
+                source=book,
+                noun=noun,
+            )
             events += zap(world, caster_id, direction, spec, rng)
     elif st in SELF_ZAPS:
         # C: the atme path -- the self effects invoke the shared

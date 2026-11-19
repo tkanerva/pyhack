@@ -11,13 +11,14 @@ explicitly masked to 64 bits (``& MASK``).  That is the only
 interpretive difference from the C source; the sequence of values is
 bit-identical.
 """
+
 from __future__ import annotations
 
 MASK = 0xFFFFFFFFFFFFFFFF
 
 ISAAC64_SZ_LOG = 8
-ISAAC64_SZ = 1 << ISAAC64_SZ_LOG          # 256
-ISAAC64_SEED_SZ_MAX = ISAAC64_SZ << 3     # 2048 bytes
+ISAAC64_SZ = 1 << ISAAC64_SZ_LOG  # 256
+ISAAC64_SEED_SZ_MAX = ISAAC64_SZ << 3  # 2048 bytes
 
 _SEED_CONSTANT = 0x9E3779B97F4A7C13
 
@@ -98,7 +99,7 @@ class Isaac64:
         full_words = nseed >> 3
         for i in range(full_words):
             # C packs each 8-byte group big-endian: seed[8i+7] is the MSB
-            r[i] ^= int.from_bytes(seed[i << 3:(i << 3) + 8], "big")
+            r[i] ^= int.from_bytes(seed[i << 3 : (i << 3) + 8], "big")
 
         nseed -= full_words << 3
         if nseed > 0:
@@ -115,12 +116,12 @@ class Isaac64:
             for j in range(8):
                 x[j] = (x[j] + r[i + j]) & MASK
             _mix(x)
-            m[i:i + 8] = x
+            m[i : i + 8] = x
         for i in range(0, ISAAC64_SZ, 8):
             for j in range(8):
                 x[j] = (x[j] + m[i + j]) & MASK
             _mix(x)
-            m[i:i + 8] = x
+            m[i : i + 8] = x
 
         self._update()
 

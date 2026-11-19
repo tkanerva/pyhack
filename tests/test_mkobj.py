@@ -5,14 +5,30 @@ table, mksobj returns an Item whose fields are inside the C ranges"), so
 that is here; the rest covers the pieces the level generator leans on --
 gold, containers, corpses and the BUC lottery.
 """
+
 import pytest
 
 from core.mklev import blank_map, makelevel
-from core.mkobj import (CORPSTAT_FEMALE, CORPSTAT_MALE, CORPSTAT_NEUTER,
-                        CORPSTAT_NONE, add_to_container, bcsign, bless,
-                        blessorcurse, curse, delete_contents, gold_at,
-                        hero_gold, is_container, mkcorpstat, mkgold,
-                        place_object, rnd_class, weight)
+from core.mkobj import (
+    CORPSTAT_FEMALE,
+    CORPSTAT_MALE,
+    CORPSTAT_NEUTER,
+    CORPSTAT_NONE,
+    add_to_container,
+    bcsign,
+    bless,
+    blessorcurse,
+    curse,
+    delete_contents,
+    gold_at,
+    hero_gold,
+    is_container,
+    mkcorpstat,
+    mkgold,
+    place_object,
+    rnd_class,
+    weight,
+)
 from core.mkobj import mkobj as make_random_object
 from core.mkobj import mksobj
 from core.monst import MONS
@@ -37,6 +53,7 @@ def _world(width: int = 12, height: int = 8):
 # ------------------------------------------------------------
 # the 480-row smoke test (PLAN-MKOBJ.md phase B exit check)
 # ------------------------------------------------------------
+
 
 @pytest.mark.parametrize("otyp", range(NUM_OBJECTS))
 def test_mksobj_makes_every_object_in_the_table(otyp):
@@ -73,6 +90,7 @@ def test_the_class_tag_follows_the_otyp():
 # weight
 # ------------------------------------------------------------
 
+
 def test_a_stack_weighs_its_unit_weight_times_the_count():
     w = _world()
     item = mksobj(w, _rng(), int(O.DAGGER))
@@ -98,7 +116,7 @@ def test_gold_weighs_one_unit_per_hundred_coins():
     gold.quan = 250
     assert weight(w, gold) == 3
     gold.quan = 1
-    assert weight(w, gold) == 1        # C 5.0: never 0
+    assert weight(w, gold) == 1  # C 5.0: never 0
 
 
 def test_a_corpse_weighs_what_the_species_weighs():
@@ -113,6 +131,7 @@ def test_a_corpse_weighs_what_the_species_weighs():
 # ------------------------------------------------------------
 # containers: the three where-states are exclusive
 # ------------------------------------------------------------
+
 
 def test_a_contained_item_is_not_on_the_floor_and_not_carried():
     w = _world()
@@ -154,13 +173,14 @@ def test_a_chest_may_hold_something():
 # gold
 # ------------------------------------------------------------
 
+
 def test_mkgold_places_one_pile_and_adds_to_it():
     w = _world()
     first = mkgold(w, _rng(), 50, (3, 3), w.lev)
     assert first.quan == 50
     assert first.pos == (3, 3) and first.lev == w.lev
     second = mkgold(w, _rng(2), 25, (3, 3), w.lev)
-    assert second is first            # C: added to the pile already there
+    assert second is first  # C: added to the pile already there
     assert first.quan == 75
     assert gold_at(w, w.lev, (3, 3)) is first
 
@@ -168,7 +188,7 @@ def test_mkgold_places_one_pile_and_adds_to_it():
 def test_mkgold_with_no_amount_rolls_one():
     w = _world()
     gold = mkgold(w, _rng(3), 0, (4, 4), w.lev)
-    assert gold.quan >= 2             # 1 + rnd(...) * rnd(...)
+    assert gold.quan >= 2  # 1 + rnd(...) * rnd(...)
 
 
 def test_hero_gold_sums_the_carried_piles():
@@ -183,6 +203,7 @@ def test_hero_gold_sums_the_carried_piles():
 # ------------------------------------------------------------
 # the BUC lottery
 # ------------------------------------------------------------
+
 
 def test_bless_and_curse_are_exclusive():
     w = _world()
@@ -215,6 +236,7 @@ def test_blessorcurse_never_marks_both():
 # picking a type
 # ------------------------------------------------------------
 
+
 def test_mkobj_returns_an_object_of_the_requested_class():
     w = _world()
     for seed in range(1, 8):
@@ -241,6 +263,7 @@ def test_rnd_class_stays_inside_the_range():
 # ------------------------------------------------------------
 # placement
 # ------------------------------------------------------------
+
 
 def test_place_object_puts_it_on_the_floor():
     w = _world()
@@ -277,8 +300,9 @@ def test_a_statue_may_be_placed_by_the_generator():
     # CORPSTAT_NONE -- what fill_ordinary_room passes -- is 0,
     # "unspecified", and overrides the roll mksobj() made
     assert statue.spe == CORPSTAT_NONE
-    female = mkcorpstat(w, _rng(4), int(O.STATUE), pos=(4, 4), lev=1,
-                        spe=CORPSTAT_FEMALE)
+    female = mkcorpstat(
+        w, _rng(4), int(O.STATUE), pos=(4, 4), lev=1, spe=CORPSTAT_FEMALE
+    )
     assert female.spe == CORPSTAT_FEMALE
     # ... while mksobj() itself does roll the gender into spe
     plain = mksobj(w, _rng(4), int(O.STATUE))

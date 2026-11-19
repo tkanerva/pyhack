@@ -1700,9 +1700,7 @@ def test_shk_chat_follows_the_anger_ladder():
     (under 50 / over 4000) and the shoplifters fallback."""
     m, room, w, keeper = _stocked_shop()
     eshk = keeper.eshk
-    purse = next(
-        it for it in keeper.inventory if it.oclass == int(ObjClass.COIN)
-    )
+    purse = next(it for it in keeper.inventory if it.oclass == int(ObjClass.COIN))
 
     def chat() -> str:
         msgs = _msgs(shk.shk_chat(w, keeper))
@@ -1944,5 +1942,4 @@ def test_a_new_customer_resets_the_keeper():
     assert eshk.visitct == 0
     assert keeper.mpeaceful is True
     # the ladder lands on the robbed line (the welcome is later)
-    assert any("mutters imprecations against shoplifters" in x
-               for x in _msgs(events))
+    assert any("mutters imprecations against shoplifters" in x for x in _msgs(events))

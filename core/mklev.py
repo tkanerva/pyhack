@@ -1975,32 +1975,27 @@ def _roll_special_room(
     # the medusa level.  pyhack has no dungeon branches, so the cap is
     # faked as world.max_lev - 5 (PLAN-SPECIAL-ROOMS.md decision 10).
     medusa_cap = world.max_lev - 5
-    if (depth > 1 and depth < medusa_cap and nrooms >= threshold
-            and rng.rn2(depth) < 3):
+    if depth > 1 and depth < medusa_cap and nrooms >= threshold and rng.rn2(depth) < 3:
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.SHOPBASE)
     elif depth > 4 and not rng.rn2(6):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.COURT)
-    elif (depth > 5 and not rng.rn2(8)
-            and not _gone(world, PM_LEPRECHAUN)):
+    elif depth > 5 and not rng.rn2(8) and not _gone(world, PM_LEPRECHAUN):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.LEPREHALL)
     elif depth > 6 and not rng.rn2(7):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.ZOO)
     elif depth > 8 and not rng.rn2(5):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.TEMPLE)
-    elif (depth > 9 and not rng.rn2(5)
-            and not _gone(world, PM_KILLER_BEE)):
+    elif depth > 9 and not rng.rn2(5) and not _gone(world, PM_KILLER_BEE):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.BEEHIVE)
     elif depth > 11 and not rng.rn2(6):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.MORGUE)
     elif depth > 12 and not rng.rn2(8) and antholemon(world) is not None:
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.ANTHOLE)
-    elif (depth > 14 and not rng.rn2(4)
-            and not _gone(world, PM_SOLDIER)):
+    elif depth > 14 and not rng.rn2(4) and not _gone(world, PM_SOLDIER):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.BARRACKS)
     elif depth > 15 and not rng.rn2(6):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.SWAMP)
-    elif (depth > 16 and not rng.rn2(8)
-            and not _gone(world, PM_COCKATRICE)):
+    elif depth > 16 and not rng.rn2(8) and not _gone(world, PM_COCKATRICE):
         do_mkroom(world, map_, stairs, traps, rng, lev, RoomType.COCKNEST)
 
 
@@ -2049,16 +2044,19 @@ def _add_vault(
         vault_pos = create_vault(map_, rects, rng)
         if vault_pos is None:
             return False
-        res = check_room(
-            map_, vault_pos[0], vault_pos[1], w, h, rng, vault=True
-        )
+        res = check_room(map_, vault_pos[0], vault_pos[1], w, h, rng, vault=True)
         if res is None:
             return False  # C: the scratch slot's `hx = -1` (abandon)
     # C: add_room(vault_x, vault_y, vault_x + w, vault_y + h, TRUE,
     # VAULT, FALSE) -- the check_room-updated box (w = ddx).
     room = add_room(
-        map_, res[0], res[1], res[0] + res[2], res[1] + res[3],
-        True, RoomType.VAULT,
+        map_,
+        res[0],
+        res[1],
+        res[0] + res[2],
+        res[1] + res[3],
+        True,
+        RoomType.VAULT,
     )
     map_.flags.has_vault = True
     room.needfill = FILL_NORMAL
@@ -2119,7 +2117,12 @@ def makelevel(world: World, map_: Map, rng, lev: int, specials: bool = False) ->
     has_vault = _add_vault(world, map_, rects, rng, depth, lev, vault_pos)
     if specials:
         _roll_special_room(
-            world, map_, rng, depth, stairs, lev,
+            world,
+            map_,
+            rng,
+            depth,
+            stairs,
+            lev,
             threshold=4 if has_vault else 3,
         )
     for room in list(map_.rooms):

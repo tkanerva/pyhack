@@ -95,6 +95,7 @@ Simplifications (documented, not bugs):
   the rknown identification split of the oerodeproof test are skipped
   (phase 5 / identification ports).
 """
+
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
@@ -102,12 +103,36 @@ from typing import List, Optional, Tuple
 from .events import Event, MessageEvent
 from . import invent
 from .items import wielded_of
-from .objects import (ARM_BOOTS, ARM_CLOAK, ARM_GLOVES, ARM_HELM,
-                      ARM_SHIELD, ARM_SHIRT, ARM_SUIT, FIRST_AMULET,
-                      LAST_AMULET, Material, ObjClass, OBJECTS, ObjType,
-                      Prop, W_AMUL, W_ARM, W_ARMC, W_ARMF, W_ARMG,
-                      W_ARMH, W_ARMOR, W_ACCESSORY, W_ARMS, W_ARMU,
-                      W_WEAPONS, W_RING, W_RINGL, W_RINGR)
+from .objects import (
+    ARM_BOOTS,
+    ARM_CLOAK,
+    ARM_GLOVES,
+    ARM_HELM,
+    ARM_SHIELD,
+    ARM_SHIRT,
+    ARM_SUIT,
+    FIRST_AMULET,
+    LAST_AMULET,
+    Material,
+    ObjClass,
+    OBJECTS,
+    ObjType,
+    Prop,
+    W_AMUL,
+    W_ARM,
+    W_ARMC,
+    W_ARMF,
+    W_ARMG,
+    W_ARMH,
+    W_ARMOR,
+    W_ACCESSORY,
+    W_ARMS,
+    W_ARMU,
+    W_WEAPONS,
+    W_RING,
+    W_RINGL,
+    W_RINGR,
+)
 from .rings import ring_on, ring_off
 from .rules import process_events
 from .types import Monster, World
@@ -128,6 +153,7 @@ _AMULET_LAST = LAST_AMULET
 # ------------------------------------------------------------
 # The armor predicates (C: include/obj.h macros)
 # ------------------------------------------------------------
+
 
 def _otyp(item) -> int:
     """The fine object type (C: otmp->otyp); 0 = not fine."""
@@ -274,6 +300,7 @@ def is_worn(item) -> bool:
 # AC_VALUE)
 # ------------------------------------------------------------
 
+
 def arm_bonus(item) -> int:
     """C: ARM_BONUS (include/hack.h): a_ac + spe -
     min(greatest_erosion, a_ac).  0 for non-armor (C applies the macro
@@ -282,8 +309,7 @@ def arm_bonus(item) -> int:
     if not o or not is_armor(item):
         return 0
     a = int(OBJECTS[o].oc1)  # a_ac
-    return a + int(getattr(item, "spe", 0)) \
-        - min(greatest_erosion(item), a)
+    return a + int(getattr(item, "spe", 0)) - min(greatest_erosion(item), a)
 
 
 def ac_bonus(world: World, mon: Monster) -> int:
@@ -306,8 +332,7 @@ def ac_bonus(world: World, mon: Monster) -> int:
     return total
 
 
-def uac(world: World, mon: Monster, ublessed: int = 0,
-        uspellprot: int = 0) -> int:
+def uac(world: World, mon: Monster, ublessed: int = 0, uspellprot: int = 0) -> int:
     """The effective armor class (C: find_ac, src/do_wear.c): the base
     ``mon.ac`` minus the gear bonus of ``ac_bonus``(), minus
     ``ublessed`` (intrinsic Protection) and ``uspellprot`` (SPE_
@@ -341,6 +366,7 @@ def ac_value(ac: int, rng) -> int:
 # Donning / doffing (Phase 2 of PLAN-ARMOR.md; the don/doff half of
 # do_wear.c)
 # ------------------------------------------------------------
+
 
 def _carried(mon: Monster, item_id: str) -> bool:
     return any(it.id == item_id for it in mon.inventory)
@@ -394,8 +420,7 @@ def can_wear(world: World, mon: Monster, item) -> Optional[str]:
         if mask == W_ARMS:
             wep = wielded_of(world, mon.id)
             if wep is not None and bimanual(wep):
-                return ("You cannot wear a shield while wielding a "
-                        "two-handed weapon.")
+                return "You cannot wear a shield while wielding a " "two-handed weapon."
         if mask == W_ARM:
             cloak = which_armor(world, mon, W_ARMC)
             if cloak is not None:
@@ -403,7 +428,7 @@ def can_wear(world: World, mon: Monster, item) -> Optional[str]:
         if mask == W_ARMU:
             cloak = which_armor(world, mon, W_ARMC)
             if cloak is not None:
-                return (f"You can't wear that over your {cloak.name}.")
+                return f"You can't wear that over your {cloak.name}."
             suit = which_armor(world, mon, W_ARM)
             if suit is not None:
                 return f"You can't wear that over your {suit.name}."
@@ -411,8 +436,10 @@ def can_wear(world: World, mon: Monster, item) -> Optional[str]:
 
     o = _otyp(item)
     if _RING_FIRST <= o <= _RING_LAST:
-        if (which_armor(world, mon, W_RINGL) is not None
-                and which_armor(world, mon, W_RINGR) is not None):
+        if (
+            which_armor(world, mon, W_RINGL) is not None
+            and which_armor(world, mon, W_RINGR) is not None
+        ):
             return "There are no more ring-fingers to fill."
         return None
     if _AMULET_FIRST <= o <= _AMULET_LAST:
@@ -509,8 +536,12 @@ def dotakeoff(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
     if item.owornmask & W_ARM:
         cloak = which_armor(world, mon, W_ARMC)
         if cloak is not None:
-            return [MessageEvent(f"You can't take that off without "
-                                 f"taking off your {cloak.name} first.")]
+            return [
+                MessageEvent(
+                    f"You can't take that off without "
+                    f"taking off your {cloak.name} first."
+                )
+            ]
     if item.owornmask & W_ARMU:
         cloak = which_armor(world, mon, W_ARMC)
         suit = which_armor(world, mon, W_ARM)
@@ -521,8 +552,11 @@ def dotakeoff(world: World, mon_id: str, item_id: str, rng) -> List[Event]:
                 why = f"your {cloak.name}"
             else:
                 why = f"your {suit.name}"
-            return [MessageEvent(f"You can't take that off without "
-                                 f"taking off {why} first.")]
+            return [
+                MessageEvent(
+                    f"You can't take that off without " f"taking off {why} first."
+                )
+            ]
     if (item.owornmask & W_ARMOR) and item.cursed:
         return [MessageEvent("You can't. It is cursed.")]
     mask = item.owornmask & (W_ARMOR | W_ACCESSORY)
@@ -554,15 +588,15 @@ ERODE_CRACK = 4  # crystal armor
 
 # obj.h: the ef_flags of erode_obj()
 EF_NONE = 0
-EF_GREASE = 0x1   # check for a greased object
+EF_GREASE = 0x1  # check for a greased object
 EF_DESTROY = 0x2  # potentially destroy the object
 EF_VERBOSE = 0x4  # print extra messages
-EF_PAY = 0x8      # it's the player's fault (costly_alteration: no shops yet)
+EF_PAY = 0x8  # it's the player's fault (costly_alteration: no shops yet)
 
 # obj.h: the return values of erode_obj()
-ER_NOTHING = 0    # nothing happened
-ER_GREASED = 1    # protected by grease
-ER_DAMAGED = 2    # object was damaged in some way
+ER_NOTHING = 0  # nothing happened
+ER_GREASED = 1  # protected by grease
+ER_DAMAGED = 2  # object was damaged in some way
 ER_DESTROYED = 3  # object was destroyed
 
 # obj.h: the erosion counters saturate here
@@ -594,6 +628,7 @@ def _row(item):
 # is_flammable / is_rottable functions of src/mkobj.c)
 # ------------------------------------------------------------
 
+
 def is_flammable(item) -> bool:
     """C: is_flammable (src/mkobj.c): WAX..BONE (LIQUID excluded) and
     PLASTIC; the FIRE_RES property and the wand of fire are not
@@ -605,8 +640,7 @@ def is_flammable(item) -> bool:
     if row.oprop == int(Prop.FIRE_RES):
         return False
     mat = row.material
-    return (mat <= Material.WOOD and mat != Material.LIQUID
-            or mat == Material.PLASTIC)
+    return mat <= Material.WOOD and mat != Material.LIQUID or mat == Material.PLASTIC
 
 
 def is_rottable(item) -> bool:
@@ -616,8 +650,9 @@ def is_rottable(item) -> bool:
     if row is None:
         return False
     mat = row.material
-    return (mat <= Material.WOOD and mat != Material.LIQUID
-            or mat == Material.DRAGON_HIDE)
+    return (
+        mat <= Material.WOOD and mat != Material.LIQUID or mat == Material.DRAGON_HIDE
+    )
 
 
 def is_rustprone(item) -> bool:
@@ -631,21 +666,28 @@ def is_crackable(item) -> bool:
     """C: is_crackable (include/obj.h): GLASS armour (crystal plate
     mail)."""
     row = _row(item)
-    return (row is not None and row.material == Material.GLASS
-            and int(row.oclass) == int(ObjClass.ARMOR))
+    return (
+        row is not None
+        and row.material == Material.GLASS
+        and int(row.oclass) == int(ObjClass.ARMOR)
+    )
 
 
 def is_corrodeable(item) -> bool:
     """C: is_corrodeable (include/obj.h): material COPPER or IRON."""
     row = _row(item)
-    return row is not None and row.material in (Material.COPPER,
-                                                Material.IRON)
+    return row is not None and row.material in (Material.COPPER, Material.IRON)
 
 
 def is_damageable(item) -> bool:
     """C: is_damageable (include/obj.h): subject to any erosion."""
-    return (is_rustprone(item) or is_flammable(item) or is_rottable(item)
-            or is_corrodeable(item) or is_crackable(item))
+    return (
+        is_rustprone(item)
+        or is_flammable(item)
+        or is_rottable(item)
+        or is_corrodeable(item)
+        or is_crackable(item)
+    )
 
 
 def erosion_matters(item) -> bool:
@@ -656,8 +698,12 @@ def erosion_matters(item) -> bool:
     if row is None:
         return False
     ocls = int(row.oclass)
-    if ocls in (int(ObjClass.WEAPON), int(ObjClass.ARMOR),
-                int(ObjClass.BALL), int(ObjClass.CHAIN)):
+    if ocls in (
+        int(ObjClass.WEAPON),
+        int(ObjClass.ARMOR),
+        int(ObjClass.BALL),
+        int(ObjClass.CHAIN),
+    ):
         return True
     if ocls == int(ObjClass.TOOL):
         return is_weptool(item)
@@ -692,8 +738,9 @@ def _remove_destroyed(world: World, mon: Optional[Monster], item) -> None:
     invent.delobj(world, item.id)
 
 
-def erode_obj(world: World, item, ostr: Optional[str], type: int,
-              ef_flags: int, rng=None) -> Tuple[List[Event], int]:
+def erode_obj(
+    world: World, item, ostr: Optional[str], type: int, ef_flags: int, rng=None
+) -> Tuple[List[Event], int]:
     """Erode one item (C: erode_obj, src/trap.c -- the hero-facing
     subset).
 
@@ -756,8 +803,7 @@ def erode_obj(world: World, item, ostr: Optional[str], type: int,
     erosion = item.oeroded if is_primary else item.oeroded2
 
     if check_grease and item.greased:
-        events.append(MessageEvent(
-            f"Your {name} is protected by the layer of grease!"))
+        events.append(MessageEvent(f"Your {name} is protected by the layer of grease!"))
         # the grease wears off 1/2 of the time it protects (C: !rn2(2))
         if not _rn2(rng, 2):
             item.greased = False
@@ -767,21 +813,25 @@ def erode_obj(world: World, item, ostr: Optional[str], type: int,
         return events, ER_NOTHING
     if not vulnerable or item.oerodeproof:
         if print_ and uvictim:
-            events.append(MessageEvent(
-                f"Your {name} is not affected by {_ERODE_BYTHE[type]}."))
+            events.append(
+                MessageEvent(f"Your {name} is not affected by {_ERODE_BYTHE[type]}.")
+            )
         return events, ER_NOTHING
     if item.oerodeproof or (item.blessed and not _rn2(rng, 4)):
         if uvictim and (print_ or item.oerodeproof):
-            events.append(MessageEvent(
-                f"Somehow, your {name} is not affected by the "
-                f"{_ERODE_BYTHE[type]}."))
+            events.append(
+                MessageEvent(
+                    f"Somehow, your {name} is not affected by the "
+                    f"{_ERODE_BYTHE[type]}."
+                )
+            )
         return events, ER_NOTHING
     if erosion < MAX_ERODE:
-        adverb = (" completely" if erosion + 1 == MAX_ERODE
-                  else " further" if erosion else "")
+        adverb = (
+            " completely" if erosion + 1 == MAX_ERODE else " further" if erosion else ""
+        )
         if uvictim:
-            events.append(MessageEvent(
-                f"Your {name} {_ERODE_ACTION[type]}s{adverb}!"))
+            events.append(MessageEvent(f"Your {name} {_ERODE_ACTION[type]}s{adverb}!"))
         if is_primary:
             item.oeroded += 1
         else:
@@ -792,18 +842,15 @@ def erode_obj(world: World, item, ostr: Optional[str], type: int,
             if crackers:
                 events.append(MessageEvent(f"Your {name} shatters!"))
             else:
-                events.append(MessageEvent(
-                    f"Your {name} {_ERODE_ACTION[type]}s away!"))
+                events.append(MessageEvent(f"Your {name} {_ERODE_ACTION[type]}s away!"))
         _remove_destroyed(world, mon, item)
         return events, ER_DESTROYED
     if print_ and uvictim:
-        events.append(MessageEvent(
-            f"Your {name} looks completely {_ERODE_MSG[type]}."))
+        events.append(MessageEvent(f"Your {name} looks completely {_ERODE_MSG[type]}."))
     return events, ER_NOTHING
 
 
-def erode_armor(world: World, mon: Monster, hurt: int,
-                rng) -> List[Event]:
+def erode_armor(world: World, mon: Monster, hurt: int, rng) -> List[Event]:
     """C: erode_armor (src/uhitm.c): a rust / acid / rot attack erodes
     one of ``mon``'s worn armour pieces.  C's loop keeps picking a
     random slot (helm / cloak-suit-shirt / shield / gloves / boots)
@@ -819,18 +866,20 @@ def erode_armor(world: World, mon: Monster, hurt: int,
     while True:
         case = _rn2(rng, 5)
         if case == 1:  # cloak, else suit, else shirt: one attempt, done
-            target = (which_armor(world, mon, W_ARMC)
-                      or which_armor(world, mon, W_ARM)
-                      or which_armor(world, mon, W_ARMU))
+            target = (
+                which_armor(world, mon, W_ARMC)
+                or which_armor(world, mon, W_ARM)
+                or which_armor(world, mon, W_ARMU)
+            )
             if target is not None:
-                events += erode_obj(world, target, target.name, hurt,
-                                    EF_GREASE | EF_VERBOSE, rng)[0]
+                events += erode_obj(
+                    world, target, target.name, hurt, EF_GREASE | EF_VERBOSE, rng
+                )[0]
             return events
         mask = {0: W_ARMH, 2: W_ARMS, 3: W_ARMG, 4: W_ARMF}[case]
         target = which_armor(world, mon, mask)
         if target is not None:
-            ev, code = erode_obj(world, target, target.name, hurt,
-                                 EF_GREASE, rng)
+            ev, code = erode_obj(world, target, target.name, hurt, EF_GREASE, rng)
             events += ev
             if code != ER_NOTHING:
                 return events
@@ -851,19 +900,24 @@ def burnarmor(world: World, mon: Monster, rng) -> List[Event]:
     while True:
         case = _rn2(rng, 5)
         if case == 1:  # cloak, else suit, else shirt
-            target = (which_armor(world, mon, W_ARMC)
-                      or which_armor(world, mon, W_ARM)
-                      or which_armor(world, mon, W_ARMU))
+            target = (
+                which_armor(world, mon, W_ARMC)
+                or which_armor(world, mon, W_ARM)
+                or which_armor(world, mon, W_ARMU)
+            )
             if target is not None:
-                events, _ = erode_obj(world, target, target.name,
-                                      ERODE_BURN, EF_GREASE, rng)
+                events, _ = erode_obj(
+                    world, target, target.name, ERODE_BURN, EF_GREASE, rng
+                )
             return events
-        mask = (W_ARMH if case == 0 else W_ARMS if case == 2
-                else W_ARMG if case == 3 else W_ARMF)
+        mask = (
+            W_ARMH
+            if case == 0
+            else W_ARMS if case == 2 else W_ARMG if case == 3 else W_ARMF
+        )
         target = which_armor(world, mon, mask)
         if target is not None:
-            ev, code = erode_obj(world, target, target.name,
-                                 ERODE_BURN, EF_GREASE, rng)
+            ev, code = erode_obj(world, target, target.name, ERODE_BURN, EF_GREASE, rng)
             if code != ER_NOTHING:
                 return ev
         # C: keep rolling while the attempt affected nothing
@@ -892,13 +946,14 @@ def disintegrate_arm(world: World, mon_id: str, rng) -> List[Event]:
     # C order + the C messages (the full item name in place of C's
     # simple-name words -- the don/doff simplification)
     for mask, verb in (
-            (W_ARMC, "crumbles and turns to dust!"),
-            (W_ARM, "turns to dust and falls to the floor!"),
-            (W_ARMU, "crumbles into tiny threads and falls apart!"),
-            (W_ARMH, "turns to dust and is blown away!"),
-            (W_ARMG, "vanish!"),
-            (W_ARMF, "disintegrate!"),
-            (W_ARMS, "crumbles away!")):
+        (W_ARMC, "crumbles and turns to dust!"),
+        (W_ARM, "turns to dust and falls to the floor!"),
+        (W_ARMU, "crumbles into tiny threads and falls apart!"),
+        (W_ARMH, "turns to dust and is blown away!"),
+        (W_ARMG, "vanish!"),
+        (W_ARMF, "disintegrate!"),
+        (W_ARMS, "crumbles away!"),
+    ):
         it = which_armor(world, mon, mask)
         if it is None:
             continue
@@ -924,22 +979,26 @@ def destroy_arm(world: World, mon_id: str, rng) -> List[Event]:
     mon = world.actors.get(mon_id)
     if mon is None:
         return []
-    armors = [a for a in (which_armor(world, mon, mask)
-                          for mask in (W_ARM, W_ARMC, W_ARMH, W_ARMS,
-                                       W_ARMG, W_ARMF, W_ARMU))
-              if a is not None]
+    armors = [
+        a
+        for a in (
+            which_armor(world, mon, mask)
+            for mask in (W_ARM, W_ARMC, W_ARMH, W_ARMS, W_ARMG, W_ARMF, W_ARMU)
+        )
+        if a is not None
+    ]
     if not armors:
         return []
     hits = _rn2(rng, 4) + 1
     events: List[Event] = []
     for _ in range(hits):
         otmp = armors[_rn2(rng, len(armors))]
-        if (erosion_matters(otmp) and is_damageable(otmp)
-                and not otmp.oerodeproof):
+        if erosion_matters(otmp) and is_damageable(otmp) and not otmp.oerodeproof:
             erosion = obj_erode_type(otmp)
             if erosion != ERODE_NONE:
-                ev, r = erode_obj(world, otmp, otmp.name, erosion,
-                                  EF_PAY | EF_DESTROY, rng)
+                ev, r = erode_obj(
+                    world, otmp, otmp.name, erosion, EF_PAY | EF_DESTROY, rng
+                )
                 events += ev
                 if r == ER_DESTROYED:
                     break
@@ -949,6 +1008,7 @@ def destroy_arm(world: World, mon_id: str, rng) -> List[Event]:
 # ------------------------------------------------------------
 # STUBs -- the C API surface, filled by the named ports
 # ------------------------------------------------------------
+
 
 def Boots_on(world: World, mon: Monster) -> List[Event]:
     """STUB (C: Boots_on): the footwear side effects (speed /
@@ -1078,7 +1138,8 @@ def stop_donning(world: World, mon: Monster) -> List[Event]:
     oc_delay don/doff occupation on top of core.occupation (the
     occupation machinery itself is in; PLAN-ARMOR.md phase 5)."""
     raise NotImplementedError(
-        "stop_donning: the multi-turn don/doff occupation is not ported yet")
+        "stop_donning: the multi-turn don/doff occupation is not ported yet"
+    )
 
 
 def inaccessible_equipment(mon: Monster) -> bool:
@@ -1086,7 +1147,8 @@ def inaccessible_equipment(mon: Monster) -> bool:
     is inaccessible (swallowed / in a container the hero cannot
     reach).  Needs the swallow machinery."""
     raise NotImplementedError(
-        "inaccessible_equipment: the swallow machinery is not ported yet")
+        "inaccessible_equipment: the swallow machinery is not ported yet"
+    )
 
 
 def count_worn_stuff(mon: Monster, verbose: bool = False) -> int:

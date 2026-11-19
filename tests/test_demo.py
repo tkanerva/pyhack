@@ -9,6 +9,7 @@ sword, so a hero bumping a monster attacks through the weapon path of
 the event model (producers -> rules.process_events -> the choke
 points).
 """
+
 import random
 
 from core import MoveCommand, WaitCommand, step
@@ -25,8 +26,16 @@ def _typed(pm: int, pos=(7, 4), hp=8, **kw) -> Monster:
     """A runtime Monster carrying a PerMonst type (the mhitu path)."""
     data = MONS[pm]
     assert data is not None
-    return Monster(id=f"mon_{pm}", name=data.pmnames[2], pos=pos, hp=hp,
-                   max_hp=kw.pop("max_hp", hp), ac=data.ac, mdata=data, **kw)
+    return Monster(
+        id=f"mon_{pm}",
+        name=data.pmnames[2],
+        pos=pos,
+        hp=hp,
+        max_hp=kw.pop("max_hp", hp),
+        ac=data.ac,
+        mdata=data,
+        **kw,
+    )
 
 
 def _hero_with_sword(**kw):
@@ -39,9 +48,13 @@ def _hero_with_sword(**kw):
     skills.skill[int(Skill.P_SHORT_SWORD)] = P_SKILLED
     skills.max_skill[int(Skill.P_SHORT_SWORD)] = P_SKILLED
     hero.skills = skills
-    sword = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
-                 otyp=ObjType.SHORT_SWORD.value,
-                 oclass=ObjClass.WEAPON.value)
+    sword = Item(
+        id="sword_0",
+        otype=ObjectType.WEAPON,
+        name="short sword",
+        otyp=ObjType.SHORT_SWORD.value,
+        oclass=ObjClass.WEAPON.value,
+    )
     hero.inventory.append(sword)
     hero.wielded = sword.id
     return hero, sword
@@ -50,6 +63,7 @@ def _hero_with_sword(**kw):
 # ------------------------------------------------------------
 # hero -> monster (the weapon path) and monster -> hero (mhitu)
 # ------------------------------------------------------------
+
 
 def test_demo_turn_sword_hero_hits_goblin_and_goblin_hits_back():
     """One full demo turn: the hero bumps a typed goblin with its sword,
@@ -62,15 +76,18 @@ def test_demo_turn_sword_hero_hits_goblin_and_goblin_hits_back():
     # goblin counterattack (mhitu): tmp=5+10+0=15 > rnd(20)=1 -> hit,
     #   1d4=2 (hero 25->23)
     ev = step(w, MoveCommand(1, 0), SeqRng(5, 3, 1, 2))
-    assert w.hero.pos == (6, 4)            # bumping does not move the hero
+    assert w.hero.pos == (6, 4)  # bumping does not move the hero
     assert g.hp == 5 and w.hero.hp == 23
     texts = [e.text for e in ev if isinstance(e, MessageEvent)]
     assert "⚔️ You hit goblin for 3 damage with your short sword." in texts
     assert "goblin hits!" in texts
-    assert any(isinstance(e, DamageEvent) and e.target == g.id
-               and e.amount == 3 for e in ev)
-    assert any(isinstance(e, DamageEvent) and e.target == "player"
-               and e.amount == 2 for e in ev)
+    assert any(
+        isinstance(e, DamageEvent) and e.target == g.id and e.amount == 3 for e in ev
+    )
+    assert any(
+        isinstance(e, DamageEvent) and e.target == "player" and e.amount == 2
+        for e in ev
+    )
 
 
 def test_demo_monster_hits_the_hero_vice_versa():
@@ -78,10 +95,9 @@ def test_demo_monster_hits_the_hero_vice_versa():
     attacks through mhitu (the hero's AC feeds the hit differential)."""
     g = _typed(PM_GOBLIN)
     w = make_world(monsters=[g])
-    ev = step(w, WaitCommand(), SeqRng(10, 3))   # goblin hits for 3
+    ev = step(w, WaitCommand(), SeqRng(10, 3))  # goblin hits for 3
     assert w.hero.hp == 22
-    assert any(isinstance(e, MessageEvent) and e.text == "goblin hits!"
-               for e in ev)
+    assert any(isinstance(e, MessageEvent) and e.text == "goblin hits!" for e in ev)
 
 
 def test_demo_weapon_kill_gives_victory():
@@ -94,8 +110,9 @@ def test_demo_weapon_kill_gives_victory():
     ev = step(w, MoveCommand(1, 0), SeqRng(1, 6))
     assert not g.alive
     assert w.over
-    assert any(isinstance(e, DeathEvent) and e.target == g.id
-               and e.by == "player" for e in ev)
+    assert any(
+        isinstance(e, DeathEvent) and e.target == g.id and e.by == "player" for e in ev
+    )
     assert any(isinstance(e, GameOverEvent) and e.victory for e in ev)
 
 
@@ -103,10 +120,10 @@ def test_demo_weapon_kill_gives_victory():
 # the whole demo world (new_world + step)
 # ------------------------------------------------------------
 
+
 def test_new_world_wires_the_demo_combat():
     w = new_world(random.Random(42))
-    for mid, pm in (("goblin_0", PM_GOBLIN), ("orc_0", PM_HILL_ORC),
-                    ("bat_0", PM_BAT)):
+    for mid, pm in (("goblin_0", PM_GOBLIN), ("orc_0", PM_HILL_ORC), ("bat_0", PM_BAT)):
         assert w.actors[mid].mdata is MONS[pm]
     hero = w.hero
     assert hero.wielded == "sword_0"
@@ -119,16 +136,28 @@ def test_new_world_wires_the_demo_combat():
 
 def test_demo_full_game_is_deterministic():
     """Same seed + same commands => same game, now that combat runs on
-    the PerMonst / weapon paths (the old demo's determinism property, checked on the wired-up world)."""
+    the PerMonst / weapon paths (the old demo's determinism property, checked on the wired-up world).
+    """
+
     def play():
         rng = random.Random(42)
         w = new_world(rng)
         out = []
-        for cmd in (MoveCommand(1, 0), MoveCommand(0, 1), WaitCommand(),
-                    MoveCommand(-1, 0), MoveCommand(0, -1), WaitCommand()):
+        for cmd in (
+            MoveCommand(1, 0),
+            MoveCommand(0, 1),
+            WaitCommand(),
+            MoveCommand(-1, 0),
+            MoveCommand(0, -1),
+            WaitCommand(),
+        ):
             out.extend(step(w, cmd, rng))
-        return (w.hero.hp, w.hero.pos, w.turn,
-                {m.id: (m.hp, m.pos, m.alive) for m in w.actors.values()},
-                [repr(e) for e in out])
+        return (
+            w.hero.hp,
+            w.hero.pos,
+            w.turn,
+            {m.id: (m.hp, m.pos, m.alive) for m in w.actors.values()},
+            [repr(e) for e in out],
+        )
 
     assert play() == play()

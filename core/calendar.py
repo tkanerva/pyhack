@@ -43,6 +43,7 @@ Adaptations for the pyhack architecture (documented, not bugs):
   struct from the unambiguous ``datetime.month`` / ``datetime.weekday()``
   fields, so the ported arithmetic behaves as in C on any platform.
 """
+
 from __future__ import annotations
 
 import time
@@ -62,17 +63,19 @@ def _lt(now: Optional[datetime] = None) -> time.struct_time:
     if now is None:
         now = datetime.now()
     t = now.timetuple()
-    return time.struct_time((
-        t.tm_year,
-        now.month - 1,            # C: January = 0
-        now.day,
-        t.tm_hour,
-        t.tm_min,
-        t.tm_sec,
-        (now.weekday() + 1) % 7,  # C: Sunday = 0
-        t.tm_yday,
-        -1,
-    ))
+    return time.struct_time(
+        (
+            t.tm_year,
+            now.month - 1,  # C: January = 0
+            now.day,
+            t.tm_hour,
+            t.tm_min,
+            t.tm_sec,
+            (now.weekday() + 1) % 7,  # C: Sunday = 0
+            t.tm_yday,
+            -1,
+        )
+    )
 
 
 def getnow() -> int:
@@ -112,8 +115,10 @@ def yyyymmddhhmmss(now: Optional[datetime] = None) -> str:
     instead (no hidden state).
     """
     lt = _lt(now)
-    return (f"{lt.tm_year:04d}{lt.tm_mon + 1:02d}{lt.tm_mday:02d}"
-            f"{lt.tm_hour:02d}{lt.tm_min:02d}{lt.tm_sec:02d}")
+    return (
+        f"{lt.tm_year:04d}{lt.tm_mon + 1:02d}{lt.tm_mday:02d}"
+        f"{lt.tm_hour:02d}{lt.tm_min:02d}{lt.tm_sec:02d}"
+    )
 
 
 def time_from_yyyymmddhhmmss(buf: Optional[str]) -> int:
@@ -126,8 +131,14 @@ def time_from_yyyymmddhhmmss(buf: Optional[str]) -> int:
     if not buf or len(buf) != 14:
         return 0
     try:
-        dt = datetime(int(buf[0:4]), int(buf[4:6]), int(buf[6:8]),
-                      int(buf[8:10]), int(buf[10:12]), int(buf[12:14]))
+        dt = datetime(
+            int(buf[0:4]),
+            int(buf[4:6]),
+            int(buf[6:8]),
+            int(buf[8:10]),
+            int(buf[10:12]),
+            int(buf[12:14]),
+        )
     except ValueError:
         return 0
     return int(dt.timestamp())

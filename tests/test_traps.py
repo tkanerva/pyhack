@@ -1,5 +1,6 @@
 """Tests for the trap system, including regression tests for bugs that
 the old broadcast architecture caused."""
+
 from core.events import DamageEvent, TrapSeenEvent
 from core.traps import check_traps, disarm_trap
 from core.types import TrapType
@@ -71,8 +72,10 @@ def test_teleport_trap_stays_in_bounds():
 
 
 def test_monster_can_trigger_traps_too():
-    w = make_world(monsters=[make_monster(pos=(6, 4))],
-                   traps=[make_trap(TrapType.SPIKED_PIT, pos=(6, 4))])
+    w = make_world(
+        monsters=[make_monster(pos=(6, 4))],
+        traps=[make_trap(TrapType.SPIKED_PIT, pos=(6, 4))],
+    )
     check_traps(w, "goblin_0", SeqRng(5, 7))
     assert w.actors["goblin_0"].hp == 1
     assert w.traps["trap_0"].triggered

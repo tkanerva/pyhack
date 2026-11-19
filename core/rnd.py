@@ -29,6 +29,7 @@ Adaptations for the pyhack architecture (documented, not bugs):
 Callers must pass x > 0 to rn2/rnd/rnl/d/x -- the C release build would
 crash (modulo by zero) and the devel build panics; here it raises.
 """
+
 from __future__ import annotations
 
 from typing import List, Sequence
@@ -83,8 +84,11 @@ class Rng:
         adjustment = luck
         if x <= 15:
             # (abs(adjustment) + 1) / 3 * sgn(adjustment), C integer math
-            adjustment = ((abs(adjustment) + 1) // 3
-                          * (1 if adjustment > 0 else -1 if adjustment < 0 else 0))
+            adjustment = (
+                (abs(adjustment) + 1)
+                // 3
+                * (1 if adjustment > 0 else -1 if adjustment < 0 else 0)
+            )
         i = self.rn2(x)
         if adjustment and self.rn2(37 + abs(adjustment)):
             i -= adjustment

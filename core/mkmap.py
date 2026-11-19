@@ -55,19 +55,28 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-from .types import (MAXNROFROOMS, NO_ROOM, ROOMOFFSET, SHARED, Map, Pos,
-                    RoomType, TerrainType, is_door, is_obstructed, is_room,
-                    is_wall)
-
+from .types import (
+    MAXNROFROOMS,
+    NO_ROOM,
+    ROOMOFFSET,
+    SHARED,
+    Map,
+    Pos,
+    RoomType,
+    TerrainType,
+    is_door,
+    is_obstructed,
+    is_room,
+    is_wall,
+)
 
 # The cellular-automaton tuning constants, verbatim from mkmap.c.
-N_P1_ITER = 1   # tune map generation via this value
-N_P2_ITER = 1   # tune map generation via this value
-N_P3_ITER = 2   # tune map smoothing via this value
+N_P1_ITER = 1  # tune map generation via this value
+N_P2_ITER = 1  # tune map generation via this value
+N_P3_ITER = 2  # tune map smoothing via this value
 
 # The eight neighbour offsets, as the C dirs[16] table pairs them.
-_DIRS = ((-1, -1), (-1, 0), (-1, 1), (0, -1),
-         (0, 1), (1, -1), (1, 0), (1, 1))
+_DIRS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
 
 
 class FillResult:
@@ -116,6 +125,7 @@ def litstate_rnd(rng, litstate: int, depth: int) -> bool:
 # The passes
 # ============================================================
 
+
 def init_map(map_: Map, bg_typ: TerrainType) -> None:
     """C: mkmap.c#init_map -- every square becomes the background
     terrain, unlit and owned by no room."""
@@ -128,8 +138,7 @@ def init_map(map_: Map, bg_typ: TerrainType) -> None:
             tile.edge = False
 
 
-def init_fill(map_: Map, rng, bg_typ: TerrainType,
-              fg_typ: TerrainType) -> None:
+def init_fill(map_: Map, rng, bg_typ: TerrainType, fg_typ: TerrainType) -> None:
     """C: mkmap.c#init_fill -- scatter the foreground terrain until
     about 40% of the level is foreground."""
     width, height = _geo(map_)
@@ -143,8 +152,7 @@ def init_fill(map_: Map, rng, bg_typ: TerrainType,
             count += 1
 
 
-def get_map(map_: Map, col: int, row: int,
-            bg_typ: TerrainType) -> TerrainType:
+def get_map(map_: Map, col: int, row: int, bg_typ: TerrainType) -> TerrainType:
     """C: mkmap.c#get_map -- the terrain, with everything off the level
     reading as the background."""
     width, height = _geo(map_)
@@ -153,8 +161,9 @@ def get_map(map_: Map, col: int, row: int,
     return map_.tiles[row][col].typ
 
 
-def _count_neighbours(map_: Map, x: int, y: int, bg_typ: TerrainType,
-                      fg_typ: TerrainType) -> int:
+def _count_neighbours(
+    map_: Map, x: int, y: int, bg_typ: TerrainType, fg_typ: TerrainType
+) -> int:
     """The 8-neighbour foreground count both pass_one and the later
     passes take (C computes it inline, the same eight dirs entries)."""
     count = 0
@@ -181,8 +190,9 @@ def pass_one(map_: Map, bg_typ: TerrainType, fg_typ: TerrainType) -> None:
                 map_.tiles[y][x].typ = fg_typ
 
 
-def _pass_from_scratch(map_: Map, bg_typ: TerrainType, fg_typ: TerrainType,
-                       drop_below: Optional[int]) -> None:
+def _pass_from_scratch(
+    map_: Map, bg_typ: TerrainType, fg_typ: TerrainType, drop_below: Optional[int]
+) -> None:
     """pass_two / pass_three share everything but the rule: they write
     into a scratch buffer and copy back, so the whole level is judged
     against the *previous* pass (C: gn.new_locations).
@@ -191,8 +201,9 @@ def _pass_from_scratch(map_: Map, bg_typ: TerrainType, fg_typ: TerrainType,
     foreground neighbours, pass_three drops everything below 3.
     """
     width, height = _geo(map_)
-    new = [[map_.tiles[y][x].typ for x in range(map_.width)]
-           for y in range(map_.height)]
+    new = [
+        [map_.tiles[y][x].typ for x in range(map_.width)] for y in range(map_.height)
+    ]
     for x in range(2, width + 1):
         for y in range(1, height):
             count = _count_neighbours(map_, x, y, bg_typ, fg_typ)
@@ -223,8 +234,10 @@ def pass_three(map_: Map, bg_typ: TerrainType, fg_typ: TerrainType) -> None:
 # Flood fill (shared with the room-based generator)
 # ============================================================
 
-def flood_fill_rm(map_: Map, sx: int, sy: int, rmno: int, lit: bool,
-                  anyroom: bool) -> FillResult:
+
+def flood_fill_rm(
+    map_: Map, sx: int, sy: int, rmno: int, lit: bool, anyroom: bool
+) -> FillResult:
     """C: mkmap.c#flood_fill_rm -- flood the connected region of
     foreground terrain around (sx, sy), stamping it with `rmno` and
     `lit`, and report its extents.
@@ -256,12 +269,14 @@ def flood_fill_rm(map_: Map, sx: int, sy: int, rmno: int, lit: bool,
             first = i - 1 if i == x0 else i
             for ii in range(first, i + 2):
                 for jj in range(y - 1, y + 2):
-                    if not (0 <= ii < map_.width
-                            and 0 <= jj < map_.height):
+                    if not (0 <= ii < map_.width and 0 <= jj < map_.height):
                         continue
                     tile = map_.tiles[jj][ii]
-                    if not (is_wall(tile.typ) or is_door(tile.typ)
-                            or tile.typ == TerrainType.SDOOR):
+                    if not (
+                        is_wall(tile.typ)
+                        or is_door(tile.typ)
+                        or tile.typ == TerrainType.SDOOR
+                    ):
                         continue
                     tile.edge = True
                     if lit:
@@ -306,13 +321,17 @@ def flood_fill_rm(map_: Map, sx: int, sy: int, rmno: int, lit: bool,
                     if row[i].roomno != rmno:
                         stack.append((i, yy))
                     continue
-                if (i > x or 0 < i - 1 < map_.width) \
-                        and row[i - 1].typ == fg_typ \
-                        and row[i - 1].roomno != rmno:
+                if (
+                    (i > x or 0 < i - 1 < map_.width)
+                    and row[i - 1].typ == fg_typ
+                    and row[i - 1].roomno != rmno
+                ):
                     stack.append((i - 1, yy))
-                if (i < nx - 1 or 0 < i + 1 < map_.width) \
-                        and row[i + 1].typ == fg_typ \
-                        and row[i + 1].roomno != rmno:
+                if (
+                    (i < nx - 1 or 0 < i + 1 < map_.width)
+                    and row[i + 1].typ == fg_typ
+                    and row[i + 1].roomno != rmno
+                ):
                     stack.append((i + 1, yy))
     return result
 
@@ -320,6 +339,7 @@ def flood_fill_rm(map_: Map, sx: int, sy: int, rmno: int, lit: bool,
 # ============================================================
 # Joining the blobs into rooms
 # ============================================================
+
 
 def join_map_cleanup(map_: Map) -> None:
     """C: mkmap.c#join_map_cleanup -- the end of join_map().
@@ -337,8 +357,9 @@ def join_map_cleanup(map_: Map) -> None:
     del map_
 
 
-def _dig_direct(map_: Map, org: Pos, dest: Pos, ftyp: TerrainType,
-                btyp: TerrainType) -> None:
+def _dig_direct(
+    map_: Map, org: Pos, dest: Pos, ftyp: TerrainType, btyp: TerrainType
+) -> None:
     """Fallback corridor: a plain L from org to dest.
 
     C has no such fallback: dig_corridor() can run out of steps and
@@ -362,8 +383,9 @@ def _dig_direct(map_: Map, org: Pos, dest: Pos, ftyp: TerrainType,
             map_.tile_at(pos).typ = ftyp
 
 
-def join_map(map_: Map, rng, depth: int, bg_typ: TerrainType,
-             fg_typ: TerrainType) -> None:
+def join_map(
+    map_: Map, rng, depth: int, bg_typ: TerrainType, fg_typ: TerrainType
+) -> None:
     """C: mkmap.c#join_map -- cut the cavern into irregular rooms and
     connect them with corridors.
 
@@ -390,9 +412,16 @@ def join_map(map_: Map, rng, depth: int, bg_typ: TerrainType,
             rmno = len(map_.rooms) + ROOMOFFSET
             filled = flood_fill_rm(map_, x, y, rmno, False, False)
             if filled.count > 3:
-                room = add_room(map_, filled.min_rx, filled.min_ry,
-                                filled.max_rx, filled.max_ry, False,
-                                RoomType.OROOM, True)
+                room = add_room(
+                    map_,
+                    filled.min_rx,
+                    filled.min_ry,
+                    filled.max_rx,
+                    filled.max_ry,
+                    False,
+                    RoomType.OROOM,
+                    True,
+                )
                 room.irregular = True
             else:
                 # a tiny hole: erase it so nobody ends up there
@@ -415,10 +444,14 @@ def join_map(map_: Map, rng, depth: int, bg_typ: TerrainType,
         em = somexy(map_, croom2, rng)
         if sm is None or em is None:
             # C's impossible() fallback: the room centers
-            sm = (croom.lx + (croom.hx - croom.lx) // 2,
-                  croom.ly + (croom.hy - croom.ly) // 2)
-            em = (croom2.lx + (croom2.hx - croom2.lx) // 2,
-                  croom2.ly + (croom2.hy - croom2.ly) // 2)
+            sm = (
+                croom.lx + (croom.hx - croom.lx) // 2,
+                croom.ly + (croom.hy - croom.ly) // 2,
+            )
+            em = (
+                croom2.lx + (croom2.hx - croom2.lx) // 2,
+                croom2.ly + (croom2.hy - croom2.ly) // 2,
+            )
         dug, _ = dig_corridor(map_, rng, depth, sm, em, False, fg_typ, bg_typ)
         if not dug:
             # C leaves the cavern split here; keep the level walkable
@@ -426,8 +459,8 @@ def join_map(map_: Map, rng, depth: int, bg_typ: TerrainType,
         # choose the next region to join: only move on when the two do
         # not overlap horizontally or vertically
         if croom2.lx > croom.hx or (
-                (croom2.ly > croom.hy or croom2.hy < croom.ly)
-                and rng.rn2(3)):
+            (croom2.ly > croom.hy or croom2.hy < croom.ly) and rng.rn2(3)
+        ):
             i = j
         j += 1
     join_map_cleanup(map_)
@@ -437,8 +470,16 @@ def join_map(map_: Map, rng, depth: int, bg_typ: TerrainType,
 # Finishing touches
 # ============================================================
 
-def finish_map(map_: Map, rng, fg_typ: TerrainType, bg_typ: TerrainType,
-               lit: bool, walled: bool, icedpools: bool) -> None:
+
+def finish_map(
+    map_: Map,
+    rng,
+    fg_typ: TerrainType,
+    bg_typ: TerrainType,
+    lit: bool,
+    walled: bool,
+    icedpools: bool,
+) -> None:
     """C: mkmap.c#finish_map -- wall the blobs in and light the level.
 
     Lava is always lit; ice records whether it is a frozen pool or a
@@ -454,11 +495,12 @@ def finish_map(map_: Map, rng, fg_typ: TerrainType, bg_typ: TerrainType,
         for x in range(1, map_.width):
             for y in range(map_.height):
                 typ = map_.tiles[y][x].typ
-                if (not is_obstructed(fg_typ) and typ == fg_typ) \
-                        or (not is_obstructed(bg_typ) and typ == bg_typ) \
-                        or (bg_typ == TerrainType.TREE
-                            and typ == bg_typ) \
-                        or (walled and is_wall(typ)):
+                if (
+                    (not is_obstructed(fg_typ) and typ == fg_typ)
+                    or (not is_obstructed(bg_typ) and typ == bg_typ)
+                    or (bg_typ == TerrainType.TREE and typ == bg_typ)
+                    or (walled and is_wall(typ))
+                ):
                     map_.tiles[y][x].lit = True
         for room in map_.rooms:
             room.rlit = True
@@ -478,14 +520,22 @@ def remove_rooms(map_: Map, lx: int, ly: int, hx: int, hy: int) -> None:
     roomno rewrite of the moved room.
     """
     raise NotImplementedError(
-        "special-level maps need room removal (C: src/mkmap.c "
-        "remove_rooms())")
+        "special-level maps need room removal (C: src/mkmap.c " "remove_rooms())"
+    )
 
 
-def mkmap(map_: Map, rng, depth: int = 1, bg_typ: TerrainType = TerrainType.STONE,
-          fg_typ: TerrainType = TerrainType.ROOM, smoothed: bool = True,
-          joined: bool = True, lit: int = -1, walled: bool = True,
-          icedpools: bool = False) -> None:
+def mkmap(
+    map_: Map,
+    rng,
+    depth: int = 1,
+    bg_typ: TerrainType = TerrainType.STONE,
+    fg_typ: TerrainType = TerrainType.ROOM,
+    smoothed: bool = True,
+    joined: bool = True,
+    lit: int = -1,
+    walled: bool = True,
+    icedpools: bool = False,
+) -> None:
     """C: mkmap.c#mkmap -- build a cavern on `map_` in place.
 
     The C `lev_init` structure collapses into keyword arguments; the
@@ -512,7 +562,18 @@ def mkmap(map_: Map, rng, depth: int = 1, bg_typ: TerrainType = TerrainType.STON
 
 
 __all__ = [
-    "FillResult", "finish_map", "flood_fill_rm", "get_map", "init_fill",
-    "init_map", "join_map", "join_map_cleanup", "litstate_rnd", "mkmap",
-    "pass_one", "pass_three", "pass_two", "remove_rooms",
+    "FillResult",
+    "finish_map",
+    "flood_fill_rm",
+    "get_map",
+    "init_fill",
+    "init_map",
+    "join_map",
+    "join_map_cleanup",
+    "litstate_rnd",
+    "mkmap",
+    "pass_one",
+    "pass_three",
+    "pass_two",
+    "remove_rooms",
 ]

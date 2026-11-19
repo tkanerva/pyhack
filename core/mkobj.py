@@ -84,8 +84,18 @@ from typing import Dict, Optional, Tuple
 
 from . import invent, makemon, rules
 from .mondata import is_female, is_male, is_neuter, undead_to_corpse
-from .monst import (G_HELL, G_NOGEN, G_NOCORPSE, G_UNIQ, LOW_PM, MONS,
-                    NON_PM, NUMMONS, PM_HUMAN, SPECIAL_PM)
+from .monst import (
+    G_HELL,
+    G_NOGEN,
+    G_NOCORPSE,
+    G_UNIQ,
+    LOW_PM,
+    MONS,
+    NON_PM,
+    NUMMONS,
+    PM_HUMAN,
+    SPECIAL_PM,
+)
 from .objects import BASES, OBJECTS, ObjClass, ObjType
 from .place import goodpos  # noqa: F401  (the random-placement check)
 from .types import Item, ObjectType, Pos, World
@@ -193,6 +203,7 @@ def coarse_otype(otyp: int) -> ObjectType:
 # Small predicates (C: obj.h macros)
 # ------------------------------------------------------------
 
+
 def is_container(item: Item) -> bool:
     """C: Is_container -- LARGE_BOX .. BAG_OF_TRICKS (C 5.0's macro is
     that otyp range; the core.objects docstring says the same)."""
@@ -204,8 +215,10 @@ def is_multigen(item: Item) -> bool:
     weapon skill range; the ammo rows are exactly the ones with a
     negative skill (core.objects._validate asserts that), so this is the
     same test without the skill table."""
-    return int(OBJECTS[item.otyp].oclass) == int(ObjClass.WEAPON) \
+    return (
+        int(OBJECTS[item.otyp].oclass) == int(ObjClass.WEAPON)
         and OBJECTS[item.otyp].subtyp < 0
+    )
 
 
 def is_ismnum(corpsenm: int) -> bool:
@@ -222,6 +235,7 @@ def bcsign(item: Item) -> int:
 # ------------------------------------------------------------
 # The BUC lottery (C: mkobj.c 1856-1902)
 # ------------------------------------------------------------
+
 
 def bless(item: Item) -> None:
     """C: bless."""
@@ -266,6 +280,7 @@ def blessorcurse(rng, item: Item, chance: int) -> None:
 # weight (C: mkobj.c 1903-1991)
 # ------------------------------------------------------------
 
+
 def weight(world: World, item: Item) -> int:
     """An object's weight in 1/100 lb (C: mkobj.c#weight).
 
@@ -277,19 +292,19 @@ def weight(world: World, item: Item) -> int:
     """
     wt = OBJECTS[item.otyp].weight
     if item.quan < 1:
-        return 0                      # C: impossible(), and 0
+        return 0  # C: impossible(), and 0
 
     if is_container(item) or item.otyp == int(O.STATUE):
         if item.otyp == int(O.STATUE) and is_ismnum(item.corpsenm):
             ptr = MONS[item.corpsenm]
-            assert ptr is not None    # is_ismnum proved the row exists
+            assert ptr is not None  # is_ismnum proved the row exists
             msize = int(ptr.msize)
             minwt = (msize + msize + 1) * 100
             # a statue weighs one and a half corpses
             wt = 3 * ptr.cwt // 2
             if wt < minwt:
                 wt = minwt
-            wt *= item.quan           # no effect: statues never stack
+            wt *= item.quan  # no effect: statues never stack
         cwt = 0
         for child_id in item.contents:
             child = world.items.get(child_id)
@@ -298,8 +313,11 @@ def weight(world: World, item: Item) -> int:
         if item.otyp == int(O.BAG_OF_HOLDING):
             # cursed doubles, blessed quarters, otherwise halves
             # (rounded up, the DELTA_CWT equations in pickup.c)
-            cwt = cwt * 2 if item.cursed \
+            cwt = (
+                cwt * 2
+                if item.cursed
                 else (cwt + 3) // 4 if item.blessed else (cwt + 1) // 2
+            )
         return wt + cwt
 
     if item.otyp == int(O.CORPSE) and is_ismnum(item.corpsenm):
@@ -315,7 +333,7 @@ def weight(world: World, item: Item) -> int:
     if oclass == int(ObjClass.COIN):
         return max((item.quan + 50) // 100, 1)
     if item.otyp == int(O.HEAVY_IRON_BALL) and item.owt != 0:
-        return item.owt               # kludge for "very" heavy iron ball
+        return item.owt  # kludge for "very" heavy iron ball
     if item.otyp == int(O.CANDELABRUM_OF_INVOCATION) and item.spe:
         return wt + item.spe * OBJECTS[int(O.TALLOW_CANDLE)].weight
     return wt * item.quan if wt else (item.quan + 1) >> 1
@@ -325,8 +343,10 @@ def weight(world: World, item: Item) -> int:
 # mksobj / mksobj_init (C: mkobj.c 869-1259)
 # ------------------------------------------------------------
 
-def mksobj(world: World, rng, otyp: int, init: bool = True,
-           artif: bool = False) -> Item:
+
+def mksobj(
+    world: World, rng, otyp: int, init: bool = True, artif: bool = False
+) -> Item:
     """Create one object of type `otyp` (C: mkobj.c#mksobj).
 
     Always returns an object and never places it.  The order is C's: the
@@ -339,9 +359,14 @@ def mksobj(world: World, rng, otyp: int, init: bool = True,
     `carrier` stay None until place_object() / add_to_container().
     """
     row = OBJECTS[otyp]
-    item = Item(id=world.new_id("obj"), otype=coarse_otype(otyp),
-                name=row.name if row.name is not None else "strange object",
-                otyp=otyp, oclass=int(row.oclass), lev=world.lev)
+    item = Item(
+        id=world.new_id("obj"),
+        otype=coarse_otype(otyp),
+        name=row.name if row.name is not None else "strange object",
+        otyp=otyp,
+        oclass=int(row.oclass),
+        lev=world.lev,
+    )
     world.items[item.id] = item
     item.age = max(world.turn, 1)
     item.quan = 1
@@ -353,22 +378,35 @@ def mksobj(world: World, rng, otyp: int, init: bool = True,
 
     # some things must get done (corpsenm) even if init = 0; C's switch
     # key is "a potion that is not oil is treated as water"
-    key = int(O.POT_WATER) if (item.oclass == int(ObjClass.POTION)
-                               and otyp != int(O.POT_OIL)) else otyp
+    key = (
+        int(O.POT_WATER)
+        if (item.oclass == int(ObjClass.POTION) and otyp != int(O.POT_OIL))
+        else otyp
+    )
     if key in (int(O.CORPSE), int(O.STATUE), int(O.FIGURINE), int(O.EGG)):
         if item.corpsenm == NON_PM:
-            item.corpsenm = (_corpse_subject(world, rng)
-                             if key == int(O.CORPSE)
-                             else rndmonnum(world, rng))
+            item.corpsenm = (
+                _corpse_subject(world, rng)
+                if key == int(O.CORPSE)
+                else rndmonnum(world, rng)
+            )
         if key != int(O.EGG) and is_ismnum(item.corpsenm):
             ptr = MONS[item.corpsenm]
             assert ptr is not None
             # C: the gender goes in the overloaded spe field
-            item.spe = (CORPSTAT_NEUTER if is_neuter(ptr)
-                        else CORPSTAT_FEMALE if is_female(ptr)
-                        else CORPSTAT_MALE if is_male(ptr)
-                        else CORPSTAT_FEMALE if rng.rn2(2)
-                        else CORPSTAT_MALE)
+            item.spe = (
+                CORPSTAT_NEUTER
+                if is_neuter(ptr)
+                else (
+                    CORPSTAT_FEMALE
+                    if is_female(ptr)
+                    else (
+                        CORPSTAT_MALE
+                        if is_male(ptr)
+                        else CORPSTAT_FEMALE if rng.rn2(2) else CORPSTAT_MALE
+                    )
+                )
+            )
         set_corpsenm(world, item, item.corpsenm)
     elif key == int(O.POT_OIL):
         item.age = MAX_OIL_IN_FLASK
@@ -403,7 +441,7 @@ def mksobj_init(world: World, rng, item: Item, artif: bool) -> None:
     containers their lock / trap state and contents, gems and rocks
     their quantity, tools the per-type switch.
     """
-    del artif                          # no artifacts: accepted, ignored
+    del artif  # no artifacts: accepted, ignored
     otyp = item.otyp
     oclass = item.oclass
     ulevel = world.hero_ulevel
@@ -425,15 +463,18 @@ def mksobj_init(world: World, rng, item: Item, artif: bool) -> None:
         if otyp == int(O.CORPSE):
             item.corpsenm = _corpse_subject(world, rng)
         elif otyp == int(O.EGG):
-            item.corpsenm = NON_PM     # generic egg (typed eggs: later)
+            item.corpsenm = NON_PM  # generic egg (typed eggs: later)
         # C also has the TIN / SLIME_MOLD / KELP_FROND / CANDY_BAR
         # cases; those rows are not reachable from the generation
         # tables yet, so they stay at the class default
-        if otyp not in (int(O.CORPSE), int(O.MEAT_RING),
-                        int(O.KELP_FROND)) and not rng.rn2(6):
+        if otyp not in (
+            int(O.CORPSE),
+            int(O.MEAT_RING),
+            int(O.KELP_FROND),
+        ) and not rng.rn2(6):
             item.quan = 2
     elif oclass == int(ObjClass.GEM):
-        item.corpsenm = 0               # C: the LOADSTONE hack
+        item.corpsenm = 0  # C: the LOADSTONE hack
         if otyp == int(O.LOADSTONE):
             curse(item)
         elif otyp == int(O.ROCK):
@@ -459,11 +500,14 @@ def mksobj_init(world: World, rng, item: Item, artif: bool) -> None:
             item.olocked = bool(rng.rn2(5))
             item.otrapped = not rng.rn2(10)
             mkbox_cnts(world, rng, item)
-        elif otyp in (int(O.ICE_BOX), int(O.SACK), int(O.OILSKIN_SACK),
-                      int(O.BAG_OF_HOLDING)):
+        elif otyp in (
+            int(O.ICE_BOX),
+            int(O.SACK),
+            int(O.OILSKIN_SACK),
+            int(O.BAG_OF_HOLDING),
+        ):
             mkbox_cnts(world, rng, item)
-        elif otyp in (int(O.EXPENSIVE_CAMERA), int(O.TINNING_KIT),
-                      int(O.MAGIC_MARKER)):
+        elif otyp in (int(O.EXPENSIVE_CAMERA), int(O.TINNING_KIT), int(O.MAGIC_MARKER)):
             item.spe = rng.rn1(70, 30)
         elif otyp == int(O.CAN_OF_GREASE):
             item.spe = rng.rn1(21, 5)
@@ -475,17 +519,23 @@ def mksobj_init(world: World, rng, item: Item, artif: bool) -> None:
             item.spe = rng.rn1(18, 3)
         elif otyp == int(O.BELL_OF_OPENING):
             item.spe = 3
-        elif otyp in (int(O.MAGIC_FLUTE), int(O.MAGIC_HARP),
-                      int(O.FROST_HORN), int(O.FIRE_HORN),
-                      int(O.DRUM_OF_EARTHQUAKE)):
+        elif otyp in (
+            int(O.MAGIC_FLUTE),
+            int(O.MAGIC_HARP),
+            int(O.FROST_HORN),
+            int(O.FIRE_HORN),
+            int(O.DRUM_OF_EARTHQUAKE),
+        ):
             item.spe = rng.rn1(5, 4)
         elif otyp == int(O.FIGURINE):
             item.corpsenm = rndmonnum_adj(world, rng, 5, 10)
             blessorcurse(rng, item, 4)
     elif oclass == int(ObjClass.AMULET):
-        if rng.rn2(10) and otyp in (int(O.AMULET_OF_STRANGULATION),
-                                    int(O.AMULET_OF_CHANGE),
-                                    int(O.AMULET_OF_RESTFUL_SLEEP)):
+        if rng.rn2(10) and otyp in (
+            int(O.AMULET_OF_STRANGULATION),
+            int(O.AMULET_OF_CHANGE),
+            int(O.AMULET_OF_RESTFUL_SLEEP),
+        ):
             curse(item)
         else:
             blessorcurse(rng, item, 10)
@@ -495,9 +545,9 @@ def mksobj_init(world: World, rng, item: Item, artif: bool) -> None:
         blessorcurse(rng, item, 17)
     elif oclass == int(ObjClass.ARMOR):
         # C: `rn2(10) && (otyp == FUMBLE_BOOTS || ... || !rn2(11))`
-        if rng.rn2(10) and (otyp in (int(O.FUMBLE_BOOTS),
-                                     int(O.LEVITATION_BOOTS))
-                            or not rng.rn2(11)):
+        if rng.rn2(10) and (
+            otyp in (int(O.FUMBLE_BOOTS), int(O.LEVITATION_BOOTS)) or not rng.rn2(11)
+        ):
             curse(item)
             item.spe = -rng.rne(3, ulevel)
         elif not rng.rn2(10):
@@ -506,7 +556,7 @@ def mksobj_init(world: World, rng, item: Item, artif: bool) -> None:
         else:
             blessorcurse(rng, item, 10)
     elif oclass == int(ObjClass.WAND):
-        if OBJECTS[otyp].dir == 0:      # C: NODIR wands hold more charges
+        if OBJECTS[otyp].dir == 0:  # C: NODIR wands hold more charges
             item.spe = rng.rn1(5, 11)
         else:
             item.spe = rng.rn1(5, 4)
@@ -519,32 +569,37 @@ def mksobj_init(world: World, rng, item: Item, artif: bool) -> None:
                 if rng.rn2(10) and bcsign(item):
                     item.spe = bcsign(item) * rng.rne(3, ulevel)
                 else:
-                    item.spe = (rng.rne(3, ulevel) if rng.rn2(2)
-                                else -rng.rne(3, ulevel))
+                    item.spe = rng.rne(3, ulevel) if rng.rn2(2) else -rng.rne(3, ulevel)
             # make useless +0 rings much less common
             if item.spe == 0:
                 item.spe = rng.rn2(4) - rng.rn2(3)
             # negative rings are usually cursed
             if item.spe < 0 and rng.rn2(5):
                 curse(item)
-        elif rng.rn2(10) and (otyp in (int(O.RIN_TELEPORTATION),
-                                       int(O.RIN_POLYMORPH),
-                                       int(O.RIN_AGGRAVATE_MONSTER),
-                                       int(O.RIN_HUNGER))
-                              or not rng.rn2(9)):
+        elif rng.rn2(10) and (
+            otyp
+            in (
+                int(O.RIN_TELEPORTATION),
+                int(O.RIN_POLYMORPH),
+                int(O.RIN_AGGRAVATE_MONSTER),
+                int(O.RIN_HUNGER),
+            )
+            or not rng.rn2(9)
+        ):
             curse(item)
     elif oclass == int(ObjClass.ROCK):
         if otyp == int(O.STATUE):
             # possibly overridden by mkcorpstat()
             item.corpsenm = rndmonnum(world, rng)
-            if not _verysmall(item.corpsenm) \
-                    and rng.rn2(rules.level_difficulty(world) // 2 + 10) > 10:
-                add_to_container(world, item,
-                                 mkobj(world, rng, SPBOOK_no_NOVEL))
+            if (
+                not _verysmall(item.corpsenm)
+                and rng.rn2(rules.level_difficulty(world) // 2 + 10) > 10
+            ):
+                add_to_container(world, item, mkobj(world, rng, SPBOOK_no_NOVEL))
         # C: the boulder case is handled in the "regardless of !init"
         # tail -- there is nothing to set until boulders can be thrown
     elif oclass == int(ObjClass.COIN):
-        pass                            # do nothing
+        pass  # do nothing
     # C's default case is a panic("mksobj tried to make type ..."); every
     # class above is handled, so there is nothing to panic about
 
@@ -590,7 +645,7 @@ def mkobj_erosions(world: World, rng, item: Item) -> None:
     if not may_generate_eroded(item):
         return
     if not rng.rn2(100):
-        return                          # C: oerodeproof
+        return  # C: oerodeproof
     if not rng.rn2(80) and is_flammable(item):
         while True:
             item.oeroded += 1
@@ -621,6 +676,7 @@ def set_corpsenm(world: World, item: Item, mndx: int) -> None:
 # ------------------------------------------------------------
 # Containers (C: mkobj.c mkbox_cnts / add_to_container / delete_contents)
 # ------------------------------------------------------------
+
 
 def add_to_container(world: World, container: Item, item: Item) -> None:
     """Put `item` inside `container` (C: mkobj.c#add_to_container).
@@ -669,8 +725,7 @@ def mkbox_cnts(world: World, rng, box: Item) -> None:
         n = 7 if box.olocked else 5
     elif box.otyp == int(O.LARGE_BOX):
         n = 5 if box.olocked else 3
-    elif box.otyp in (int(O.SACK), int(O.OILSKIN_SACK),
-                      int(O.BAG_OF_HOLDING)):
+    elif box.otyp in (int(O.SACK), int(O.OILSKIN_SACK), int(O.BAG_OF_HOLDING)):
         # C: a starting sack is empty; there is no starting inventory
         # path through mksobj yet, so the "up to 1" stands
         n = 1
@@ -686,14 +741,16 @@ def mkbox_cnts(world: World, rng, box: Item) -> None:
             otmp = mkobj(world, rng, oclass)
             if otmp.oclass == int(ObjClass.COIN):
                 # 2.5 times the level's usual amount; weight fixed below
-                otmp.quan = rng.rnd(rules.level_difficulty(world) + 2) \
-                    * rng.rnd(75)
+                otmp.quan = rng.rnd(rules.level_difficulty(world) + 2) * rng.rnd(75)
             else:
                 while otmp.otyp == int(O.ROCK):
-                    otmp = mksobj(world, rng,
-                                  rnd_class(world, rng,
-                                            int(O.DILITHIUM_CRYSTAL),
-                                            int(O.LOADSTONE)))
+                    otmp = mksobj(
+                        world,
+                        rng,
+                        rnd_class(
+                            world, rng, int(O.DILITHIUM_CRYSTAL), int(O.LOADSTONE)
+                        ),
+                    )
                     if otmp.quan > 2:
                         otmp.quan = 1
             if box.otyp == int(O.BAG_OF_HOLDING):
@@ -701,10 +758,13 @@ def mkbox_cnts(world: World, rng, box: Item) -> None:
                     otmp = mksobj(world, rng, int(O.SACK))
                 else:
                     while otmp.otyp == int(O.WAN_CANCELLATION):
-                        otmp = mksobj(world, rng,
-                                      rnd_class(world, rng,
-                                                int(O.WAN_LIGHT),
-                                                int(O.WAN_LIGHTNING)))
+                        otmp = mksobj(
+                            world,
+                            rng,
+                            rnd_class(
+                                world, rng, int(O.WAN_LIGHT), int(O.WAN_LIGHTNING)
+                            ),
+                        )
         add_to_container(world, box, otmp)
     box.owt = weight(world, box)
 
@@ -713,6 +773,7 @@ def mkbox_cnts(world: World, rng, box: Item) -> None:
 # mkobj / rnd_class -- picking an object type
 # (C: mkobj.c 270-301, 509-530 rnd_class)
 # ------------------------------------------------------------
+
 
 def _pick_class(rng, probs: Tuple[Tuple[int, int], ...]) -> int:
     """Walk a `struct icp` table with one rnd(100) (C: the class loop at
@@ -748,8 +809,7 @@ def rnd_class(world: World, rng, o_low: int, o_high: int) -> int:
     return o_high
 
 
-def mkobj(world: World, rng, oclass: int = RANDOM_CLASS,
-          artif: bool = False) -> Item:
+def mkobj(world: World, rng, oclass: int = RANDOM_CLASS, artif: bool = False) -> Item:
     """Make a random object of class `oclass` (C: mkobj.c#mkobj).
 
     RANDOM_CLASS rolls the class from mkobjprobs first; SPBOOK_no_NOVEL
@@ -760,8 +820,7 @@ def mkobj(world: World, rng, oclass: int = RANDOM_CLASS,
         oclass = _pick_class(rng, MKOBJPROBS)
 
     if oclass == SPBOOK_no_NOVEL:
-        i = rnd_class(world, rng, BASES[int(ObjClass.SPBOOK)],
-                      int(O.SPE_BLANK_PAPER))
+        i = rnd_class(world, rng, BASES[int(ObjClass.SPBOOK)], int(O.SPE_BLANK_PAPER))
         oclass = int(ObjClass.SPBOOK)
     else:
         prob = rng.rnd(world.obj_tables.prob_totals[oclass])
@@ -778,8 +837,9 @@ def mkobj(world: World, rng, oclass: int = RANDOM_CLASS,
     return mksobj(world, rng, i, True, artif)
 
 
-def mkobj_at(world: World, rng, oclass: int, pos: Pos, lev: int,
-             artif: bool = False) -> Item:
+def mkobj_at(
+    world: World, rng, oclass: int, pos: Pos, lev: int, artif: bool = False
+) -> Item:
     """A random object of `oclass`, placed on the map (C:
     mkobj.c#mkobj_at)."""
     item = mkobj(world, rng, oclass, artif)
@@ -787,8 +847,15 @@ def mkobj_at(world: World, rng, oclass: int, pos: Pos, lev: int,
     return item
 
 
-def mksobj_at(world: World, rng, otyp: int, pos: Pos, lev: int,
-              init: bool = True, artif: bool = False) -> Item:
+def mksobj_at(
+    world: World,
+    rng,
+    otyp: int,
+    pos: Pos,
+    lev: int,
+    init: bool = True,
+    artif: bool = False,
+) -> Item:
     """A specific object type, placed on the map (C:
     mkobj.c#mksobj_at)."""
     item = mksobj(world, rng, otyp, init, artif)
@@ -813,11 +880,11 @@ def place_object(world: World, item: Item, pos: Pos, lev: int) -> None:
 # Gold (C: mkobj.c mkgold / mkmonmoney is in core.makemon)
 # ------------------------------------------------------------
 
+
 def gold_at(world: World, lev: int, pos: Pos) -> Optional[Item]:
     """The gold pile on a square, if any (C: g_at)."""
     for item in world.items.values():
-        if (item.lev == lev and item.pos == pos
-                and item.oclass == int(ObjClass.COIN)):
+        if item.lev == lev and item.pos == pos and item.oclass == int(ObjClass.COIN):
             return item
     return None
 
@@ -870,10 +937,18 @@ def hero_gold(world: World) -> int:
 # Corpses and statues (C: mkobj.c mkcorpstat / rndmonnum)
 # ------------------------------------------------------------
 
-def mkcorpstat(world: World, rng, otyp: int, mon: Optional[object] = None,
-               ptr: Optional[object] = None, pos: Pos = (0, 0),
-               lev: Optional[int] = None, init: bool = True,
-               spe: int = CORPSTAT_NONE) -> Item:
+
+def mkcorpstat(
+    world: World,
+    rng,
+    otyp: int,
+    mon: Optional[object] = None,
+    ptr: Optional[object] = None,
+    pos: Pos = (0, 0),
+    lev: Optional[int] = None,
+    init: bool = True,
+    spe: int = CORPSTAT_NONE,
+) -> Item:
     """Make a corpse or a statue of a monster type (C:
     mkobj.c#mkcorpstat).
 
@@ -897,7 +972,7 @@ def mkcorpstat(world: World, rng, otyp: int, mon: Optional[object] = None,
         if ptr is None:
             ptr = getattr(mon, "mdata", None)
     if ptr is not None:
-        item.corpsenm = ptr.pmidx          # type: ignore[attr-defined]
+        item.corpsenm = ptr.pmidx  # type: ignore[attr-defined]
         item.owt = weight(world, item)
     return item
 
@@ -956,15 +1031,45 @@ def rndmonnum_adj(world: World, rng, minadj: int, maxadj: int) -> int:
 
 
 __all__ = [
-    "BOXIPROBS", "CORPSTAT_FEMALE", "CORPSTAT_MALE", "CORPSTAT_NEUTER",
-    "CORPSTAT_NONE", "MAX_OIL_IN_FLASK", "MKOBJPROBS", "RANDOM_CLASS",
+    "BOXIPROBS",
+    "CORPSTAT_FEMALE",
+    "CORPSTAT_MALE",
+    "CORPSTAT_NEUTER",
+    "CORPSTAT_NONE",
+    "MAX_OIL_IN_FLASK",
+    "MKOBJPROBS",
+    "RANDOM_CLASS",
     "SPBOOK_no_NOVEL",
-    "add_to_container", "bcsign", "bless", "blessorcurse", "coarse_otype",
-    "curse", "delete_contents", "gold_at", "hero_gold", "is_container",
-    "is_ismnum", "is_multigen", "may_generate_eroded", "mkbox_cnts",
-    "mkcorpstat", "mkgold", "mkobj", "mkobj_at", "mkobj_erosions",
-    "mksobj", "mksobj_at", "mksobj_init", "place_object", "rnd_class",
-    "rndmonnum", "rndmonnum_adj", "set_corpsenm", "sobj_at",
-    "unbless", "uncurse",
-    "unknow_object", "weight",
+    "add_to_container",
+    "bcsign",
+    "bless",
+    "blessorcurse",
+    "coarse_otype",
+    "curse",
+    "delete_contents",
+    "gold_at",
+    "hero_gold",
+    "is_container",
+    "is_ismnum",
+    "is_multigen",
+    "may_generate_eroded",
+    "mkbox_cnts",
+    "mkcorpstat",
+    "mkgold",
+    "mkobj",
+    "mkobj_at",
+    "mkobj_erosions",
+    "mksobj",
+    "mksobj_at",
+    "mksobj_init",
+    "place_object",
+    "rnd_class",
+    "rndmonnum",
+    "rndmonnum_adj",
+    "set_corpsenm",
+    "sobj_at",
+    "unbless",
+    "uncurse",
+    "unknow_object",
+    "weight",
 ]

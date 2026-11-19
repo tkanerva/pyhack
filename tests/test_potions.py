@@ -1,4 +1,5 @@
 """Tests for the potion system."""
+
 import random
 
 from core.potions import quaff
@@ -8,8 +9,13 @@ from conftest import assert_item_locations, make_hero, make_world
 
 def world_with_potion(potion_type, hp=20, max_hp=25):
     w = make_world(hero=make_hero(hp=hp, max_hp=max_hp))
-    pot = Item(id="pot_0", otype=ObjectType.POTION, name="Potion",
-               potion_type=potion_type, carrier="player")
+    pot = Item(
+        id="pot_0",
+        otype=ObjectType.POTION,
+        name="Potion",
+        potion_type=potion_type,
+        carrier="player",
+    )
     w.items["pot_0"] = pot
     w.hero.inventory.append(pot)
     return w

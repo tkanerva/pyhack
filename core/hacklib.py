@@ -34,6 +34,7 @@ geometry helpers (distmin / dist2 / online2), and the status query
 functions (is_blind / is_confused / can_see / ...) -- the single home
 for every "is this actor in status X?" question.
 """
+
 from __future__ import annotations
 
 from math import isqrt  # noqa: F401  (stdlib replacement for C isqrt)
@@ -54,16 +55,18 @@ Pos = Tuple[int, int]
 # Characters
 # ------------------------------------------------------------
 
+
 def letter(c: str) -> bool:
     """NetHack letter test (C: letter): '@' through 'Z' and 'a' through
     'z'.  '@' counts as a letter because inventory letters range
     @..z -- keep this; str.isalpha() does NOT include '@'."""
-    return '@' <= c <= 'Z' or 'a' <= c <= 'z'
+    return "@" <= c <= "Z" or "a" <= c <= "z"
 
 
 # ------------------------------------------------------------
 # Input-line handling (no stdlib equivalent)
 # ------------------------------------------------------------
+
 
 def mungspaces(s: str) -> str:
     """C: mungspaces -- remove excess whitespace: collapse runs of
@@ -73,16 +76,16 @@ def mungspaces(s: str) -> str:
     out = []
     was_space = True
     for c in s:
-        if c == '\n':
+        if c == "\n":
             break  # treat newline the same as end-of-string
-        if c == '\t':
-            c = ' '
-        if c != ' ' or not was_space:
+        if c == "\t":
+            c = " "
+        if c != " " or not was_space:
             out.append(c)
-        was_space = (c == ' ')
+        was_space = c == " "
     if was_space and out:
         out.pop()  # drop the trailing space
-    return ''.join(out)
+    return "".join(out)
 
 
 def visctrl(c: str) -> str:
@@ -105,12 +108,13 @@ def visctrl(c: str) -> str:
 # Name matching (no stdlib equivalent)
 # ------------------------------------------------------------
 
+
 def findword(word_list: str, word: str, ignorecase: bool = False) -> Optional[str]:
     """C: findword -- find an exact word in a space-separated list.
 
     Returns the word (as it appears in the list) or None.
     """
-    for tok in word_list.split(' '):
+    for tok in word_list.split(" "):
         if not tok:
             continue
         if ignorecase:
@@ -127,14 +131,14 @@ def fuzzymatch(s1: str, s2: str, ignore_chars: str, caseblind: bool = False) -> 
     input against object/monster names."""
     i = j = 0
     n1, n2 = len(s1), len(s2)
-    c1 = c2 = ''
+    c1 = c2 = ""
     while True:
         while i < n1 and s1[i] in ignore_chars:
             i += 1
         while j < n2 and s2[j] in ignore_chars:
             j += 1
-        c1 = s1[i] if i < n1 else ''
-        c2 = s2[j] if j < n2 else ''
+        c1 = s1[i] if i < n1 else ""
+        c2 = s2[j] if j < n2 else ""
         if not c1 or not c2:
             break
         if caseblind:
@@ -168,6 +172,7 @@ def ordin(n: int) -> str:
 # ------------------------------------------------------------
 # Geometry
 # ------------------------------------------------------------
+
 
 def sgn(n: int) -> int:
     """Sign of n: -1, 0, or 1 (C: sgn)."""
@@ -232,6 +237,7 @@ def swapbits(val: int, bita: int, bitb: int) -> int:
 # one of the functions below, and mutation stays in core.rules (the
 # state-mutation choke points).  These functions only answer
 # questions; they never change state.
+
 
 def is_asleep(m: Monster) -> bool:
     """True while the actor is asleep (C: Sleeping)."""

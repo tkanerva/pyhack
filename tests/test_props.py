@@ -20,12 +20,13 @@ test_worn.py pattern: coarse ``Item.otype`` from the fine oclass,
 ``Item.otyp`` / ``Item.oclass`` from the row, the worn state the
 ``Item.owornmask`` bitmask.
 """
+
 import pytest
 
 # the module under test: skip (not fail) until the prop-system port
-pytest.importorskip("core.props",
-                    reason="the prop-system port is not in yet "
-                           "(PLAN-ARMOR.md)")
+pytest.importorskip(
+    "core.props", reason="the prop-system port is not in yet " "(PLAN-ARMOR.md)"
+)
 
 from core.objects import OBJECTS, ObjClass, ObjType, Prop  # noqa: E402
 from core.objects import W_ARMC, W_RINGL  # noqa: E402
@@ -45,9 +46,13 @@ def _item(otyp: ObjType, owornmask: int = 0) -> Item:
     o = OBJECTS[otyp.value]
     oclass = int(o.oclass)
     return Item(
-        id=f"it_{otyp.name.lower()}", otype=_COARSE[oclass],
+        id=f"it_{otyp.name.lower()}",
+        otype=_COARSE[oclass],
         name=o.name,
-        otyp=otyp.value, oclass=oclass, owornmask=owornmask)
+        otyp=otyp.value,
+        oclass=oclass,
+        owornmask=owornmask,
+    )
 
 
 def _add(w, mon, item) -> Item:

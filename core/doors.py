@@ -139,8 +139,7 @@ def close_door(world: World, pos: Pos, rng) -> List[Event]:
 def _monster_at(world: World, pos: Pos) -> Optional[Monster]:
     """The live non-hero monster standing in a doorway (C: m_at)."""
     for mon in world.actors.values():
-        if (mon.alive and not mon.is_hero and mon.lev == world.lev
-                and mon.pos == pos):
+        if mon.alive and not mon.is_hero and mon.lev == world.lev and mon.pos == pos:
             return mon
     return None
 
@@ -148,8 +147,7 @@ def _monster_at(world: World, pos: Pos) -> Optional[Monster]:
 def is_doorway(world: World, pos: Pos) -> bool:
     """A square whose terrain is a door (the display / travel helpers
     want this without importing core.mklev)."""
-    return world.map.in_bounds(pos) and \
-        world.map.tile_at(pos).typ == TerrainType.DOOR
+    return world.map.in_bounds(pos) and world.map.tile_at(pos).typ == TerrainType.DOOR
 
 
 __all__ = ["close_door", "closed_door", "is_doorway", "open_door"]

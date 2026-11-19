@@ -1,10 +1,19 @@
 """Unit tests for the pure rules in core.rules."""
+
 import random
 
 from core.events import DamageEvent, DeathEvent
 from core.hacklib import is_blind, is_hallucinating
-from core.rules import (apply_damage, heal, hit_chance, melee_attack,
-                        resists, roll, tick_actor, teleport_to_floor)
+from core.rules import (
+    apply_damage,
+    heal,
+    hit_chance,
+    melee_attack,
+    resists,
+    roll,
+    tick_actor,
+    teleport_to_floor,
+)
 from core.types import DamageType
 from conftest import SeqRng, make_hero, make_monster, make_world
 
@@ -23,7 +32,7 @@ def test_hit_chance_is_twenty_minus_ac():
 def test_melee_miss_then_hit():
     hero = make_hero(ac=19)  # hit chance 1
     mon = make_monster(damage=2)
-    assert melee_attack(SeqRng(2), mon, hero) == 0     # d20 = 2 > 1
+    assert melee_attack(SeqRng(2), mon, hero) == 0  # d20 = 2 > 1
     assert melee_attack(SeqRng(1, 2), mon, hero) == 2  # d20 = 1, 1d2 = 2
 
 
@@ -76,8 +85,10 @@ def test_tick_actor_poison_deals_one_damage():
     events = tick_actor(w, "player", SeqRng())
     assert w.hero.hp == 24
     assert w.hero.poisoned == 1
-    assert any(isinstance(e, DamageEvent) and e.damage_type == DamageType.POISON
-               for e in events)
+    assert any(
+        isinstance(e, DamageEvent) and e.damage_type == DamageType.POISON
+        for e in events
+    )
 
 
 def test_tick_actor_blindness_and_hallucination_decrement():

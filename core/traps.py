@@ -6,14 +6,21 @@ to a per-type effect function in TRAP_EFFECTS.  Adding a trap type now
 means adding one function and one registry entry -- no more 200-line
 if/elif in TrapActor._apply_trap_effect.
 """
+
 from __future__ import annotations
 
 from typing import Callable, List
 
 from .events import Event, MessageEvent, TrapSeenEvent, TrapTriggeredEvent
 from .items import cancel_items
-from .rules import (apply_damage, apply_stuck, put_to_sleep, resists, roll,
-                    teleport_to_floor)
+from .rules import (
+    apply_damage,
+    apply_stuck,
+    put_to_sleep,
+    resists,
+    roll,
+    teleport_to_floor,
+)
 from .types import DamageType, Trap, TrapType, World
 from .worn import burnarmor
 
@@ -23,11 +30,15 @@ TrapEffect = Callable[[World, Trap, str, object], List[Event]]
 def _pit_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event]:
     a = world.actors[actor_id]
     dmg = roll(rng, 6)
-    flavor = (f"⚡ A pit hits you for {dmg} damage!" if a.is_hero
-              else f"⚡ {a.name} triggers a pit and takes {dmg} damage!")
+    flavor = (
+        f"⚡ A pit hits you for {dmg} damage!"
+        if a.is_hero
+        else f"⚡ {a.name} triggers a pit and takes {dmg} damage!"
+    )
     events: List[Event] = [MessageEvent(flavor)]
-    events += apply_damage(world, actor_id, dmg, DamageType.MELEE,
-                           f"trap:{trap.id}", message=False)
+    events += apply_damage(
+        world, actor_id, dmg, DamageType.MELEE, f"trap:{trap.id}", message=False
+    )
     events += apply_stuck(world, actor_id, 10, message=False)
     return events
 
@@ -35,11 +46,15 @@ def _pit_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event]:
 def _spiked_pit_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event]:
     a = world.actors[actor_id]
     dmg = roll(rng, 12)
-    flavor = (f"⚡ A spiked pit hits you for {dmg} damage!" if a.is_hero
-              else f"⚡ {a.name} triggers a spiked pit and takes {dmg} damage!")
+    flavor = (
+        f"⚡ A spiked pit hits you for {dmg} damage!"
+        if a.is_hero
+        else f"⚡ {a.name} triggers a spiked pit and takes {dmg} damage!"
+    )
     events: List[Event] = [MessageEvent(flavor)]
-    events += apply_damage(world, actor_id, dmg, DamageType.MELEE,
-                           f"trap:{trap.id}", message=False)
+    events += apply_damage(
+        world, actor_id, dmg, DamageType.MELEE, f"trap:{trap.id}", message=False
+    )
     events += apply_stuck(world, actor_id, 10, message=False)
     return events
 
@@ -47,34 +62,46 @@ def _spiked_pit_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Eve
 def _fire_trap_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event]:
     a = world.actors[actor_id]
     if resists(a, DamageType.FIRE):
-        text = ("You resist the fire trap." if a.is_hero
-                else f"{a.name} resists the fire trap.")
+        text = (
+            "You resist the fire trap."
+            if a.is_hero
+            else f"{a.name} resists the fire trap."
+        )
         return [MessageEvent(text)]
     dmg = roll(rng, 6)
-    flavor = (f"🔥 A fire trap hits you for {dmg} damage!" if a.is_hero
-              else f"🔥 {a.name} is hit by a fire trap for {dmg} damage!")
+    flavor = (
+        f"🔥 A fire trap hits you for {dmg} damage!"
+        if a.is_hero
+        else f"🔥 {a.name} is hit by a fire trap for {dmg} damage!"
+    )
     events: List[Event] = [MessageEvent(flavor)]
-    events += apply_damage(world, actor_id, dmg, DamageType.FIRE,
-                           f"trap:{trap.id}", message=False)
+    events += apply_damage(
+        world, actor_id, dmg, DamageType.FIRE, f"trap:{trap.id}", message=False
+    )
     # C: dofiretrap -> burnarmor: the fire also chews at the worn
     # armour (the trap.c 5-way pick; a no-op for bare monsters)
     events += burnarmor(world, a, rng)
     return events
 
 
-def _ranged_trap_effect(world: World, trap: Trap, actor_id: str, rng,
-                        projectile: str) -> List[Event]:
+def _ranged_trap_effect(
+    world: World, trap: Trap, actor_id: str, rng, projectile: str
+) -> List[Event]:
     """Arrow / dart trap with an AC-based hit check (old trap_hit())."""
     a = world.actors[actor_id]
     die = 6 if projectile == "arrow" else 4
     hit_chance = max(5, 20 - a.ac)
     if rng.randint(1, 20) <= hit_chance:
         dmg = roll(rng, die)
-        flavor = (f"🏹 A {projectile} trap hits you for {dmg} damage!" if a.is_hero
-                  else f"🏹 A {projectile} trap hits {a.name} for {dmg} damage!")
+        flavor = (
+            f"🏹 A {projectile} trap hits you for {dmg} damage!"
+            if a.is_hero
+            else f"🏹 A {projectile} trap hits {a.name} for {dmg} damage!"
+        )
         events: List[Event] = [MessageEvent(flavor)]
-        events += apply_damage(world, actor_id, dmg, DamageType.ACID,
-                               f"trap:{trap.id}", message=False)
+        events += apply_damage(
+            world, actor_id, dmg, DamageType.ACID, f"trap:{trap.id}", message=False
+        )
         return events
     if a.is_hero:
         return [MessageEvent(f"🏹 The {projectile} trap misses you.")]
@@ -91,8 +118,11 @@ def _teleport_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event
 
 def _trapdoor_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event]:
     a = world.actors[actor_id]
-    flavor = ("🕳️ You fall through a trap door!" if a.is_hero
-              else f"🕳️ {a.name} falls through a trap door!")
+    flavor = (
+        "🕳️ You fall through a trap door!"
+        if a.is_hero
+        else f"🕳️ {a.name} falls through a trap door!"
+    )
     events: List[Event] = [MessageEvent(flavor)]
     events += teleport_to_floor(world, actor_id, rng)
     return events
@@ -109,11 +139,15 @@ def _web_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event]:
 def _boulder_effect(world: World, trap: Trap, actor_id: str, rng) -> List[Event]:
     a = world.actors[actor_id]
     dmg = rng.randint(4, 20)
-    flavor = (f"💥 A rolling boulder hits you for {dmg} damage!" if a.is_hero
-              else f"💥 {a.name} is crushed by a rolling boulder!")
+    flavor = (
+        f"💥 A rolling boulder hits you for {dmg} damage!"
+        if a.is_hero
+        else f"💥 {a.name} is crushed by a rolling boulder!"
+    )
     events: List[Event] = [MessageEvent(flavor)]
-    events += apply_damage(world, actor_id, dmg, DamageType.MELEE,
-                           f"trap:{trap.id}", message=False)
+    events += apply_damage(
+        world, actor_id, dmg, DamageType.MELEE, f"trap:{trap.id}", message=False
+    )
     return events
 
 
@@ -155,10 +189,15 @@ def check_traps(world: World, actor_id: str, rng) -> List[Event]:
             trap.seen = True
             events.append(TrapSeenEvent(trap.id))
             if actor.is_hero:
-                events.append(MessageEvent(
-                    "👣 You feel something underfoot but don't trigger it."))
+                events.append(
+                    MessageEvent(
+                        "👣 You feel something underfoot but don't trigger it."
+                    )
+                )
             else:
-                events.append(MessageEvent(f"👣 {actor.name} feels something underfoot."))
+                events.append(
+                    MessageEvent(f"👣 {actor.name} feels something underfoot.")
+                )
     return events
 
 
@@ -170,5 +209,8 @@ def disarm_trap(world: World, trap_id: str, source_id: str) -> List[Event]:
     source = world.actors.get(source_id)
     if source is not None and source.is_hero:
         return [MessageEvent("You disarm the trap.")]
-    return [MessageEvent(f"{source.name} disarms the trap." if source
-                         else "The trap is disarmed.")]
+    return [
+        MessageEvent(
+            f"{source.name} disarms the trap." if source else "The trap is disarmed."
+        )
+    ]

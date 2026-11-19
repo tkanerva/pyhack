@@ -4,13 +4,22 @@ Fixed-date table tests: every function takes an explicit ``now``
 (datetime), so nothing here touches the wall clock except two small
 smoke tests of the default (``now=None``) path.
 """
+
 import time
 from datetime import datetime, timedelta
 
-from core.calendar import (friday_13th, getnow, getyear, hhmmss,
-                           midnight, night, phase_of_the_moon,
-                           time_from_yyyymmddhhmmss, yyyymmdd,
-                           yyyymmddhhmmss)
+from core.calendar import (
+    friday_13th,
+    getnow,
+    getyear,
+    hhmmss,
+    midnight,
+    night,
+    phase_of_the_moon,
+    time_from_yyyymmddhhmmss,
+    yyyymmdd,
+    yyyymmddhhmmss,
+)
 
 T = datetime(2026, 10, 28, 15, 4, 5)
 
@@ -32,21 +41,31 @@ def test_hhmmss():
 
 def test_yyyymmddhhmmss():
     assert yyyymmddhhmmss(T) == "20261028150405"
-    assert yyyymmddhhmmss(datetime(2000, 1, 2, 3, 4, 5)) == \
-        "20000102030405"
+    assert yyyymmddhhmmss(datetime(2000, 1, 2, 3, 4, 5)) == "20000102030405"
 
 
 def test_time_from_yyyymmddhhmmss_roundtrip():
     epoch = time_from_yyyymmddhhmmss("20261028150405")
     back = datetime.fromtimestamp(epoch)
-    assert (back.year, back.month, back.day,
-            back.hour, back.minute, back.second) == \
-        (2026, 10, 28, 15, 4, 5)
+    assert (back.year, back.month, back.day, back.hour, back.minute, back.second) == (
+        2026,
+        10,
+        28,
+        15,
+        4,
+        5,
+    )
 
 
 def test_time_from_yyyymmddhhmmss_malformed_is_zero():
-    for bad in ("", "2026102", "202610281504051", "abcdefghijklmn",
-                "20261301000000", "20260229120000"):
+    for bad in (
+        "",
+        "2026102",
+        "202610281504051",
+        "abcdefghijklmn",
+        "20261301000000",
+        "20260229120000",
+    ):
         assert time_from_yyyymmddhhmmss(bad) == 0
 
 

@@ -48,6 +48,7 @@ table:
   indices this parse produced (they are what the game code reads, so a
   drift there is a silent mis-identification of every monster).
 """
+
 from __future__ import annotations
 
 import re
@@ -73,27 +74,28 @@ ROW_MACROS = ("MON", "NAM", "NAMS", "LVL", "A", "ATTK", "SIZ", "NO_ATTK")
 class Row(NamedTuple):
     """One C ``MON(...)`` row, already translated to Python field text."""
 
-    idx: int                        # the mons[] index == PM_* value
-    enum: str                       # the C enum name, e.g. GIANT_ANT
-    cname: str                      # the neutral name, e.g. giant ant
-    name: str                       # `"giant ant"` or `_nams(...)`
-    mlet: str                       # S_ANT
-    lvl: Tuple[str, ...]            # level, move, ac, mr, alignment
-    geno: str                       # G_GENO | G_SGROUP | 3
-    atks: Tuple[str, ...]           # six Attack(...) / NO_ATK
-    siz: Tuple[str, ...]            # cwt, cnutrit, msound, msize
-    mr1: str                        # mresists
-    mr2: str                        # mconveys
-    f1: str                         # mflags1
-    f2: str                         # mflags2
-    f3: str                         # mflags3
-    diff: str                       # difficulty
-    col: str                        # mcolor
+    idx: int  # the mons[] index == PM_* value
+    enum: str  # the C enum name, e.g. GIANT_ANT
+    cname: str  # the neutral name, e.g. giant ant
+    name: str  # `"giant ant"` or `_nams(...)`
+    mlet: str  # S_ANT
+    lvl: Tuple[str, ...]  # level, move, ac, mr, alignment
+    geno: str  # G_GENO | G_SGROUP | 3
+    atks: Tuple[str, ...]  # six Attack(...) / NO_ATK
+    siz: Tuple[str, ...]  # cwt, cnutrit, msound, msize
+    mr1: str  # mresists
+    mr2: str  # mconveys
+    f1: str  # mflags1
+    f2: str  # mflags2
+    f3: str  # mflags3
+    diff: str  # difficulty
+    col: str  # mcolor
 
 
 # ------------------------------------------------------------
 # C source -> rows
 # ------------------------------------------------------------
+
 
 def _strip_comments(text: str) -> str:
     """Drop every ``/* ... */`` comment (the rows carry prose asides)."""
@@ -117,8 +119,7 @@ def _logical_lines(text: str) -> List[str]:
     return out
 
 
-def _directive(line: str, macros: Dict[str, str],
-               active: List[bool]) -> None:
+def _directive(line: str, macros: Dict[str, str], active: List[bool]) -> None:
     """Handle one preprocessor line: record macros, track the sections.
 
     The header only uses the simple forms (``#ifdef`` / ``#if 0`` /
@@ -128,7 +129,7 @@ def _directive(line: str, macros: Dict[str, str],
     kind = line.split()[0]
     if kind == "#define":
         if re.match(r"#define\s+\w+\(", line):
-            return                      # function-like (MON, MON3): unused
+            return  # function-like (MON, MON3): unused
         m = re.match(r"#define\s+(\w+)\s+(.*)", line)
         if m is None:
             raise ValueError(f"unparsed #define: {line}")
@@ -138,7 +139,7 @@ def _directive(line: str, macros: Dict[str, str],
     elif kind == "#ifndef":
         active.append(line.split()[1] not in DEFINED_SECTIONS)
     elif kind == "#if":
-        active.append(False)            # `#if 0` / `#if defined(MONS_ENUM)`
+        active.append(False)  # `#if 0` / `#if defined(MONS_ENUM)`
     elif kind in ("#else", "#elif"):
         active[-1] = not active[-1]
     elif kind == "#endif":
@@ -237,8 +238,7 @@ def _expr(text: str) -> str:
     geno column is written with."""
     out = re.sub(r"\s+", " ", text).strip()
     out = re.sub(r"\b(0[xX][0-9a-fA-F]+|\d+)[uUlL]+\b", r"\1", out)
-    if (out.startswith("(") and out.endswith(")")
-            and _balanced(out, 1) == out[1:-1]):
+    if out.startswith("(") and out.endswith(")") and _balanced(out, 1) == out[1:-1]:
         out = out[1:-1].strip()
     return out
 
@@ -249,8 +249,9 @@ def _call_args(text: str, name: str, count: int) -> List[str]:
         raise ValueError(f"expected {name}(...) but found: {text[:40]}")
     args = _split_top(_balanced(text, len(name) + 1))
     if len(args) != count:
-        raise ValueError(f"{name}() takes {count} arguments, got "
-                         f"{len(args)} in: {text[:60]}")
+        raise ValueError(
+            f"{name}() takes {count} arguments, got " f"{len(args)} in: {text[:60]}"
+        )
     return args
 
 
@@ -276,8 +277,10 @@ def _parse_name(nam: str, idx: int) -> Tuple[str, str]:
     """The name column: C's ``NAM()`` or ``NAMS()`` -> Python, and the
     neutral name (the one ``PM_NAMES`` records)."""
     if nam.startswith("NAMS("):
-        names = [_quoted(a, f"row {idx} NAMS") for a in
-                 _split_top(_balanced(nam, len("NAMS") + 1))]
+        names = [
+            _quoted(a, f"row {idx} NAMS")
+            for a in _split_top(_balanced(nam, len("NAMS") + 1))
+        ]
         if len(names) != 3:
             raise ValueError(f"row {idx}: NAMS() needs three names")
         return f"_nams({', '.join(names)})", names[2].strip('"')
@@ -295,10 +298,12 @@ def _parse_attack(text: str, idx: int) -> str:
     if text == "NO_ATTK":
         return "NO_ATK"
     aatyp, adtyp, damn, damd = _call_args(text, "ATTK", 4)
-    return ("Attack({}, {}, {}, {})"
-            .format(_expr(aatyp), _expr(adtyp),
-                    _int(damn, f"row {idx} ATTK dice"),
-                    _int(damd, f"row {idx} ATTK sides")))
+    return "Attack({}, {}, {}, {})".format(
+        _expr(aatyp),
+        _expr(adtyp),
+        _int(damn, f"row {idx} ATTK dice"),
+        _int(damd, f"row {idx} ATTK sides"),
+    )
 
 
 def _parse_row(idx: int, args_text: str) -> Row:
@@ -306,26 +311,31 @@ def _parse_row(idx: int, args_text: str) -> Row:
     args = _split_top(args_text)
     if len(args) != MON_ARGS:
         raise ValueError(f"row {idx}: {len(args)} MON arguments")
-    (nam, sym, lvl, gen, atk, siz, mr1, mr2,
-     f1, f2, f3, diff, col, enum) = args
+    nam, sym, lvl, gen, atk, siz, mr1, mr2, f1, f2, f3, diff, col, enum = args
 
     name, cname = _parse_name(nam, idx)
 
     # LVL(level, move, ac, mr, alignment)
     level, move, ac, mr, align = _call_args(lvl, "LVL", 5)
-    lvl_col = (_int(level, f"row {idx} LVL level"),
-               _int(move, f"row {idx} LVL move"),
-               _int(ac, f"row {idx} LVL ac"),
-               _int(mr, f"row {idx} LVL mr"),
-               _expr(align))
+    lvl_col = (
+        _int(level, f"row {idx} LVL level"),
+        _int(move, f"row {idx} LVL move"),
+        _int(ac, f"row {idx} LVL ac"),
+        _int(mr, f"row {idx} LVL mr"),
+        _expr(align),
+    )
 
     # A(...) -- exactly six attack slots
     atks = tuple(_parse_attack(a, idx) for a in _call_args(atk, "A", 6))
 
     # SIZ(weight, nutrition, sound, size)
     weight, nutrit, sound, size = _call_args(siz, "SIZ", 4)
-    siz_col = (weight, _int(nutrit, f"row {idx} SIZ nutrition"),
-               _expr(sound), _expr(size))
+    siz_col = (
+        weight,
+        _int(nutrit, f"row {idx} SIZ nutrition"),
+        _expr(sound),
+        _expr(size),
+    )
 
     return Row(
         idx=idx,
@@ -362,16 +372,15 @@ def parse(path: Path = C_HEADER) -> List[Row]:
             continue
         if all(active):
             body.append(_expand(stripped, macros))
-    return [_parse_row(i, call)
-            for i, call in enumerate(_calls(" ".join(body), "MON"))]
+    return [_parse_row(i, call) for i, call in enumerate(_calls(" ".join(body), "MON"))]
 
 
 # ------------------------------------------------------------
 # Checks (they abort the run; a converter bug must not be silent)
 # ------------------------------------------------------------
 
-def check_rows(rows: Sequence[Row], nummons: int,
-               special_pm: int) -> List[str]:
+
+def check_rows(rows: Sequence[Row], nummons: int, special_pm: int) -> List[str]:
     """The table-shape checks; returns the report lines, raises on a
     wrong answer."""
     if len(rows) != nummons:
@@ -380,11 +389,14 @@ def check_rows(rows: Sequence[Row], nummons: int,
         if row.idx != i:
             raise ValueError(f"row {i} carries index {row.idx}")
     if rows[0].cname != "giant ant":
-        raise ValueError(f"row 0 is {rows[0].cname!r}; the table starts "
-                         "with the giant ant")
+        raise ValueError(
+            f"row 0 is {rows[0].cname!r}; the table starts " "with the giant ant"
+        )
     if rows[special_pm].enum != "LONG_WORM_TAIL":
-        raise ValueError(f"row {special_pm} is {rows[special_pm].enum!r}; "
-                         "SPECIAL_PM expects the worm tail")
+        raise ValueError(
+            f"row {special_pm} is {rows[special_pm].enum!r}; "
+            "SPECIAL_PM expects the worm tail"
+        )
     # the special section is the G_NOGEN | M2_NOPOLY tail of the table
     for row in rows[special_pm:]:
         if "G_NOGEN" not in row.geno:
@@ -398,10 +410,11 @@ def check_identifiers(rows: Sequence[Row]) -> List[str]:
     """Every identifier a row uses must be declared by core.monst_defs,
     and every PM_* anchor there must be the C index of its row."""
     sys.path.insert(0, str(REPO_ROOT))
-    from core import monst_defs                       # noqa: E402
+    from core import monst_defs  # noqa: E402
 
-    known = {name for name in dir(monst_defs)
-             if not name.startswith("__")} | set(ROW_MACROS)
+    known = {name for name in dir(monst_defs) if not name.startswith("__")} | set(
+        ROW_MACROS
+    )
     missing: Dict[str, str] = {}
     pattern = re.compile(r"[A-Za-z_]\w*")
     for row in rows:
@@ -412,23 +425,26 @@ def check_identifiers(rows: Sequence[Row]) -> List[str]:
     if missing:
         raise ValueError(
             "identifiers core.monst_defs does not declare: "
-            + ", ".join(f"{name} ({where})"
-                        for name, where in sorted(missing.items())))
+            + ", ".join(f"{name} ({where})" for name, where in sorted(missing.items()))
+        )
 
-    anchors = {name: getattr(monst_defs, name) for name in dir(monst_defs)
-               if re.fullmatch(r"PM_[A-Z0-9_]+", name)}
+    anchors = {
+        name: getattr(monst_defs, name)
+        for name in dir(monst_defs)
+        if re.fullmatch(r"PM_[A-Z0-9_]+", name)
+    }
     expected = {"PM_" + row.enum: row.idx for row in rows}
-    bad = [f"{name}={value} (the table says {expected[name]})"
-           for name, value in sorted(anchors.items())
-           if name in expected and value != expected[name]]
+    bad = [
+        f"{name}={value} (the table says {expected[name]})"
+        for name, value in sorted(anchors.items())
+        if name in expected and value != expected[name]
+    ]
     if bad:
-        raise ValueError("PM_* anchors disagree with monsters.h: "
-                         + ", ".join(bad))
+        raise ValueError("PM_* anchors disagree with monsters.h: " + ", ".join(bad))
     report = [f"{len(anchors)} PM_* anchors agree with the C numbering"]
     stale = sorted(name for name in anchors if name not in expected)
     if stale:
-        report.append("anchors with no C row (renamed in 5.0?): "
-                      + ", ".join(stale))
+        report.append("anchors with no C row (renamed in 5.0?): " + ", ".join(stale))
     return report
 
 
@@ -475,8 +491,7 @@ can be audited against monsters.h line by line.
 """'''
 
 
-def _pack(chunks: Sequence[str], indent: str,
-          last_suffix: str = "") -> List[str]:
+def _pack(chunks: Sequence[str], indent: str, last_suffix: str = "") -> List[str]:
     """Greedily wrap `chunks` into lines, appending `last_suffix` to the
     last one (the closing paren of a call)."""
     lines: List[str] = []
@@ -493,8 +508,10 @@ def _pack(chunks: Sequence[str], indent: str,
 
 # the constants the generated rows use, grouped for the import block
 IMPORT_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    ("the row builder and its types",
-     ("_mon", "_nams", "Attack", "NO_ATK", "NUMMONS", "PerMonst")),
+    (
+        "the row builder and its types",
+        ("_mon", "_nams", "Attack", "NO_ATK", "NUMMONS", "PerMonst"),
+    ),
     ("alignments (C: A_*)", ("A_",)),
     ("monster classes (C: S_*)", ("S_",)),
     ("attack types (C: AT_*)", ("AT_",)),
@@ -514,9 +531,12 @@ def _row_fields(row: Row) -> List[str]:
     """Every constant-bearing text field of a row (what the import
     block must cover).  The name column is a string literal, not a
     constant, so it is not one of them."""
-    return (list(row.lvl) + [row.geno] + list(row.siz)
-            + [row.mr1, row.mr2, row.f1, row.f2, row.f3, row.col,
-               row.mlet, *row.atks])
+    return (
+        list(row.lvl)
+        + [row.geno]
+        + list(row.siz)
+        + [row.mr1, row.mr2, row.f1, row.f2, row.f3, row.col, row.mlet, *row.atks]
+    )
 
 
 def _emit_imports(rows: Sequence[Row]) -> str:
@@ -537,16 +557,16 @@ def _emit_imports(rows: Sequence[Row]) -> str:
             # because sorting puts the two _-prefixed helpers last
             names = [n for n in prefixes if n in used]
         else:
-            names = sorted(n for n in used
-                           if n not in claimed
-                           and n.startswith(tuple(prefixes)))
+            names = sorted(
+                n for n in used if n not in claimed and n.startswith(tuple(prefixes))
+            )
         claimed.update(names)
         if not names:
             continue
         out.append(f"    # {label}")
         out.extend(_pack([f"{n}," for n in names], "    "))
     left = sorted(used - claimed)
-    if left:                            # a name that matched no group
+    if left:  # a name that matched no group
         raise ValueError(f"unclassified imports: {left}")
     out.append(")")
     return "\n".join(out)
@@ -570,13 +590,15 @@ def _emit_pm_names(rows: Sequence[Row]) -> str:
 
 
 def _emit_subset() -> str:
-    return "\n".join([
-        "",
-        "",
-        "# the implemented rows: all of them, since the converter pass",
-        "# (the depth-band table it replaced listed the indices by hand)",
-        'SUBSET_PM: tuple[int, ...] = tuple(range(NUMMONS))',
-    ])
+    return "\n".join(
+        [
+            "",
+            "",
+            "# the implemented rows: all of them, since the converter pass",
+            "# (the depth-band table it replaced listed the indices by hand)",
+            "SUBSET_PM: tuple[int, ...] = tuple(range(NUMMONS))",
+        ]
+    )
 
 
 def _emit_mons(rows: Sequence[Row], special_pm: int) -> str:
@@ -602,16 +624,21 @@ def _emit_mons(rows: Sequence[Row], special_pm: int) -> str:
             prev_mlet = row.mlet
         out.append(f"    # PM_{row.enum}")
         out.append("    _mon(")
-        out.extend(_pack([f"{row.idx},", f"{row.mlet},", f"{row.name},"],
-                         "        "))
-        out.extend(_pack([f"{v}," for v in row.lvl] + [f"{row.geno},"],
-                         "        "))
+        out.extend(_pack([f"{row.idx},", f"{row.mlet},", f"{row.name},"], "        "))
+        out.extend(_pack([f"{v}," for v in row.lvl] + [f"{row.geno},"], "        "))
         out.extend(_pack([f"{a}," for a in row.atks], "        "))
-        out.extend(_pack([f"{v}," for v in row.siz]
-                         + [f"{row.mr1},", f"{row.mr2},"], "        "))
-        out.extend(_pack([f"{row.f1},", f"{row.f2},", f"{row.f3},",
-                          f"{row.diff},", row.col], "        ",
-                         last_suffix="),"))
+        out.extend(
+            _pack(
+                [f"{v}," for v in row.siz] + [f"{row.mr1},", f"{row.mr2},"], "        "
+            )
+        )
+        out.extend(
+            _pack(
+                [f"{row.f1},", f"{row.f2},", f"{row.f3},", f"{row.diff},", row.col],
+                "        ",
+                last_suffix="),",
+            )
+        )
     out.append("]")
     return "\n".join(out)
 
@@ -636,15 +663,18 @@ def render(rows: Sequence[Row], special_pm: int) -> str:
 # Entry point
 # ------------------------------------------------------------
 
+
 def main(argv: Sequence[str] = ()) -> int:
     if not C_HEADER.exists():
-        print(f"no C header at {C_HEADER}\n"
-              "the converter reads NetHack 5.0's include/monsters.h from "
-              "the checkout next to pyhack (../NetHack/include)",
-              file=sys.stderr)
+        print(
+            f"no C header at {C_HEADER}\n"
+            "the converter reads NetHack 5.0's include/monsters.h from "
+            "the checkout next to pyhack (../NetHack/include)",
+            file=sys.stderr,
+        )
         return 2
     sys.path.insert(0, str(REPO_ROOT))
-    from core import monst_defs                       # noqa: E402
+    from core import monst_defs  # noqa: E402
 
     rows = parse()
     notes = check_rows(rows, monst_defs.NUMMONS, monst_defs.SPECIAL_PM)
@@ -658,8 +688,10 @@ def main(argv: Sequence[str] = ()) -> int:
         if current == text:
             print(f"{TARGET.name} is up to date")
             return 0
-        print(f"{TARGET.name} is out of date: "
-              f"{len(current)} bytes on disk, {len(text)} generated")
+        print(
+            f"{TARGET.name} is out of date: "
+            f"{len(current)} bytes on disk, {len(text)} generated"
+        )
         return 1
 
     TARGET.write_text(text, encoding="utf-8", newline="\n")

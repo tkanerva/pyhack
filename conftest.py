@@ -4,8 +4,8 @@ Kept at the repo root so that `pytest` puts the root on sys.path
 (making `import core` work) and every test module can do
 `from conftest import ...`.
 """
-from core.types import (Map, Monster, Tile, TerrainType, Trap, TrapType,
-                        World)
+
+from core.types import Map, Monster, Tile, TerrainType, Trap, TrapType, World
 
 MONSTER_STATS = {
     "goblin": dict(name="Goblin", hp=8, max_hp=8, ac=7, damage=2),
@@ -16,16 +16,23 @@ MONSTER_STATS = {
 
 def make_map(width=12, height=8, walls=()):
     """An all-floor (ROOM) grid with the given wall (STONE) tiles."""
-    tiles = [[Tile(typ=TerrainType.ROOM) for _ in range(width)]
-             for _ in range(height)]
+    tiles = [[Tile(typ=TerrainType.ROOM) for _ in range(width)] for _ in range(height)]
     for x, y in walls:
         tiles[y][x] = Tile(typ=TerrainType.STONE)
     return Map(tiles)
 
 
 def make_hero(pos=(6, 4), hp=25, **kw):
-    defaults = dict(id="player", name="Hero", pos=pos, hp=hp, max_hp=hp,
-                    ac=5, damage=2, is_hero=True)
+    defaults = dict(
+        id="player",
+        name="Hero",
+        pos=pos,
+        hp=hp,
+        max_hp=hp,
+        ac=5,
+        damage=2,
+        is_hero=True,
+    )
     defaults.update(kw)
     return Monster(**defaults)
 
@@ -73,24 +80,30 @@ def assert_item_locations(world: World) -> None:
     parents: dict = {}
     for parent in world.items.values():
         for child_id in parent.contents:
-            assert child_id in world.items, \
-                f"{parent.id} lists contents id {child_id} that is not " \
-                f"in the world"
+            assert child_id in world.items, (
+                f"{parent.id} lists contents id {child_id} that is not " f"in the world"
+            )
             parents.setdefault(child_id, []).append(parent.id)
     for item in world.items.values():
-        where = [name for name, on in
-                 (("floor", item.pos is not None),
-                  ("carrier", item.carrier is not None),
-                  ("container", item.id in parents)) if on]
-        assert len(where) <= 1, \
-            f"{item.id} is in more than one place: {where}"
+        where = [
+            name
+            for name, on in (
+                ("floor", item.pos is not None),
+                ("carrier", item.carrier is not None),
+                ("container", item.id in parents),
+            )
+            if on
+        ]
+        assert len(where) <= 1, f"{item.id} is in more than one place: {where}"
         if item.carrier is not None:
-            assert item.carrier in world.actors, \
-                f"{item.id} is carried by unknown {item.carrier}"
+            assert (
+                item.carrier in world.actors
+            ), f"{item.id} is carried by unknown {item.carrier}"
         # an item that is nowhere at all is the "ghost" a bad writer
         # leaves behind (the consume_item orphan of PLAN-INVENT.md)
-        assert where, (f"{item.id} ({item.name}) is nowhere: no pos, "
-                       f"no carrier, no container")
+        assert where, (
+            f"{item.id} ({item.name}) is nowhere: no pos, " f"no carrier, no container"
+        )
 
 
 def container_ids(world: World) -> set:

@@ -58,9 +58,14 @@ def test_the_engraving_types_are_this_nethacks():
     """The E_* values are engrave.h's (5.0: DUST 1 .. HEADSTONE 6,
     N_ENGRAVE 6) -- not the 3.6 E_PLAIN / E_PEN / E_SABER set, which
     an earlier revision of this module carried by mistake."""
-    assert (engrave.E_DUST, engrave.E_ENGRAVE, engrave.E_BURN,
-            engrave.E_MARK, engrave.E_ENGR_BLOOD, engrave.E_HEADSTONE) == (
-                1, 2, 3, 4, 5, 6)
+    assert (
+        engrave.E_DUST,
+        engrave.E_ENGRAVE,
+        engrave.E_BURN,
+        engrave.E_MARK,
+        engrave.E_ENGR_BLOOD,
+        engrave.E_HEADSTONE,
+    ) == (1, 2, 3, 4, 5, 6)
     assert engrave.N_ENGRAVE == 6
 
 

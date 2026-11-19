@@ -12,15 +12,33 @@ House conventions: every test asserts world state *and*, where the
 function returns one, the value; the `assert_item_locations` invariant
 runs after every mutation the pack half makes.
 """
+
 import pytest
 
-from core.invent import (CONTAINED_SYM, GOLD_SYM, NOINVSYM, addinv,
-                         assigninvlet, carry_obj_effects,
-                         consume_obj_charge, currency, delobj,
-                         display_in_use, display_inventory, doname,
-                         doprgold, freeinv, invletter_value, let_to_name,
-                         money_cnt, obj_to_let, reorder_invent, useup,
-                         useupall, xprname)
+from core.invent import (
+    CONTAINED_SYM,
+    GOLD_SYM,
+    NOINVSYM,
+    addinv,
+    assigninvlet,
+    carry_obj_effects,
+    consume_obj_charge,
+    currency,
+    delobj,
+    display_in_use,
+    display_inventory,
+    doname,
+    doprgold,
+    freeinv,
+    invletter_value,
+    let_to_name,
+    money_cnt,
+    obj_to_let,
+    reorder_invent,
+    useup,
+    useupall,
+    xprname,
+)
 from core.mkobj import add_to_container, place_object, weight
 from core.objects import MAXOCLASSES, ObjClass, W_ARM, W_RINGL
 from core.pickup import pickup
@@ -45,14 +63,20 @@ def floor(w, item, pos=HERO_POS):
 # invletter_value -- the C rank table
 # ------------------------------------------------------------
 
-@pytest.mark.parametrize("letter,value", [
-    ("$", 1),            # GOLD_SYM
-    ("a", 2), ("z", 2 + 25),
-    ("A", 2 + 26), ("Z", 2 + 26 + 25),
-    ("#", 1 + 52 + 1),   # NOINVSYM
-    ("!", 1 + 52 + 2),   # C: none of the above
-    ("", 1 + 52 + 2),    # the pyhack empty letter hits the catchall
-])
+
+@pytest.mark.parametrize(
+    "letter,value",
+    [
+        ("$", 1),  # GOLD_SYM
+        ("a", 2),
+        ("z", 2 + 25),
+        ("A", 2 + 26),
+        ("Z", 2 + 26 + 25),
+        ("#", 1 + 52 + 1),  # NOINVSYM
+        ("!", 1 + 52 + 2),  # C: none of the above
+        ("", 1 + 52 + 2),  # the pyhack empty letter hits the catchall
+    ],
+)
 def test_invletter_value_ranks(letter, value):
     """C: invletter_value -- '$'==1, 'a'-'z'==2..27, 'A'-'Z'==28..53,
     '#'==54, catchall 55."""
@@ -62,6 +86,7 @@ def test_invletter_value_ranks(letter, value):
 # ------------------------------------------------------------
 # assigninvlet -- the a..z A..Z '#' allocation
 # ------------------------------------------------------------
+
 
 def test_first_letter_is_a():
     """C: the walk starts at lastinvnr + 1, and reset_globals leaves
@@ -75,8 +100,7 @@ def test_first_letter_is_a():
 
 def test_letters_are_allocated_in_order():
     w = make_world()
-    letters = [addinv(w, "player", thing(id=f"t{i}")).invlet
-               for i in range(4)]
+    letters = [addinv(w, "player", thing(id=f"t{i}")).invlet for i in range(4)]
     assert letters == ["a", "b", "c", "d"]
     assert w.lastinvnr == 3
 
@@ -86,9 +110,10 @@ def test_a_full_pack_gets_noinvsym():
     walk cannot loop (the C `inuse[i] ? NOINVSYM` answer)."""
     w = make_world()
     items = [addinv(w, "player", thing(id=f"t{i}")) for i in range(52)]
-    assert items[-1].invlet == "Z"          # a..z, then A..Z
-    assert {it.invlet for it in items} == \
-        set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    assert items[-1].invlet == "Z"  # a..z, then A..Z
+    assert {it.invlet for it in items} == set(
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    )
     overflow = addinv(w, "player", thing(id="t52"))
     assert overflow.invlet == NOINVSYM
 
@@ -97,11 +122,16 @@ def test_the_coin_stack_is_always_gold_sym():
     """C: the COIN_CLASS early return -- there is at most one gold
     pile in the pack."""
     w = make_world()
-    gold = thing(id="gold_0", otype=ObjectType.COIN, name="gold piece",
-                 oclass=ObjClass.COIN.value, quan=200)
+    gold = thing(
+        id="gold_0",
+        otype=ObjectType.COIN,
+        name="gold piece",
+        oclass=ObjClass.COIN.value,
+        quan=200,
+    )
     addinv(w, "player", gold)
     assert gold.invlet == GOLD_SYM
-    assert w.lastinvnr == -1        # the walk never ran
+    assert w.lastinvnr == -1  # the walk never ran
 
 
 def test_a_kept_letter_survives_a_re_pickup():
@@ -110,12 +140,9 @@ def test_a_kept_letter_survives_a_re_pickup():
     third item must keep the letter the player learned for it, where
     the old index-based UI re-lettered the whole tail of the pack."""
     w = make_world()
-    first = addinv(w, "player", thing(id="t_0", name="apple",
-                                      otype=ObjectType.FOOD))
-    second = addinv(w, "player", thing(id="t_1", name="orange",
-                                       otype=ObjectType.FOOD))
-    third = addinv(w, "player", thing(id="t_2", name="melon",
-                                      otype=ObjectType.FOOD))
+    first = addinv(w, "player", thing(id="t_0", name="apple", otype=ObjectType.FOOD))
+    second = addinv(w, "player", thing(id="t_1", name="orange", otype=ObjectType.FOOD))
+    third = addinv(w, "player", thing(id="t_2", name="melon", otype=ObjectType.FOOD))
     assert (first.invlet, second.invlet, third.invlet) == ("a", "b", "c")
 
     freeinv(w, "player", second)
@@ -141,8 +168,8 @@ def test_a_colliding_letter_is_cleared_first():
     assert holder.invlet == "a"
     clone = thing(id="t_1", invlet="a")
     assigninvlet(w, w.hero, clone)
-    assert holder.invlet == "a"         # the first one keeps it
-    assert clone.invlet == "b"          # the newcomer is re-lettered
+    assert holder.invlet == "a"  # the first one keeps it
+    assert clone.invlet == "b"  # the newcomer is re-lettered
     assert w.lastinvnr == 1
 
 
@@ -155,7 +182,7 @@ def test_lastinvnr_walks_forward_and_wraps():
     assert (a.invlet, b.invlet) == ("a", "b")
     freeinv(w, "player", b)
     c = addinv(w, "player", thing(id="t_2"))
-    assert c.invlet == "c"              # not the freed 'b'
+    assert c.invlet == "c"  # not the freed 'b'
     assert w.lastinvnr == 2
 
 
@@ -163,6 +190,7 @@ def test_a_monster_pack_carries_no_letters():
     """C: assigninvlet runs on gi.invent, the HERO's pack -- a
     monster's minvent has no letters (addinv skips the letter half)."""
     from conftest import make_monster
+
     w = make_world(monsters=[make_monster()])
     it = addinv(w, "goblin_0", thing())
     assert it.invlet == ""
@@ -173,18 +201,23 @@ def test_a_monster_pack_carries_no_letters():
 # reorder_invent / obj_to_let
 # ------------------------------------------------------------
 
+
 def test_reorder_invent_sorts_by_the_inv_rank_key():
     """C: reorder_invent -- inv_rank is `invlet ^ 040`, i.e. '#' and
     '$' first, then a..z, then A..Z."""
     w = make_world()
-    items = [thing(id="i0", invlet="B"), thing(id="i1", invlet="a"),
-             thing(id="i2", invlet="A"), thing(id="i3", invlet="z"),
-             thing(id="i4", invlet=GOLD_SYM), thing(id="i5", invlet="b"),
-             thing(id="i6", invlet=NOINVSYM)]
+    items = [
+        thing(id="i0", invlet="B"),
+        thing(id="i1", invlet="a"),
+        thing(id="i2", invlet="A"),
+        thing(id="i3", invlet="z"),
+        thing(id="i4", invlet=GOLD_SYM),
+        thing(id="i5", invlet="b"),
+        thing(id="i6", invlet=NOINVSYM),
+    ]
     w.hero.inventory = list(items)
     reorder_invent(w.hero)
-    assert [it.invlet for it in w.hero.inventory] == \
-        ["#", "$", "a", "b", "z", "A", "B"]
+    assert [it.invlet for it in w.hero.inventory] == ["#", "$", "a", "b", "z", "A", "B"]
 
 
 def test_obj_to_let_is_the_stored_letter():
@@ -196,6 +229,7 @@ def test_obj_to_let_is_the_stored_letter():
 # ------------------------------------------------------------
 # let_to_name -- the C names[] table
 # ------------------------------------------------------------
+
 
 def test_let_to_name_is_the_c_table():
     """C: names[] (invent.c 4841-4845), indexed by the oclass id."""
@@ -222,16 +256,13 @@ def test_let_to_name_the_pseudo_letters():
 def test_let_to_name_unpaid_and_the_glyph_suffix():
     """C: the "Unpaid " prefix, and the showsym padding
     (invbuf_sympadding 8 -- `7 - len` spaces, then `  ('%c')`)."""
-    assert let_to_name(int(ObjClass.COIN), unpaid=True) \
-        == "Unpaid Coins"
+    assert let_to_name(int(ObjClass.COIN), unpaid=True) == "Unpaid Coins"
     assert let_to_name(int(ObjClass.WEAPON), showsym=True) == "Weapons  (')')"
     # "Comestibles" is 11 wide: no padding at all (the C loop's
     # `while (--mlen > 0)` never runs)
-    assert let_to_name(int(ObjClass.FOOD), showsym=True) \
-        == "Comestibles  ('%')"
+    assert let_to_name(int(ObjClass.FOOD), showsym=True) == "Comestibles  ('%')"
     # the two pseudo-letters never take a glyph (C: `oclass != 0`)
-    assert let_to_name(ord(CONTAINED_SYM), showsym=True) \
-        == "Bagged/Boxed items"
+    assert let_to_name(ord(CONTAINED_SYM), showsym=True) == "Bagged/Boxed items"
 
 
 def test_the_class_table_covers_the_oclass_space():
@@ -244,6 +275,7 @@ def test_the_class_table_covers_the_oclass_space():
 # ------------------------------------------------------------
 # addinv -- the pack half of the where-state
 # ------------------------------------------------------------
+
 
 def test_addinv_registers_and_marks_the_carrier():
     w = make_world()
@@ -291,6 +323,7 @@ def test_addinv_refuses_an_item_inside_a_container():
 # freeinv -- pack -> floor (C freeinv + the drop path's place_object)
 # ------------------------------------------------------------
 
+
 def test_freeinv_puts_the_item_on_the_carrier_s_square():
     w = make_world()
     it = addinv(w, "player", thing())
@@ -299,13 +332,14 @@ def test_freeinv_puts_the_item_on_the_carrier_s_square():
     assert it.pos == HERO_POS
     assert it not in w.hero.inventory
     assert w.items[it.id] is it
-    assert it.owornmask == 0        # C: freeinv leaves the mask alone
+    assert it.owornmask == 0  # C: freeinv leaves the mask alone
     assert_item_locations(w)
 
 
 # ------------------------------------------------------------
 # useup / useupall / delobj -- the three deletion paths
 # ------------------------------------------------------------
+
 
 def test_useup_takes_one_from_a_stack():
     """C: useup -- quan-- and a fresh weight; the item stays."""
@@ -315,7 +349,7 @@ def test_useup_takes_one_from_a_stack():
     assert it.quan == 2
     assert it in w.hero.inventory
     assert w.items[it.id] is it
-    assert it.owt == weight(w, it)      # C: obj->owt = weight(obj)
+    assert it.owt == weight(w, it)  # C: obj->owt = weight(obj)
     assert it.owt != 30
     assert_item_locations(w)
 
@@ -382,6 +416,7 @@ def test_delobj_clears_the_worn_slot():
     """The single clearing point: a destroyed worn item cannot leave a
     slot bit the which_armor scan would answer for."""
     from core.worn import which_armor
+
     w = make_world()
     mail = addinv(w, "player", thing(id="t_0", name="chain mail"))
     mail.owornmask = W_ARM
@@ -395,8 +430,9 @@ def test_delobj_leaves_the_wielded_field_alone():
     (core.items.wielded_of reads a dangling id as bare hands) --
     PLAN-DROP phase C replaces the field with wield.setuwep."""
     w = make_world()
-    sword = addinv(w, "player", thing(id="t_0", name="short sword",
-                                      otype=ObjectType.WEAPON))
+    sword = addinv(
+        w, "player", thing(id="t_0", name="short sword", otype=ObjectType.WEAPON)
+    )
     w.hero.wielded = sword.id
     delobj(w, sword.id)
     assert w.hero.wielded == sword.id
@@ -406,12 +442,14 @@ def test_delobj_leaves_the_wielded_field_alone():
 # consume_obj_charge / carry_obj_effects
 # ------------------------------------------------------------
 
+
 def test_consume_obj_charge_spends_one_spe():
     """C: consume_obj_charge -- the `spe` decrement (the wand / book /
     tool charge), with the shop's maybe_unpaid accepted and ignored."""
     w = make_world()
-    wand = addinv(w, "player", thing(id="t_0", otype=ObjectType.WAND,
-                                     name="wand", spe=3))
+    wand = addinv(
+        w, "player", thing(id="t_0", otype=ObjectType.WAND, name="wand", spe=3)
+    )
     consume_obj_charge(w, "player", wand)
     assert wand.spe == 2
     consume_obj_charge(w, "player", wand, maybe_unpaid=True)
@@ -428,17 +466,24 @@ def test_carry_obj_effects_is_the_no_op_hook():
 # The invariant over a real world
 # ------------------------------------------------------------
 
+
 def test_the_demo_world_satisfies_the_invariant():
     """The starting kit and the floor kit go through addinv /
     place_object, so a fresh world is already consistent -- and the
     heroes' pack is lettered a..e."""
     import random
     from core.worldgen import new_world
+
     w = new_world(random.Random(42))
     assert_item_locations(w)
     assert [it.invlet for it in w.hero.inventory] == ["a", "b", "c", "d", "e"]
-    assert [it.id for it in w.hero.inventory] == \
-        ["sword_0", "mail_0", "cloak_0", "gloves_0", "ring_0"]
+    assert [it.id for it in w.hero.inventory] == [
+        "sword_0",
+        "mail_0",
+        "cloak_0",
+        "gloves_0",
+        "ring_0",
+    ]
     floor_ids = {it.id for it in w.items.values() if it.pos is not None}
     assert "wand_0" in floor_ids and "food_3" in floor_ids
 
@@ -446,6 +491,7 @@ def test_the_demo_world_satisfies_the_invariant():
 def test_pickup_and_useup_keep_the_invariant():
     import random
     from core.worldgen import new_world
+
     w = new_world(random.Random(42))
     hero = w.hero
     for _ in range(5):
@@ -466,12 +512,14 @@ def test_pickup_and_useup_keep_the_invariant():
 # are read, never written (PLAN-INVENT.md phase F / §6 "rendering
 # allocates no state").
 
+
 def test_doname_counts_a_stack():
     """C: doname -- the count comes from `quan` and the name is
     pluralised (C: makeplural): "3 arrows", never "3 arrow"."""
     w = make_world()
-    arrows = addinv(w, "player", thing(id="t_0", name="arrow", quan=3,
-                                       oclass=ObjClass.WEAPON.value))
+    arrows = addinv(
+        w, "player", thing(id="t_0", name="arrow", quan=3, oclass=ObjClass.WEAPON.value)
+    )
     assert doname(w.hero, arrows) == "3 arrows"
     # prinv's partial-stack form: the count passed in, not the stored one
     assert doname(w.hero, arrows, quan=1) == "arrow"
@@ -482,18 +530,30 @@ def test_doname_marks_the_gear_in_use():
     The wielded weapon is still the bare `Monster.wielded` id
     (PLAN-DROP.md phase C moves it to W_WEP), so both are read."""
     w = make_world()
-    mail = addinv(w, "player", thing(id="t_0", name="chain mail",
-                                     oclass=ObjClass.ARMOR.value))
+    mail = addinv(
+        w, "player", thing(id="t_0", name="chain mail", oclass=ObjClass.ARMOR.value)
+    )
     mail.owornmask = W_ARM
-    ring = addinv(w, "player", thing(id="t_1", name="ring of protection",
-                                     oclass=ObjClass.RING.value))
+    ring = addinv(
+        w,
+        "player",
+        thing(id="t_1", name="ring of protection", oclass=ObjClass.RING.value),
+    )
     ring.owornmask = W_RINGL
-    sword = addinv(w, "player", thing(id="t_2", name="short sword",
-                                      otype=ObjectType.WEAPON,
-                                      oclass=ObjClass.WEAPON.value))
+    sword = addinv(
+        w,
+        "player",
+        thing(
+            id="t_2",
+            name="short sword",
+            otype=ObjectType.WEAPON,
+            oclass=ObjClass.WEAPON.value,
+        ),
+    )
     w.hero.wielded = sword.id
-    cloak = addinv(w, "player", thing(id="t_3", name="leather cloak",
-                                      oclass=ObjClass.ARMOR.value))
+    cloak = addinv(
+        w, "player", thing(id="t_3", name="leather cloak", oclass=ObjClass.ARMOR.value)
+    )
     assert doname(w.hero, mail) == "chain mail (being worn)"
     assert doname(w.hero, ring) == "ring of protection (on left hand)"
     assert doname(w.hero, sword) == "short sword (wielded)"
@@ -516,6 +576,7 @@ def test_display_inventory_lists_the_demo_pack():
     wielded suffixes on the gear in use."""
     import random
     from core.worldgen import new_world
+
     w = new_world(random.Random(42))
     assert display_inventory(w.hero) == [
         "Weapons",
@@ -536,6 +597,7 @@ def test_display_inventory_lists_one_class():
     the hero carries nothing of answers with C's dotypeinv line."""
     import random
     from core.worldgen import new_world
+
     w = new_world(random.Random(42))
     assert display_inventory(w.hero, "[") == [
         "Armor",
@@ -561,6 +623,7 @@ def test_display_in_use_is_only_the_worn_and_wielded():
     mail is worn; the cloak, the gloves and the ring are only carried."""
     import random
     from core.worldgen import new_world
+
     w = new_world(random.Random(42))
     assert display_in_use(w.hero) == [
         "Weapons",
@@ -569,7 +632,8 @@ def test_display_in_use_is_only_the_worn_and_wielded():
         "b - chain mail (being worn)",
     ]
     assert display_in_use(make_world().hero) == [
-        "You are not wearing or wielding anything."]
+        "You are not wearing or wielding anything."
+    ]
 
 
 def test_a_gold_pile_shows_its_count_under_coins():
@@ -577,9 +641,17 @@ def test_a_gold_pile_shows_its_count_under_coins():
     heads the list -- C: def_inv_order puts coins first -- and its count
     is pluralised."""
     w = make_world()
-    addinv(w, "player", thing(id="t_0", otype=ObjectType.COIN,
-                              name="gold piece", quan=5,
-                              oclass=ObjClass.COIN.value))
+    addinv(
+        w,
+        "player",
+        thing(
+            id="t_0",
+            otype=ObjectType.COIN,
+            name="gold piece",
+            quan=5,
+            oclass=ObjClass.COIN.value,
+        ),
+    )
     assert money_cnt(w.hero) == 5
     assert display_inventory(w.hero) == ["Coins", "$ - 5 gold pieces"]
 
@@ -589,9 +661,17 @@ def test_the_wallet_line():
     is empty." (the verbose branch; the shop report is not ported)."""
     w = make_world()
     assert doprgold(w.hero) == "Your wallet is empty."
-    addinv(w, "player", thing(id="t_0", otype=ObjectType.COIN,
-                              name="gold piece", quan=120,
-                              oclass=ObjClass.COIN.value))
+    addinv(
+        w,
+        "player",
+        thing(
+            id="t_0",
+            otype=ObjectType.COIN,
+            name="gold piece",
+            quan=120,
+            oclass=ObjClass.COIN.value,
+        ),
+    )
     assert doprgold(w.hero) == "Your wallet contains 120 zorkmids."
     assert currency(1) == "zorkmid"
     assert currency(120) == "zorkmids"
@@ -603,11 +683,13 @@ def test_rendering_does_not_touch_the_pack():
     afterwards -- sorting for the display is done on a copy."""
     import random
     from core.worldgen import new_world
+
     w = new_world(random.Random(42))
 
     def snapshot():
-        return [(it.id, it.invlet, it.quan, it.owornmask, it.owt)
-                for it in w.hero.inventory]
+        return [
+            (it.id, it.invlet, it.quan, it.owornmask, it.owt) for it in w.hero.inventory
+        ]
 
     before = snapshot()
     display_inventory(w.hero)

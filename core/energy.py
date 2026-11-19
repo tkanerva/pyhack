@@ -25,6 +25,7 @@ computed from the level directly, as in C's regen_pw
 (`(MAXULEV + 8 - u.ulevel) * (wizard ? 3 : 4) / 6`; the demo uses the
 base period).
 """
+
 from __future__ import annotations
 
 from typing import List

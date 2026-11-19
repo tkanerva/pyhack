@@ -77,6 +77,7 @@ Simplifications (documented, not bugs):
 - tick_rings is hero-and-monster uniform (PLAN-ARMOR.md decision 1);
   the demo monsters carry no rings, so it is a no-op for them.
 """
+
 from __future__ import annotations
 
 from typing import Dict, List
@@ -104,8 +105,7 @@ def is_ring(item) -> bool:
 # cases that call learnring(obj, TRUE) -- levitation, stealth,
 # invisibility, see-invisible).  Discovery works; the ACTIVE effect is a
 # STUB (module docstring).
-_FEEL_IT = (O.RIN_LEVITATION, O.RIN_STEALTH, O.RIN_INVISIBILITY,
-            O.RIN_SEE_INVISIBLE)
+_FEEL_IT = (O.RIN_LEVITATION, O.RIN_STEALTH, O.RIN_INVISIBILITY, O.RIN_SEE_INVISIBLE)
 
 # C: adjattrib's plusattr / minusattr (src/attrib.c), indexed by the
 # ability -- the three the rings change.
@@ -129,6 +129,7 @@ _ABILITY_RING: Dict[int, str] = {
 # Discovery (C: learnring) -- a producer
 # ------------------------------------------------------------
 
+
 def _type_known(world: World, otyp: int) -> bool:
     """C: objects[otyp].oc_name_known -- the type's name is known (either
     pre-known in the table or discovered this game)."""
@@ -137,8 +138,7 @@ def _type_known(world: World, otyp: int) -> bool:
     return bool(OBJECTS[otyp].name_known)
 
 
-def learnring(world: World, mon: Monster, ring: Item,
-              observed: bool) -> List[Event]:
+def learnring(world: World, mon: Monster, ring: Item, observed: bool) -> List[Event]:
     """C: learnring (src/do_wear.c) -- the ring discovery logic, as a
     producer.
 
@@ -161,13 +161,21 @@ def learnring(world: World, mon: Monster, ring: Item,
     # otherwise the type stays as it was.  Either way the ring is seen.
     mark_known = known_before or observed
     reveal = bool(row.charged) and mark_known
-    return [DiscoveryEvent(otyp=otyp, item_id=ring.id, mark_known=mark_known,
-                           mark_encountered=True, reveal_spe=reveal)]
+    return [
+        DiscoveryEvent(
+            otyp=otyp,
+            item_id=ring.id,
+            mark_known=mark_known,
+            mark_encountered=True,
+            reveal_spe=reveal,
+        )
+    ]
 
 
 # ------------------------------------------------------------
 # The attribute feedback (C: the adjattrib message, src/attrib.c)
 # ------------------------------------------------------------
+
 
 def _ability_message(mon: Monster, which: str, delta: int) -> List[Event]:
     """C: the adjattrib message (src/attrib.c): "You feel <word>!" with
@@ -178,14 +186,18 @@ def _ability_message(mon: Monster, which: str, delta: int) -> List[Event]:
     plus, minus = _ABILITY_WORD[which]
     word = plus if delta > 0 else minus
     prefix = "very " if abs(delta) > 1 else ""
-    text = (f"You feel {prefix}{word}!" if mon.is_hero
-            else f"{mon.name} feels {prefix}{word}!")
+    text = (
+        f"You feel {prefix}{word}!"
+        if mon.is_hero
+        else f"{mon.name} feels {prefix}{word}!"
+    )
     return [MessageEvent(text)]
 
 
 # ------------------------------------------------------------
 # Donning / doffing (C: Ring_on / Ring_off_or_gone) -- producers
 # ------------------------------------------------------------
+
 
 def ring_on(world: World, mon: Monster, ring: Item) -> List[Event]:
     """C: Ring_on (src/do_wear.c) -- the side effects of putting on
@@ -253,6 +265,7 @@ def ring_off(world: World, mon: Monster, ring: Item) -> List[Event]:
 # Per-turn effects (C: the RIN_* cases of allmain.c + eat.c gethungry)
 # ------------------------------------------------------------
 
+
 def tick_rings(world: World, mon_id: str, rng) -> List[Event]:
     """Per-turn ring effects, called from core.step for each actor after
     the status tick.
@@ -291,6 +304,7 @@ def tick_rings(world: World, mon_id: str, rng) -> List[Event]:
 # Naming (C: the RING_CLASS half of objnam.c xname / doname)
 # ------------------------------------------------------------
 
+
 def ring_name(world: World, item: Item) -> str:
     """The RING_CLASS half of objnam.c xname / doname: "ring of <name>"
     once the type's name is known (or pre-known), else the bare "ring";
@@ -315,6 +329,12 @@ def ring_name(world: World, item: Item) -> str:
 
 
 __all__ = [
-    "RING_FIRST", "RING_LAST", "is_ring", "learnring", "ring_on",
-    "ring_off", "tick_rings", "ring_name",
+    "RING_FIRST",
+    "RING_LAST",
+    "is_ring",
+    "learnring",
+    "ring_on",
+    "ring_off",
+    "tick_rings",
+    "ring_name",
 ]

@@ -104,7 +104,7 @@ def test_pools_land_only_on_checkerboard_squares_not_in_doorways():
     assert m.flags.has_swamp
     pools = _pools(m)
     assert pools  # the room has checkerboard squares
-    for (x, y) in pools:
+    for x, y in pools:
         assert (x + y) % 2 == 1, (x, y)
         assert not mkroom.nexttodoor(m, x, y), (x, y)
     # the door is still a door (the pool ran past it, not over it)

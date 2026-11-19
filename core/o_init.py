@@ -21,13 +21,23 @@ Dropped (window port, not game logic): the #known / #knownclass /
 rename_disco display commands, tile shuffling, and savefile I/O
 (savenames/restnames).
 """
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Set, Tuple
 
-from .objects import (BASES, FIRST_OBJECT, IMMEDIATE, LAST_REAL_GEM,
-                      MAXOCLASSES, NODIR, NUM_OBJECTS, OBJECTS, ObjClass,
-                      ObjType)
+from .objects import (
+    BASES,
+    FIRST_OBJECT,
+    IMMEDIATE,
+    LAST_REAL_GEM,
+    MAXOCLASSES,
+    NODIR,
+    NUM_OBJECTS,
+    OBJECTS,
+    ObjClass,
+    ObjType,
+)
 
 O = ObjType  # noqa: E741 -- short alias for table lookups
 
@@ -35,6 +45,7 @@ O = ObjType  # noqa: E741 -- short alias for table lookups
 # ------------------------------------------------------------
 # Per-game state
 # ------------------------------------------------------------
+
 
 class ObjTables:
     """Mutable object state for one game (see module docstring)."""
@@ -72,6 +83,7 @@ def _oclass_range(state: ObjTables, oclass: int) -> Tuple[int, int]:
 # Gem handling (C: setgemprobs, randomize_gem_colors)
 # ------------------------------------------------------------
 
+
 def setgemprobs(state: ObjTables, ledger_level: int = 0) -> None:
     """Level-dependent gem probabilities (C: setgemprobs).
 
@@ -84,21 +96,25 @@ def setgemprobs(state: ObjTables, ledger_level: int = 0) -> None:
         state.prob[first + j] = 0
         j += 1
     first += j
-    if (first > LAST_REAL_GEM
-            or int(OBJECTS[first].oclass) != int(ObjClass.GEM)
-            or OBJECTS[first].name is None):
+    if (
+        first > LAST_REAL_GEM
+        or int(OBJECTS[first].oclass) != int(ObjClass.GEM)
+        or OBJECTS[first].name is None
+    ):
         raise ValueError(
-            f"Not enough gems? first={first} j={j} LAST_GEM={LAST_REAL_GEM}")
+            f"Not enough gems? first={first} j={j} LAST_GEM={LAST_REAL_GEM}"
+        )
     for idx in range(first, LAST_REAL_GEM + 1):
         state.prob[idx] = (171 + idx - first) // (LAST_REAL_GEM + 1 - first)
     # recompute GEM_CLASS total (including rocks/stones)
     lo, hi = _oclass_range(state, int(ObjClass.GEM))
-    state.prob_totals[int(ObjClass.GEM)] = sum(state.prob[lo:hi + 1])
+    state.prob_totals[int(ObjClass.GEM)] = sum(state.prob[lo : hi + 1])
 
 
 def randomize_gem_colors(state: ObjTables, rng) -> None:
     """Some gems can appear with different colors (C:
     randomize_gem_colors)."""
+
     def copy_descr(dst: int, src: int) -> None:
         state.descr[dst] = state.descr[src]
         state.color[dst] = state.color[src]
@@ -109,17 +125,18 @@ def randomize_gem_colors(state: ObjTables, rng) -> None:
         copy_descr(O.AQUAMARINE.value, O.SAPPHIRE.value)
     # change fluorite from violet?
     case = rng.rn2(4)
-    if case == 1:      # blue
+    if case == 1:  # blue
         copy_descr(O.FLUORITE.value, O.SAPPHIRE.value)
-    elif case == 2:    # white
+    elif case == 2:  # white
         copy_descr(O.FLUORITE.value, O.DIAMOND.value)
-    elif case == 3:    # green
+    elif case == 3:  # green
         copy_descr(O.FLUORITE.value, O.EMERALD.value)
 
 
 # ------------------------------------------------------------
 # Description shuffling (C: shuffle, obj_shuffle_range, shuffle_all)
 # ------------------------------------------------------------
+
 
 def obj_shuffle_range(state: ObjTables, otyp: "ObjType | int") -> Tuple[int, int]:
     """The range of objects that `otyp` shares descriptions with
@@ -134,26 +151,25 @@ def obj_shuffle_range(state: ObjTables, otyp: "ObjType | int") -> Tuple[int, int
             lo, hi = O.HELMET.value, O.HELM_OF_TELEPATHY.value
         elif O.LEATHER_GLOVES.value <= otyp <= O.GAUNTLETS_OF_DEXTERITY.value:
             lo, hi = O.LEATHER_GLOVES.value, O.GAUNTLETS_OF_DEXTERITY.value
-        elif (O.CLOAK_OF_PROTECTION.value <= otyp
-                <= O.CLOAK_OF_DISPLACEMENT.value):
-            lo, hi = (O.CLOAK_OF_PROTECTION.value,
-                      O.CLOAK_OF_DISPLACEMENT.value)
+        elif O.CLOAK_OF_PROTECTION.value <= otyp <= O.CLOAK_OF_DISPLACEMENT.value:
+            lo, hi = (O.CLOAK_OF_PROTECTION.value, O.CLOAK_OF_DISPLACEMENT.value)
         elif O.SPEED_BOOTS.value <= otyp <= O.LEVITATION_BOOTS.value:
             lo, hi = O.SPEED_BOOTS.value, O.LEVITATION_BOOTS.value
     elif ocls == int(ObjClass.POTION):
         # potion of water has the only fixed description
         lo, hi = state.bases[ocls], O.POT_WATER.value - 1
-    elif ocls in (int(ObjClass.AMULET), int(ObjClass.SCROLL),
-                  int(ObjClass.SPBOOK)):
+    elif ocls in (int(ObjClass.AMULET), int(ObjClass.SCROLL), int(ObjClass.SPBOOK)):
         # exclude non-magic types and unique ones
         lo = state.bases[ocls]
         i = lo
-        while (int(OBJECTS[i].oclass) == ocls
-               and not OBJECTS[i].unique and OBJECTS[i].magic):
+        while (
+            int(OBJECTS[i].oclass) == ocls
+            and not OBJECTS[i].unique
+            and OBJECTS[i].magic
+        ):
             i += 1
         hi = i - 1
-    elif ocls in (int(ObjClass.RING), int(ObjClass.WAND),
-                  int(ObjClass.VENOM)):
+    elif ocls in (int(ObjClass.RING), int(ObjClass.WAND), int(ObjClass.VENOM)):
         # entire class
         lo, hi = _oclass_range(state, ocls)
 
@@ -162,15 +178,15 @@ def obj_shuffle_range(state: ObjTables, otyp: "ObjType | int") -> Tuple[int, int
     return lo, hi
 
 
-def shuffle(state: ObjTables, rng, o_low: int, o_high: int,
-            domaterial: bool) -> None:
+def shuffle(state: ObjTables, rng, o_low: int, o_high: int, domaterial: bool) -> None:
     """Shuffle descriptions on objects o_low..o_high (C: shuffle).
 
     Objects whose names are already known don't move; the descr/color
     (and optionally material) of the rest are permuted.
     """
-    num_to_shuffle = sum(1 for j in range(o_low, o_high + 1)
-                         if j not in state.name_known)
+    num_to_shuffle = sum(
+        1 for j in range(o_low, o_high + 1) if j not in state.name_known
+    )
     if num_to_shuffle < 2:
         return
     for j in range(o_low, o_high + 1):
@@ -182,22 +198,25 @@ def shuffle(state: ObjTables, rng, o_low: int, o_high: int,
         state.descr[j], state.descr[i] = state.descr[i], state.descr[j]
         state.color[j], state.color[i] = state.color[i], state.color[j]
         if domaterial:
-            state.material[j], state.material[i] = \
-                state.material[i], state.material[j]
+            state.material[j], state.material[i] = state.material[i], state.material[j]
 
 
 def shuffle_all(state: ObjTables, rng) -> None:
     """Randomize object descriptions (C: shuffle_all)."""
     # whole classes (obj_shuffle_range() handles their exceptions)
-    for ocls in (int(ObjClass.AMULET), int(ObjClass.POTION),
-                 int(ObjClass.RING), int(ObjClass.SCROLL),
-                 int(ObjClass.SPBOOK), int(ObjClass.WAND),
-                 int(ObjClass.VENOM)):
+    for ocls in (
+        int(ObjClass.AMULET),
+        int(ObjClass.POTION),
+        int(ObjClass.RING),
+        int(ObjClass.SCROLL),
+        int(ObjClass.SPBOOK),
+        int(ObjClass.WAND),
+        int(ObjClass.VENOM),
+    ):
         lo, hi = obj_shuffle_range(state, state.bases[ocls])
         shuffle(state, rng, lo, hi, True)
     # sub-class type ranges (one representative from each group)
-    for otyp in (O.HELMET, O.LEATHER_GLOVES, O.CLOAK_OF_PROTECTION,
-                 O.SPEED_BOOTS):
+    for otyp in (O.HELMET, O.LEATHER_GLOVES, O.CLOAK_OF_PROTECTION, O.SPEED_BOOTS):
         lo, hi = obj_shuffle_range(state, otyp)
         shuffle(state, rng, lo, hi, False)
 
@@ -206,15 +225,20 @@ def shuffle_all(state: ObjTables, rng) -> None:
 # Class probability totals (C: init_oclass_probs)
 # ------------------------------------------------------------
 
+
 def init_oclass_probs(state: ObjTables) -> None:
     for oclass in range(MAXOCLASSES):
         lo, hi = _oclass_range(state, oclass)
-        total = sum(state.prob[lo:hi + 1])
-        if total <= 0 and oclass != int(ObjClass.ILLOBJ) \
-                and state.bases[oclass] != state.bases[oclass + 1]:
+        total = sum(state.prob[lo : hi + 1])
+        if (
+            total <= 0
+            and oclass != int(ObjClass.ILLOBJ)
+            and state.bases[oclass] != state.bases[oclass + 1]
+        ):
             raise ValueError(
                 f"{'zero' if not total else 'negative'} "
-                f"probability total for oclass {oclass}")
+                f"probability total for oclass {oclass}"
+            )
             # C repairs by giving every member probability 1; we fail
             # loudly instead (a data error, not a game condition)
         state.prob_totals[oclass] = total
@@ -224,13 +248,15 @@ def init_oclass_probs(state: ObjTables) -> None:
 # Full initialization (C: init_objects, oinit)
 # ------------------------------------------------------------
 
+
 def init_objects(state: ObjTables, rng) -> None:
     # slots [1..17] must be the generic class placeholders
     for i in range(1, MAXOCLASSES):
         if int(OBJECTS[i].oclass) != i:
             raise ValueError(
                 f"init_objects: class for generic object #{i} doesn't "
-                f"match ({OBJECTS[i].oclass})")
+                f"match ({OBJECTS[i].oclass})"
+            )
     # check oc_name_known vs. presence of an alternate description
     # (C: no-description items must be pre-known, described items must
     # not be; a contradiction is a table error)
@@ -239,7 +265,8 @@ def init_objects(state: ObjTables, rng) -> None:
         if (OBJECTS[i].descr is None) ^ bool(nmkn):
             raise ValueError(
                 f"obj #{i} name state contradicts its alternate "
-                f"description (name_known={nmkn})")
+                f"description (name_known={nmkn})"
+            )
     # level-0 gem probabilities and gem color randomization
     setgemprobs(state)
     randomize_gem_colors(state, rng)
@@ -261,9 +288,14 @@ def oinit(state: ObjTables, rng, ledger_level: int = 0) -> None:
 # undiscover_object, interesting_to_discover)
 # ------------------------------------------------------------
 
-def discover_object(state: ObjTables, otyp: "ObjType | int",
-                    mark_as_known: bool, mark_as_encountered: bool,
-                    credit_hero: bool = False) -> bool:
+
+def discover_object(
+    state: ObjTables,
+    otyp: "ObjType | int",
+    mark_as_known: bool,
+    mark_as_encountered: bool,
+    credit_hero: bool = False,
+) -> bool:
     """Record a discovery; returns True if anything changed
     (C: discover_object).  `credit_hero` is the hook for
     exercise(A_WIS) -- callers decide what it means."""
@@ -309,8 +341,11 @@ def undiscover_object(state: ObjTables, otyp: "ObjType | int") -> None:
     ocls = int(OBJECTS[otyp].oclass)
     found = False
     dindx = state.bases[ocls]
-    while (dindx < NUM_OBJECTS and state.disco[dindx] is not None
-           and int(OBJECTS[dindx].oclass) == ocls):
+    while (
+        dindx < NUM_OBJECTS
+        and state.disco[dindx] is not None
+        and int(OBJECTS[dindx].oclass) == ocls
+    ):
         if found:
             state.disco[dindx - 1] = state.disco[dindx]
         elif state.disco[dindx] == otyp:
@@ -327,9 +362,10 @@ def interesting_to_discover(state: ObjTables, otyp: "ObjType | int") -> bool:
     (C: interesting_to_discover)."""
     if isinstance(otyp, ObjType):
         otyp = otyp.value
-    return (otyp in state.uname
-            or ((otyp in state.name_known or otyp in state.encountered)
-                and state.descr[otyp] is not None))
+    return otyp in state.uname or (
+        (otyp in state.name_known or otyp in state.encountered)
+        and state.descr[otyp] is not None
+    )
 
 
 def typename(state: ObjTables, otyp: "ObjType | int") -> str:

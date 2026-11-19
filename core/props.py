@@ -52,6 +52,7 @@ Simplifications (documented, not bugs):
   row, which needs the fine identity (the test_worn.py _item()
   pattern).
 """
+
 from __future__ import annotations
 
 from typing import Set

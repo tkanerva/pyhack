@@ -106,6 +106,7 @@ Simplifications (documented, not bugs):
   itself in one turn (self-detonators have a single attack), so this
   is unobservable today; it is noted here for the completion pass.
 """
+
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
@@ -114,15 +115,57 @@ from .events import DamageEvent, Event, MessageEvent, StatusEvent
 from .hacklib import can_see, is_hallucinating, is_stuck
 from .mondata import is_animal, is_undead
 from .monst import (
-    AD_ACID, AD_BLND, AD_COLD, AD_CONF, AD_DISE, AD_DISN, AD_DRIN, AD_ELEC,
-    AD_FIRE, AD_FAMN, AD_HALU, AD_MAGM, AD_PHYS, AD_PEST, AD_SITM, AD_SLEE,
-    AD_SEDU, AD_SSEX, AD_STUN, AD_DRST, AD_WRAP,
-    AT_BITE, AT_BOOM, AT_BUTT, AT_ENGL, AT_EXPL, AT_HUGS, AT_KICK, AT_NONE,
-    AT_STNG, AT_TENT, AT_TUCH, NATTK, Attack, DmgType, PerMonst,
-    PM_WOOD_NYMPH, distance_atk_type,
+    AD_ACID,
+    AD_BLND,
+    AD_COLD,
+    AD_CONF,
+    AD_DISE,
+    AD_DISN,
+    AD_DRIN,
+    AD_ELEC,
+    AD_FIRE,
+    AD_FAMN,
+    AD_HALU,
+    AD_MAGM,
+    AD_PHYS,
+    AD_PEST,
+    AD_SITM,
+    AD_SLEE,
+    AD_SEDU,
+    AD_SSEX,
+    AD_STUN,
+    AD_DRST,
+    AD_WRAP,
+    AT_BITE,
+    AT_BOOM,
+    AT_BUTT,
+    AT_ENGL,
+    AT_EXPL,
+    AT_HUGS,
+    AT_KICK,
+    AT_NONE,
+    AT_STNG,
+    AT_TENT,
+    AT_TUCH,
+    NATTK,
+    Attack,
+    DmgType,
+    PerMonst,
+    PM_WOOD_NYMPH,
+    distance_atk_type,
 )
-from .objects import (OBJECTS, ObjType, W_AMUL, W_ARM, W_ARMC, W_ARMF,
-                      W_ARMG, W_ARMH, W_ARMS, W_ARMU)
+from .objects import (
+    OBJECTS,
+    ObjType,
+    W_AMUL,
+    W_ARM,
+    W_ARMC,
+    W_ARMF,
+    W_ARMG,
+    W_ARMH,
+    W_ARMS,
+    W_ARMU,
+)
 from .types import DamageType, Monster, World
 from .worn import ERODE_CORRODE, ac_value, erode_armor, uac, which_armor
 
@@ -172,6 +215,7 @@ def adtyp_to_damage(adtyp: DmgType) -> DamageType:
 # RNG adapters (C rnd/d over the runtime rng.randint duck-type)
 # ------------------------------------------------------------
 
+
 def _rnd(rng, n: int) -> int:
     """C ``rnd(n)``: a roll in 1..n."""
     return rng.randint(1, n)
@@ -195,6 +239,7 @@ def _dice(rng, n: int, x: int) -> int:
 # Attack selection (C: getmattk)
 # ------------------------------------------------------------
 
+
 def getmattk(mdat: PerMonst, indx: int, prev_result: List[int]) -> Attack:
     """Select the monster's next attack (C: getmattk), possibly
     substituting for its usual one.
@@ -209,10 +254,12 @@ def getmattk(mdat: PerMonst, indx: int, prev_result: List[int]) -> Attack:
     resistances and are deferred with those ports.
     """
     attk = mdat.mattk[indx]
-    if (indx > 0
-            and prev_result[indx - 1] > M_ATTK_MISS
-            and attk.adtyp in (AD_DISE, AD_PEST, AD_FAMN)
-            and attk.adtyp == mdat.mattk[indx - 1].adtyp):
+    if (
+        indx > 0
+        and prev_result[indx - 1] > M_ATTK_MISS
+        and attk.adtyp in (AD_DISE, AD_PEST, AD_FAMN)
+        and attk.adtyp == mdat.mattk[indx - 1].adtyp
+    ):
         return Attack(attk.aatyp, AD_STUN, attk.damn, attk.damd)
     return attk
 
@@ -220,6 +267,7 @@ def getmattk(mdat: PerMonst, indx: int, prev_result: List[int]) -> Attack:
 # ------------------------------------------------------------
 # Message helpers
 # ------------------------------------------------------------
+
 
 def _hit_verb(mattk: Attack) -> str:
     """The verb for a hit message by attack type (C: hitmsg switch)."""
@@ -255,8 +303,7 @@ def hitmsg(mon: Monster, mattk: Attack) -> MessageEvent:
     return MessageEvent(f"{mon.name} {verb}!")
 
 
-def could_seduce(magr: Monster, mdef: Monster,
-                 mattk: Optional[Attack]) -> int:
+def could_seduce(magr: Monster, mdef: Monster, mattk: Optional[Attack]) -> int:
     """Returns 0 if seduction is impossible, 1 if fine, 2 if wrong
     gender for a nymph (C: could_seduce).
 
@@ -286,6 +333,7 @@ def could_seduce(magr: Monster, mdef: Monster,
 # Trap test (C: mtrapped_in_pit) -- scoped
 # ------------------------------------------------------------
 
+
 def mtrapped_in_pit(mon: Monster) -> bool:
     """True iff the monster is trapped in a (spiked) pit (C:
     mtrapped_in_pit).
@@ -301,8 +349,10 @@ def mtrapped_in_pit(mon: Monster) -> bool:
 # A hit (C: hitmu) -- produces events, returns (events, damage)
 # ------------------------------------------------------------
 
-def hitmu(world: World, mdat: PerMonst, mon: Monster, hero: Monster,
-          mattk: Attack, rng) -> Tuple[List[Event], int]:
+
+def hitmu(
+    world: World, mdat: PerMonst, mon: Monster, hero: Monster, mattk: Attack, rng
+) -> Tuple[List[Event], int]:
     """The monster's attack landed on the hero (C: hitmu).
 
     Returns ``(events, damage)``: the ``DamageEvent`` / ``MessageEvent``
@@ -329,9 +379,14 @@ def hitmu(world: World, mdat: PerMonst, mon: Monster, hero: Monster,
 
     events.append(hitmsg(mon, mattk))
     if dmg > 0:
-        events.append(DamageEvent(target=hero.id, amount=dmg,
-                                  damage_type=adtyp_to_damage(mattk.adtyp),
-                                  source=mon.id))
+        events.append(
+            DamageEvent(
+                target=hero.id,
+                amount=dmg,
+                damage_type=adtyp_to_damage(mattk.adtyp),
+                source=mon.id,
+            )
+        )
 
     # status the attack carries (C: make_sick / make_confused / ...)
     if mattk.adtyp in (AD_DRST, AD_DISE):
@@ -352,6 +407,7 @@ def hitmu(world: World, mdat: PerMonst, mon: Monster, hero: Monster,
 # A miss (C: missmu)
 # ------------------------------------------------------------
 
+
 def missmu(mon: Monster, mattk: Attack, nearmiss: bool = False) -> List[Event]:
     """The monster missed the hero (C: missmu)."""
     word = "just " if nearmiss else ""
@@ -362,8 +418,10 @@ def missmu(mon: Monster, mattk: Attack, nearmiss: bool = False) -> List[Event]:
 # Explosion (C: explmu)
 # ------------------------------------------------------------
 
-def explmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
-           rng) -> List[Event]:
+
+def explmu(
+    world: World, mon: Monster, hero: Monster, mattk: Attack, rng
+) -> List[Event]:
     """The monster explodes in the hero's face (C: explmu).
 
     The hero is affected by the blast (blinded / hallucinating /
@@ -382,13 +440,23 @@ def explmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
     elif adtyp == AD_HALU and not is_hallucinating(hero):
         events.append(StatusEvent(hero.id, "hallucination", power))
     elif adtyp in (AD_FIRE, AD_COLD, AD_ELEC):
-        events.append(DamageEvent(target=hero.id, amount=power,
-                                  damage_type=adtyp_to_damage(adtyp),
-                                  source=mon.id))
+        events.append(
+            DamageEvent(
+                target=hero.id,
+                amount=power,
+                damage_type=adtyp_to_damage(adtyp),
+                source=mon.id,
+            )
+        )
     # the exploder dies: it takes the whole blast as self-damage
-    events.append(DamageEvent(target=mon.id, amount=power,
-                              damage_type=adtyp_to_damage(adtyp),
-                              source=mon.id))
+    events.append(
+        DamageEvent(
+            target=mon.id,
+            amount=power,
+            damage_type=adtyp_to_damage(adtyp),
+            source=mon.id,
+        )
+    )
     return events
 
 
@@ -396,8 +464,10 @@ def explmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
 # Passive counterattack (C: passiveum) -- scoped
 # ------------------------------------------------------------
 
-def passiveum(world: World, mdat: PerMonst, hero: Monster, mon: Monster,
-              mattk: Attack, rng) -> List[Event]:
+
+def passiveum(
+    world: World, mdat: PerMonst, hero: Monster, mon: Monster, mattk: Attack, rng
+) -> List[Event]:
     """The hero's passive counterattack, if it is a monster with one
     (C: passiveum).
 
@@ -427,9 +497,14 @@ def passiveum(world: World, mdat: PerMonst, hero: Monster, mon: Monster,
         if _rnd(rng, 2) == 1:
             events.append(MessageEvent(f"{mon.name} is splashed by your acid!"))
             if tmp:
-                events.append(DamageEvent(target=mon.id, amount=tmp,
-                                          damage_type=DamageType.ACID,
-                                          source=hero.id))
+                events.append(
+                    DamageEvent(
+                        target=mon.id,
+                        amount=tmp,
+                        damage_type=DamageType.ACID,
+                        source=hero.id,
+                    )
+                )
         # the hero's acid corrodes the attacker's worn armour 1/30 (C:
         # passiveum AD_ACID -> erode_armor(mtmp, ERODE_CORRODE)); the
         # draw happens in every acid case, as in C.  C's 1/6
@@ -445,6 +520,7 @@ def passiveum(world: World, mdat: PerMonst, hero: Monster, mon: Monster,
 # ------------------------------------------------------------
 # The main entry point (C: mattacku)
 # ------------------------------------------------------------
+
 
 def mattacku(world: World, mon_id: str, rng) -> List[Event]:
     """The monster attacks the hero (C: mattacku).
@@ -499,8 +575,7 @@ def mattacku(world: World, mon_id: str, rng) -> List[Event]:
             continue  # swallowing is a STUB
         if aatyp == AT_HUGS:
             # automatic only if the previous two attacks both hit (C)
-            if not (i >= 2 and prev[i - 1] == M_ATTK_HIT
-                    and prev[i - 2] == M_ATTK_HIT):
+            if not (i >= 2 and prev[i - 1] == M_ATTK_HIT and prev[i - 2] == M_ATTK_HIT):
                 continue
         if aatyp == AT_KICK and mtrapped_in_pit(mon):
             continue
@@ -522,16 +597,19 @@ def mattacku(world: World, mon_id: str, rng) -> List[Event]:
 # STUBs -- the C API surface, filled by the named ports
 # ------------------------------------------------------------
 
-def gulpmu(world: World, mon: Monster, hero: Monster, mattk: Attack,
-           rng) -> List[Event]:
+
+def gulpmu(
+    world: World, mon: Monster, hero: Monster, mattk: Attack, rng
+) -> List[Event]:
     """STUB (C: gulpmu): the monster swallows the hero (or digests him
     if already swallowed).  Needs the swallow machinery (u.uswallow /
     u.ustuck / u.uswldtim) -- the mon.c / swallow port."""
     raise NotImplementedError("gulpmu: swallowing is not ported yet")
 
 
-def expels(mon: Monster, hero: Monster, mdat: PerMonst,
-           message: bool = True) -> List[Event]:
+def expels(
+    mon: Monster, hero: Monster, mdat: PerMonst, message: bool = True
+) -> List[Event]:
     """STUB (C: expels): the swallower releases the hero.  Needs the
     swallow machinery -- the mon.c / swallow port."""
     raise NotImplementedError("expels: the swallow machinery is not ported yet")
@@ -544,15 +622,17 @@ def gulp_blnd_check(world: World, mon: Monster, hero: Monster) -> bool:
     raise NotImplementedError("gulp_blnd_check: swallowing is not ported yet")
 
 
-def gazemu(world: World, mon: Monster, hero: Monster, mattk: Attack,
-           rng) -> List[Event]:
+def gazemu(
+    world: World, mon: Monster, hero: Monster, mattk: Attack, rng
+) -> List[Event]:
     """STUB (C: gazemu): the monster's gaze attack.  Needs line-of-sight,
     stone resistance and polymorph -- the vision / polymorph ports."""
     raise NotImplementedError("gazemu: gazes are not ported yet")
 
 
-def doseduce(world: World, mon: Monster, hero: Monster,
-             mattk: Optional[Attack]) -> List[Event]:
+def doseduce(
+    world: World, mon: Monster, hero: Monster, mattk: Optional[Attack]
+) -> List[Event]:
     """STUB (C: doseduce): the seduction sequence (the nymph / amorous
     demon undresses and drains the hero).  Needs equipment, money and
     alignment -- the do_wear / money / align ports."""
@@ -572,8 +652,9 @@ def summonmu(mon: Monster, youseeit: bool, rng) -> List[Event]:
     raise NotImplementedError("summonmu: summoning is not ported yet")
 
 
-def u_slip_free(world: World, mon: Monster, mattk: Attack,
-                rng) -> Tuple[bool, List[Event]]:
+def u_slip_free(
+    world: World, mon: Monster, mattk: Attack, rng
+) -> Tuple[bool, List[Event]]:
     """Whether the hero's greased / slippery clothing sheds a hug / wrap /
     brain-drain attack (C: u_slip_free, src/mhitu.c).
 
@@ -607,14 +688,20 @@ def u_slip_free(world: World, mon: Monster, mattk: Attack,
 
     # greased (or oilskin) gear makes the monster slip off; the protection
     # might fail (1/3) when the gear is cursed (C: !obj->cursed || rn2(3))
-    if (obj is not None
-            and (obj.greased or obj.otyp == ObjType.OILSKIN_CLOAK.value)
-            and (not obj.cursed or _rn2(rng, 3))):
-        verb = ("slips off of" if mattk.adtyp == AD_WRAP
-                else "grabs you, but cannot hold onto")
+    if (
+        obj is not None
+        and (obj.greased or obj.otyp == ObjType.OILSKIN_CLOAK.value)
+        and (not obj.cursed or _rn2(rng, 3))
+    ):
+        verb = (
+            "slips off of"
+            if mattk.adtyp == AD_WRAP
+            else "grabs you, but cannot hold onto"
+        )
         adjective = "greased" if obj.greased else "slippery"
         events: List[Event] = [
-            MessageEvent(f"{mon.name} {verb} your {adjective} {obj.name}!")]
+            MessageEvent(f"{mon.name} {verb} your {adjective} {obj.name}!")
+        ]
         # the grease wears off 1/2 of the time it protects (C: !rn2(2))
         if obj.greased and not _rn2(rng, 2):
             obj.greased = False
@@ -649,8 +736,7 @@ def magic_negation(mon: Monster) -> int:
             if acan > mc:
                 mc = acan
     amul = which_armor(None, mon, W_AMUL)
-    via_amul = (amul is not None
-                and amul.otyp == ObjType.AMULET_OF_GUARDING.value)
+    via_amul = amul is not None and amul.otyp == ObjType.AMULET_OF_GUARDING.value
     gotprot = False  # other Protection sources: the prop-system port
     if gotprot or via_amul:
         mc += 2 if via_amul else 1

@@ -1,4 +1,5 @@
 """Tests for the wand system."""
+
 from core import Direction
 from core.events import MessageEvent
 from core.types import Item, ObjectType, WandType
@@ -9,8 +10,14 @@ from conftest import SeqRng, assert_item_locations, make_monster, make_world
 def world_with_wand(wand_type, **monster_kw):
     mon = make_monster(pos=(8, 4), **monster_kw)
     w = make_world(monsters=[mon])
-    wand = Item(id="wand_0", otype=ObjectType.WAND, name="Wand",
-                spe=1, wand_type=wand_type, carrier="player")
+    wand = Item(
+        id="wand_0",
+        otype=ObjectType.WAND,
+        name="Wand",
+        spe=1,
+        wand_type=wand_type,
+        carrier="player",
+    )
     w.items["wand_0"] = wand
     w.hero.inventory.append(wand)
     return w
@@ -34,10 +41,9 @@ def test_death_wand_resisted_by_undead():
     Death monster itself, which the demo has no)."""
     w = world_with_wand(WandType.DEATH, is_undead=True, hp=3, max_hp=20)
     ev = use_wand(w, "player", WandType.DEATH, Direction.E, SeqRng(1))
-    assert w.actors["goblin_0"].hp == 3   # resisted: neither healed nor hurt
+    assert w.actors["goblin_0"].hp == 3  # resisted: neither healed nor hurt
     # the resistance is tested before the damage roll (C): no dice drawn
-    assert any("is unaffected" in e.text
-               for e in ev if isinstance(e, MessageEvent))
+    assert any("is unaffected" in e.text for e in ev if isinstance(e, MessageEvent))
 
 
 def test_sleep_wand_puts_to_sleep():

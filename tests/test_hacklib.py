@@ -7,6 +7,7 @@ inflect itself, so the suite covers only what this module still
 implements: the NetHack-specific and stdlib-less helpers, plus the
 status query functions (is_blind / is_confused / can_see / ...).
 """
+
 from core import hacklib as h
 from conftest import make_monster
 
@@ -96,7 +97,7 @@ def test_ordin():
 
 def test_geometry():
     assert h.sgn(-5) == -1 and h.sgn(0) == 0 and h.sgn(3) == 1
-    assert h.distmin((0, 0), (3, 4)) == 4     # king moves
+    assert h.distmin((0, 0), (3, 4)) == 4  # king moves
     assert h.distmin((0, 0), (0, 0)) == 0
     assert h.dist2((0, 0), (3, 4)) == 25
     assert h.online2((0, 0), (2, 2))
@@ -115,6 +116,7 @@ def test_geometry():
 # Status queries
 # ------------------------------------------------------------
 
+
 def test_status_queries_false_on_a_fresh_actor():
     m = make_monster()
     assert not h.is_asleep(m)
@@ -127,8 +129,9 @@ def test_status_queries_false_on_a_fresh_actor():
 
 
 def test_status_queries_true_while_the_counter_is_positive():
-    m = make_monster(sleeping=3, stuck=10, poisoned=2,
-                     confused=20, blind=5, hallucinating=30)
+    m = make_monster(
+        sleeping=3, stuck=10, poisoned=2, confused=20, blind=5, hallucinating=30
+    )
     assert h.is_asleep(m)
     assert h.is_stuck(m)
     assert h.is_poisoned(m)

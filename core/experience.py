@@ -79,6 +79,7 @@ Simplifications (documented, not bugs -- PLAN-EXPERIENCE.md §4 / §5):
   post-MAXULEV 1200 / 600 throttles in newhp / newpw) are no-ops for
   Python ints / unreachable in the demo.
 """
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -86,16 +87,27 @@ from typing import List, Optional
 from .energy import newpw
 from .events import DeathEvent, Event, MessageEvent
 from .mondata import extra_nasty
-from .monst import (AD_BLND, AD_DRLI, AD_PHYS, AD_SLIM, AD_STON, AD_WRAP,
-                    AT_BUTT, AT_MAGC, AT_WEAP, NORMAL_SPEED,
-                    PM_MAIL_DAEMON, S_EEL)
+from .monst import (
+    AD_BLND,
+    AD_DRLI,
+    AD_PHYS,
+    AD_SLIM,
+    AD_STON,
+    AD_WRAP,
+    AT_BUTT,
+    AT_MAGC,
+    AT_WEAP,
+    NORMAL_SPEED,
+    PM_MAIL_DAEMON,
+    S_EEL,
+)
 from .types import MAXULEV, Monster, World
 from .worn import uac
-
 
 # ------------------------------------------------------------
 # The level threshold (C: newuexp)
 # ------------------------------------------------------------
+
 
 def newuexp(lev: int) -> int:
     """C: newuexp(lev) -- the experience needed to REACH level ``lev``
@@ -118,6 +130,7 @@ def newuexp(lev: int) -> int:
 # ------------------------------------------------------------
 # The kill-XP formula (C: experience)
 # ------------------------------------------------------------
+
 
 def kill_experience(world: World, mon: Monster, nk: int = 1) -> int:
     """C: experience(mtmp, nk) -- the XP for killing ``mon``.
@@ -192,6 +205,7 @@ def kill_experience(world: World, mon: Monster, nk: int = 1) -> int:
 # The XP accumulation (C: more_experienced)
 # ------------------------------------------------------------
 
+
 def more_experienced(world: World, exper: int, rexp: int = 0) -> None:
     """C: more_experienced(exper, rexp) -- add ``exper`` XP to the hero.
 
@@ -211,6 +225,7 @@ def more_experienced(world: World, exper: int, rexp: int = 0) -> None:
 # The level check (C: newexplevel)
 # ------------------------------------------------------------
 
+
 def newexplevel(world: World, rng) -> List[Event]:
     """C: newexplevel -- make experience gaining similar to AD&D: at most
     ONE level per call-site (the comment in exper.c says so explicitly).
@@ -225,6 +240,7 @@ def newexplevel(world: World, rng) -> List[Event]:
 # ------------------------------------------------------------
 # The HP-per-level increment (C: newhp, src/attrib.c)
 # ------------------------------------------------------------
+
 
 def _con_bonus(con: int) -> int:
     """C: the CON table of newhp (src/attrib.c) -- the constitution
@@ -283,6 +299,7 @@ def init_experience(world: World) -> None:
 # The level-up (C: pluslvl)
 # ------------------------------------------------------------
 
+
 def pluslvl(world: World, incr: bool, rng) -> List[Event]:
     """C: pluslvl(incr) -- raise the hero a level.
 
@@ -333,8 +350,7 @@ def pluslvl(world: World, incr: bool, rng) -> List[Event]:
         # C: the welcome pline -- "back" only when NOT a new high
         # ((u.ulevelmax < u.ulevel) ? "" : "back ")
         back = "" if hero.ulevelmax < hero.ulevel else "back "
-        events.append(MessageEvent(
-            f"Welcome {back}to experience level {hero.ulevel}."))
+        events.append(MessageEvent(f"Welcome {back}to experience level {hero.ulevel}."))
         if hero.ulevelmax < hero.ulevel:
             hero.ulevelmax = hero.ulevel
         # C: adjabil(u.ulevel - 1, u.ulevel) -- the intrinsic grants are
@@ -347,6 +363,7 @@ def pluslvl(world: World, incr: bool, rng) -> List[Event]:
 # ------------------------------------------------------------
 # The level-loss / drain (C: losexp)
 # ------------------------------------------------------------
+
 
 def losexp(world: World, drainer: Optional[str]) -> List[Event]:
     """C: losexp(drainer) -- the level-loss (drain) path.
@@ -422,6 +439,7 @@ def losexp(world: World, drainer: Optional[str]) -> List[Event]:
 # ------------------------------------------------------------
 # The kill-XP hook (C: the mkill kill path, mon.c)
 # ------------------------------------------------------------
+
 
 def grant_kill_xp(world: World, mon: Monster, rng) -> List[Event]:
     """The kill-XP hook -- the body ``rules.apply_damage`` calls when a

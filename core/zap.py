@@ -56,6 +56,7 @@ Simplifications (documented, not bugs):
   demo's "undead absorb the death ray" heal is dropped (C heals only
   the Death monster itself, which the demo has no)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -64,10 +65,25 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .events import Event, MessageEvent, ZapEvent
 from .invent import consume_obj_charge, useup
 from .items import cancel_items
-from .rules import (apply_damage, can_polymorph, find_target_in_line,
-                    put_to_sleep, resists, roll, teleport_to_floor)
-from .types import (DamageType, Direction, Item, Monster, ObjectType,
-                    WandType, ZapEffect, World)
+from .rules import (
+    apply_damage,
+    can_polymorph,
+    find_target_in_line,
+    put_to_sleep,
+    resists,
+    roll,
+    teleport_to_floor,
+)
+from .types import (
+    DamageType,
+    Direction,
+    Item,
+    Monster,
+    ObjectType,
+    WandType,
+    ZapEffect,
+    World,
+)
 
 # C: dobuzz's `range = rn1(7, 7)` (3.x: `7 + rnd(7)`) -- 8..14
 BEAM_RANGE_BASE = 7
@@ -89,11 +105,12 @@ class ZapSpec:
     for a spell) carried for provenance; the effect code never reads
     it (the caster-side differences stay in the caster).
     """
+
     effect: ZapEffect
     power: int = 0
     damage_bonus: int = 0
-    range: int = 0                    # 0 = the C 7 + rnd(7) roll (in zap())
-    noun: str = "bolt"                # beam noun for the miss lines (C: zap_str)
+    range: int = 0  # 0 = the C 7 + rnd(7) roll (in zap())
+    noun: str = "bolt"  # beam noun for the miss lines (C: zap_str)
     source: Optional[Item] = None
 
 
@@ -107,8 +124,10 @@ EffectFn = Callable[[World, Monster, Monster, ZapSpec, Any], List[Event]]
 # dispatch here)
 # ------------------------------------------------------------
 
-def _zap_damage(world: World, target: Monster, spec: ZapSpec, rng,
-                dmg_type: DamageType, source: str) -> List[Event]:
+
+def _zap_damage(
+    world: World, target: Monster, spec: ZapSpec, rng, dmg_type: DamageType, source: str
+) -> List[Event]:
     """C: the zhitm() damage cases (d(nd, 6) + the spell bonus).  The
     resists() pre-check comes BEFORE the roll, as in C (resistance is
     tested before d(nd,6) is drawn) -- a resisted zap draws no dice."""
@@ -121,39 +140,48 @@ def _zap_damage(world: World, target: Monster, spec: ZapSpec, rng,
     return apply_damage(world, target.id, dmg, dmg_type, source, rng=rng)
 
 
-def _zap_fire(world: World, caster: Monster, target: Monster, spec: ZapSpec,
-              rng) -> List[Event]:
+def _zap_fire(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: zhitm ZT_FIRE (WAN_FIRE)."""
-    return _zap_damage(world, target, spec, rng, DamageType.FIRE,
-                       caster.id)  # the caster id (decision 4)
+    return _zap_damage(
+        world, target, spec, rng, DamageType.FIRE, caster.id
+    )  # the caster id (decision 4)
 
 
-def _zap_cold(world: World, caster: Monster, target: Monster, spec: ZapSpec,
-              rng) -> List[Event]:
+def _zap_cold(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: zhitm ZT_COLD (WAN_COLD + SPE_CONE_OF_COLD -- one effect,
     C 3.x's "a cold stream")."""
-    return _zap_damage(world, target, spec, rng, DamageType.COLD,
-                       caster.id)  # the caster id (decision 4)
+    return _zap_damage(
+        world, target, spec, rng, DamageType.COLD, caster.id
+    )  # the caster id (decision 4)
 
 
-def _zap_lightning(world: World, caster: Monster, target: Monster,
-                   spec: ZapSpec, rng) -> List[Event]:
+def _zap_lightning(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: zhitm ZT_LIGHTNING (WAN_LIGHTNING + the lightning spell)."""
-    return _zap_damage(world, target, spec, rng, DamageType.LIGHTNING,
-                       caster.id)  # the caster id (decision 4)
+    return _zap_damage(
+        world, target, spec, rng, DamageType.LIGHTNING, caster.id
+    )  # the caster id (decision 4)
 
 
-def _zap_magic(world: World, caster: Monster, target: Monster, spec: ZapSpec,
-               rng) -> List[Event]:
+def _zap_magic(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: zhitm ZT_MAGIC_MISSILE (SPE_MAGIC_MISSILE + WAN_MAGIC_MISSILE;
     the demo's undead-resist table stands in for C's magic
     resistance)."""
-    return _zap_damage(world, target, spec, rng, DamageType.MAGIC_MISSILE,
-                       caster.id)  # the caster id (decision 4)
+    return _zap_damage(
+        world, target, spec, rng, DamageType.MAGIC_MISSILE, caster.id
+    )  # the caster id (decision 4)
 
 
-def _zap_striking(world: World, caster: Monster, target: Monster,
-                  spec: ZapSpec, rng) -> List[Event]:
+def _zap_striking(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: bhitm WAN_STRIKING -> SPE_FORCE_BOLT (zap_punch) -- the
     force bolt / striking bolt, a fixed d(2,12) for BOTH the wand and
     the spell (C: `dmg = d(2, 12)`; the spell adds its bonus, which
@@ -161,12 +189,14 @@ def _zap_striking(world: World, caster: Monster, target: Monster,
     if resists(target, DamageType.MAGIC_MISSILE):
         return [MessageEvent(f"{target.name} is unaffected.")]
     dmg = roll(rng, 12, 2) + spec.damage_bonus
-    return apply_damage(world, target.id, dmg, DamageType.MAGIC_MISSILE,
-                        caster.id, rng=rng)  # the caster id (decision 4)
+    return apply_damage(
+        world, target.id, dmg, DamageType.MAGIC_MISSILE, caster.id, rng=rng
+    )  # the caster id (decision 4)
 
 
-def _zap_sleep(world: World, caster: Monster, target: Monster, spec: ZapSpec,
-               rng) -> List[Event]:
+def _zap_sleep(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: zhitm ZT_SLEEP -> sleep_monst (WAN_SLEEP + SPE_SLEEP).  The
     demo's flat 25-turn sleep (C: d(nd, 25)) is kept."""
     if resists(target, DamageType.SLEEP):
@@ -174,17 +204,20 @@ def _zap_sleep(world: World, caster: Monster, target: Monster, spec: ZapSpec,
     return put_to_sleep(world, target.id, 25)
 
 
-def _zap_death(world: World, caster: Monster, target: Monster, spec: ZapSpec,
-               rng) -> List[Event]:
+def _zap_death(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: zhitm ZT_DEATH (WAN_DEATH + SPE_FINGER_OF_DEATH).  C's
     nonliving / demon / magic-resist unaffected set is the demo's
     resists(DEATH) table (undead / demon / golem)."""
-    return _zap_damage(world, target, spec, rng, DamageType.DEATH,
-                       caster.id)  # the caster id (decision 4)
+    return _zap_damage(
+        world, target, spec, rng, DamageType.DEATH, caster.id
+    )  # the caster id (decision 4)
 
 
-def _zap_polymorph(world: World, caster: Monster, target: Monster,
-                   spec: ZapSpec, rng) -> List[Event]:
+def _zap_polymorph(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: bhitm WAN_POLYMORPH + SPE_POLYMORPH (+ POT_POLYMORPH).  The
     system shock (C: 1/25 death) is dropped -- no corpse system."""
     if not can_polymorph(target):
@@ -193,24 +226,27 @@ def _zap_polymorph(world: World, caster: Monster, target: Monster,
     return [MessageEvent(f"{target.name} shudders and transforms!")]
 
 
-def _zap_cancellation(world: World, caster: Monster, target: Monster,
-                      spec: ZapSpec, rng) -> List[Event]:
+def _zap_cancellation(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: bhitm WAN_CANCELLATION + SPE_CANCELLATION -> cancel_monst.
     The wand cancels the TARGET's items; the spell cancels the
     CASTER's (the caster side picks the actor)."""
     return cancel_items(world, target)
 
 
-def _zap_teleport(world: World, caster: Monster, target: Monster,
-                  spec: ZapSpec, rng) -> List[Event]:
+def _zap_teleport(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: bhitm WAN_TELEPORTATION + SPE_TELEPORT_AWAY ->
     u_teleport_mon.  The wand teleports the TARGET; the spell
     teleports the CASTER (the caster side picks the actor)."""
     return teleport_to_floor(world, target.id, rng)
 
 
-def _zap_undead_turning(world: World, caster: Monster, target: Monster,
-                        spec: ZapSpec, rng) -> List[Event]:
+def _zap_undead_turning(
+    world: World, caster: Monster, target: Monster, spec: ZapSpec, rng
+) -> List[Event]:
     """C: bhitm WAN_UNDEAD_TURNING + SPE_TURN_UNDEAD -> unturn_dead:
     the undead take `rnd(8)` (+ the spell bonus, carried in the
     spec) and flee; the living are unaffected.  The monflee() flee is
@@ -219,8 +255,9 @@ def _zap_undead_turning(world: World, caster: Monster, target: Monster,
         return [MessageEvent(f"{target.name} is unaffected.")]
     dmg = roll(rng, 8, 1) + spec.damage_bonus
     events: List[Event] = [MessageEvent(f"{target.name} is turned and flees!")]
-    events += apply_damage(world, target.id, dmg, DamageType.MELEE,
-                           caster.id, rng=rng)  # the caster id (decision 4)
+    events += apply_damage(
+        world, target.id, dmg, DamageType.MELEE, caster.id, rng=rng
+    )  # the caster id (decision 4)
     return events
 
 
@@ -247,27 +284,35 @@ ZAP_EFFECTS: Dict[ZapEffect, EffectFn] = {
 # The beam engine (C: the dobuzz() / bhit() traversal)
 # ------------------------------------------------------------
 
-def zap(world: World, caster_id: str, direction: Direction, spec: ZapSpec,
-        rng) -> List[Event]:
+
+def zap(
+    world: World, caster_id: str, direction: Direction, spec: ZapSpec, rng
+) -> List[Event]:
     """Fire one zap in `direction` (C: the dobuzz()/bhit() beam):
     roll the beam range (C: `7 + rnd(7)`), walk the line, stop at the
     first monster (C behaviour, kept from the old beam), and dispatch
     to `ZAP_EFFECTS[spec.effect]`.  No monster in range: the wall /
     astray line (C: the zap_miss output)."""
     caster = world.actors[caster_id]
-    range_ = spec.range if spec.range > 0 else \
-        BEAM_RANGE_BASE + rng.randint(1, BEAM_RANGE_RND)  # C: 7 + rnd(7)
-    target, hit_wall = find_target_in_line(world, caster.pos, direction,
-                                           range_)
-    events: List[Event] = [ZapEvent(caster_id, spec.effect,
-                                    target.id if target else None)]
+    range_ = (
+        spec.range
+        if spec.range > 0
+        else BEAM_RANGE_BASE + rng.randint(1, BEAM_RANGE_RND)
+    )  # C: 7 + rnd(7)
+    target, hit_wall = find_target_in_line(world, caster.pos, direction, range_)
+    events: List[Event] = [
+        ZapEvent(caster_id, spec.effect, target.id if target else None)
+    ]
     if target is None:
-        events.append(MessageEvent(
-            f"💥 The {spec.noun} hits a wall." if hit_wall
-            else f"The {spec.noun} goes astray."))
+        events.append(
+            MessageEvent(
+                f"💥 The {spec.noun} hits a wall."
+                if hit_wall
+                else f"The {spec.noun} goes astray."
+            )
+        )
         return events
-    return events + ZAP_EFFECTS[spec.effect](world, caster, target, spec,
-                                             rng)
+    return events + ZAP_EFFECTS[spec.effect](world, caster, target, spec, rng)
 
 
 # ------------------------------------------------------------
@@ -297,15 +342,18 @@ WAND_ZAPS: Dict[WandType, Tuple[ZapEffect, int]] = {
 
 def _find_wand(caster: Monster, wand_type: WandType) -> Optional[Item]:
     for item in caster.inventory:
-        if (item.otype == ObjectType.WAND
-                and item.wand_type == wand_type
-                and item.spe > 0):
+        if (
+            item.otype == ObjectType.WAND
+            and item.wand_type == wand_type
+            and item.spe > 0
+        ):
             return item
     return None
 
 
-def use_wand(world: World, caster_id: str, wand_type: WandType,
-             direction: Direction, rng) -> List[Event]:
+def use_wand(
+    world: World, caster_id: str, wand_type: WandType, direction: Direction, rng
+) -> List[Event]:
     """C: dozap() -> zappable() -> weffects(): fire a wand of
     `wand_type` in `direction` and return the events.
 

@@ -4,22 +4,38 @@ House conventions: SeqRng for exact draws, conftest.make_world for
 the tiny worlds, assert on the world state AND the event list; the
 StairsCommand goes through step() where the wiring is the point.
 """
+
 import random
 
-from core import (MoveCommand, StairsCommand, WaitCommand, step)
-from core.events import (GameOverEvent, LevelChangeEvent, MessageEvent,
-                         TrapTriggeredEvent)
+from core import MoveCommand, StairsCommand, WaitCommand, step
+from core.events import (
+    GameOverEvent,
+    LevelChangeEvent,
+    MessageEvent,
+    TrapTriggeredEvent,
+)
 from core.rules import apply_stuck
 from core.stairs import go_stairs, rebuild_stairs
-from core.types import (Item, Monster, ObjectType, Pos, STAIR_DOWN,
-                        STAIR_UP, Stairway, TerrainType, Tile, Trap, TrapType)
+from core.types import (
+    Item,
+    Monster,
+    ObjectType,
+    Pos,
+    STAIR_DOWN,
+    STAIR_UP,
+    Stairway,
+    TerrainType,
+    Tile,
+    Trap,
+    TrapType,
+)
 from core.worldgen import LEVEL1_DN_STAIRS, generate_level, new_world
 from conftest import SeqRng, make_hero, make_map, make_world
-
 
 # ------------------------------------------------------------
 # worldgen plumbing
 # ------------------------------------------------------------
+
 
 def test_new_world_is_multi_level():
     w = new_world(random.Random(42), levels=3)
@@ -40,6 +56,7 @@ def test_generate_level_deterministic_and_stairs():
     same stair positions (up + down, distinct), same trap / monster
     positions; the stair tiles are reserved from traps, monsters and
     items; no floor items on new levels."""
+
     def descend():
         w = new_world(random.Random(42), levels=3)
         w.hero.pos = LEVEL1_DN_STAIRS
@@ -48,12 +65,13 @@ def test_generate_level_deterministic_and_stairs():
         tiles = [[(t.typ, t.stair_dir) for t in row] for row in w.map.tiles]
         up = [s.pos for s in w.stairs if s.up]
         dn = [s.pos for s in w.stairs if not s.up]
-        traps = {t.id: (t.pos, t.trap_type) for t in w.traps.values()
-                 if t.lev == 2}
-        mons = {m.id: (m.pos, m.name) for m in w.actors.values()
-                if not m.is_hero and m.lev == 2}
-        items = [it.id for it in w.items.values()
-                 if it.lev == 2 and it.pos is not None]
+        traps = {t.id: (t.pos, t.trap_type) for t in w.traps.values() if t.lev == 2}
+        mons = {
+            m.id: (m.pos, m.name)
+            for m in w.actors.values()
+            if not m.is_hero and m.lev == 2
+        }
+        items = [it.id for it in w.items.values() if it.lev == 2 and it.pos is not None]
         return tiles, up, dn, traps, mons, items
 
     a = descend()
@@ -82,8 +100,9 @@ def test_bottom_level_has_up_stairs_only_and_victory():
     # the bottom level (C: Is_botlevel) has only the up stairs
     assert any(s.up for s in w.stairs)
     assert not any(not s.up for s in w.stairs)
-    assert any(isinstance(e, LevelChangeEvent) and e.lev == 3
-               and e.first_visit for e in ev)
+    assert any(
+        isinstance(e, LevelChangeEvent) and e.lev == 3 and e.first_visit for e in ev
+    )
     go = [e for e in ev if isinstance(e, GameOverEvent)]
     assert go and go[0].victory
     assert go[0].reason == "You have reached the bottom of the dungeon!"
@@ -97,6 +116,7 @@ def test_bottom_level_has_up_stairs_only_and_victory():
 # calls -- the wiring is the point)
 # ------------------------------------------------------------
 
+
 def test_descend_and_climb_back():
     w = new_world(random.Random(42), levels=3)
     w.hero.pos = LEVEL1_DN_STAIRS
@@ -109,13 +129,13 @@ def test_descend_and_climb_back():
     texts = [e.text for e in ev if isinstance(e, MessageEvent)]
     assert "You descend the stairs." in texts
     assert "You are now on level 2 of 3." in texts
-    assert any(isinstance(e, LevelChangeEvent) and e.lev == 2
-               and e.first_visit for e in ev)
+    assert any(
+        isinstance(e, LevelChangeEvent) and e.lev == 2 and e.first_visit for e in ev
+    )
     assert w.turn == 1
     # level 1 is parked with its monsters still there
     assert set(w.levels) == {1}
-    assert sum(1 for m in w.actors.values()
-               if not m.is_hero and m.lev == 1) == 9
+    assert sum(1 for m in w.actors.values() if not m.is_hero and m.lev == 1) == 9
     # climb back up from the up stairs
     ev = step(w, StairsCommand(up=True), random.Random(42))
     assert w.lev == 1
@@ -129,8 +149,7 @@ def test_descend_and_climb_back():
     assert "You are now on level 1 of 3." not in texts
     # level 2 is parked now, its state intact
     assert set(w.levels) == {2}
-    assert sum(1 for m in w.actors.values()
-               if not m.is_hero and m.lev == 2) == 9
+    assert sum(1 for m in w.actors.values() if not m.is_hero and m.lev == 2) == 9
 
 
 def _stair_world(hero_pos=(6, 4)):
@@ -151,13 +170,15 @@ def test_no_stairs_at_the_hero_tile_refuses():
     assert w.hero.pos == (6, 4)
     assert w.levels == {}  # no level generated
     assert not any(isinstance(e, LevelChangeEvent) for e in ev)
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You can't go down here." for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You can't go down here." for e in ev
+    )
     ev = step(w, StairsCommand(up=True), SeqRng())
     assert w.lev == 1
     assert not any(isinstance(e, LevelChangeEvent) for e in ev)
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You can't go up here." for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You can't go up here." for e in ev
+    )
 
 
 def test_up_on_the_level_one_down_stairs_refused():
@@ -168,8 +189,9 @@ def test_up_on_the_level_one_down_stairs_refused():
     assert w.lev == 1
     assert w.levels == {}
     assert not any(isinstance(e, LevelChangeEvent) for e in ev)
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You can't go up here." for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You can't go up here." for e in ev
+    )
 
 
 def test_down_on_the_bottom_level_refused():
@@ -180,8 +202,9 @@ def test_down_on_the_bottom_level_refused():
     assert w.lev == 2
     assert w.levels == {}
     assert not any(isinstance(e, LevelChangeEvent) for e in ev)
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You can't go down here." for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You can't go down here." for e in ev
+    )
 
 
 def test_stuck_hero_cannot_use_the_stairs():
@@ -191,9 +214,11 @@ def test_stuck_hero_cannot_use_the_stairs():
     assert w.lev == 1
     assert w.levels == {}
     assert not any(isinstance(e, LevelChangeEvent) for e in ev)
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You are stuck and can't use the stairs."
-               for e in ev)
+    assert any(
+        isinstance(e, MessageEvent)
+        and e.text == "You are stuck and can't use the stairs."
+        for e in ev
+    )
 
 
 def test_asleep_hero_ignores_the_stairs_command():
@@ -209,6 +234,7 @@ def test_asleep_hero_ignores_the_stairs_command():
 # the arrival collision (C: u_collide_m) -- go_stairs direct, with
 # a pre-parked level 2 so the descent draws only the collision roll
 # ------------------------------------------------------------
+
 
 def _stair_pos(m, want_dir) -> Pos:
     for y in range(m.height):
@@ -239,8 +265,8 @@ def _world_on_the_level1_stairs(monster_on_arrival: bool):
     up_pos = _stair_pos(m2, STAIR_UP)
     if monster_on_arrival:
         w.actors["goblin_l2"] = Monster(
-            id="goblin_l2", name="Goblin", pos=up_pos, hp=8, max_hp=8,
-            ac=7, lev=2)
+            id="goblin_l2", name="Goblin", pos=up_pos, hp=8, max_hp=8, ac=7, lev=2
+        )
     return w, m2, up_pos
 
 
@@ -255,8 +281,9 @@ def test_arrival_collision_even_moves_the_hero():
     assert w.hero.pos == p
     assert mon.pos == up_pos
     assert mon.alive
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You descend the stairs." for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You descend the stairs." for e in ev
+    )
 
 
 def test_arrival_collision_odd_moves_the_monster():
@@ -270,13 +297,15 @@ def test_arrival_collision_odd_moves_the_monster():
     assert w.hero.pos == up_pos
     assert mon.pos == p
     assert mon.alive
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You descend the stairs." for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You descend the stairs." for e in ev
+    )
 
 
 # ------------------------------------------------------------
 # cross-level isolation
 # ------------------------------------------------------------
+
 
 def test_cross_level_isolation():
     """On level 2: a wait does not tick / move level-1 monsters, and
@@ -285,18 +314,22 @@ def test_cross_level_isolation():
     w.hero.pos = LEVEL1_DN_STAIRS
     step(w, StairsCommand(up=False), random.Random(42))
     assert w.lev == 2
-    l1 = [(m.id, m.pos, m.stuck, m.sleeping) for m in w.actors.values()
-          if not m.is_hero and m.lev == 1]
+    l1 = [
+        (m.id, m.pos, m.stuck, m.sleeping)
+        for m in w.actors.values()
+        if not m.is_hero and m.lev == 1
+    ]
     assert len(l1) == 9
-    for m in (m for m in w.actors.values()
-              if not m.is_hero and m.lev == 1):
+    for m in (m for m in w.actors.values() if not m.is_hero and m.lev == 1):
         found = w.monster_at(m.pos)
         # a level-2 monster may share the coordinate, never the actor
         assert found is None or found.lev == 2
     step(w, WaitCommand(), random.Random(42))
-    l1_after = [(m.id, m.pos, m.stuck, m.sleeping)
-                for m in w.actors.values()
-                if not m.is_hero and m.lev == 1]
+    l1_after = [
+        (m.id, m.pos, m.stuck, m.sleeping)
+        for m in w.actors.values()
+        if not m.is_hero and m.lev == 1
+    ]
     assert l1_after == l1
 
 
@@ -305,12 +338,15 @@ def test_traps_and_items_filtered_by_level():
     trigger, not in items_at) and live again after returning."""
     m1 = make_map()
     m1.tiles[3][6] = Tile(typ=TerrainType.STAIRS, stair_dir=STAIR_DOWN)
-    it = Item(id="armor_1", otype=ObjectType.ARMOR, name="leather armor",
-              pos=(7, 4), lev=1)
-    w = make_world(map=m1, hero=make_hero(pos=(6, 3)),
-                   traps=[Trap(id="trap_l1", trap_type=TrapType.PIT,
-                               pos=(7, 4), lev=1)],
-                   items=[it])
+    it = Item(
+        id="armor_1", otype=ObjectType.ARMOR, name="leather armor", pos=(7, 4), lev=1
+    )
+    w = make_world(
+        map=m1,
+        hero=make_hero(pos=(6, 3)),
+        traps=[Trap(id="trap_l1", trap_type=TrapType.PIT, pos=(7, 4), lev=1)],
+        items=[it],
+    )
     w.max_lev = 2
     rebuild_stairs(w)
     assert w.items_at((7, 4)) == [it]
@@ -346,22 +382,31 @@ def test_traps_and_items_filtered_by_level():
 # integration: the whole game with the stairs
 # ------------------------------------------------------------
 
+
 def test_full_game_with_stairs_is_deterministic():
     """Same seed + same commands => the same game, including the lazy
     level-2 generation on the shared rng stream (the test_demo
     pattern, extended with the stairs)."""
+
     def play():
         rng = random.Random(42)
         w = new_world(rng, levels=3)
         out = []
-        cmds = ([MoveCommand(0, -1)] * 8 + [StairsCommand(up=False)]
-                + [MoveCommand(1, 0), MoveCommand(0, 1), WaitCommand()]
-                + [StairsCommand(up=True)] + [WaitCommand()])
+        cmds = (
+            [MoveCommand(0, -1)] * 8
+            + [StairsCommand(up=False)]
+            + [MoveCommand(1, 0), MoveCommand(0, 1), WaitCommand()]
+            + [StairsCommand(up=True)]
+            + [WaitCommand()]
+        )
         for cmd in cmds:
             out.extend(step(w, cmd, rng))
-        return (w.lev, w.hero.pos, w.turn,
-                {m.id: (m.hp, m.pos, m.alive, m.lev)
-                 for m in w.actors.values()},
-                [repr(e) for e in out])
+        return (
+            w.lev,
+            w.hero.pos,
+            w.turn,
+            {m.id: (m.hp, m.pos, m.alive, m.lev) for m in w.actors.values()},
+            [repr(e) for e in out],
+        )
 
     assert play() == play()

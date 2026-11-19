@@ -1,4 +1,5 @@
 """Tests for core.pickup (the pickobj subset, PLAN-ARMOR.md Phase 2)."""
+
 from core import PickupCommand, step
 from core.events import MessageEvent
 from core.pickup import pickup
@@ -9,8 +10,12 @@ HERO_POS = (6, 4)
 
 
 def _floor(w, i, pos=HERO_POS, name=None) -> Item:
-    it = Item(id=f"floor_{i}", otype=ObjectType.ARMOR,
-              name=name if name is not None else f"item {i}", pos=pos)
+    it = Item(
+        id=f"floor_{i}",
+        otype=ObjectType.ARMOR,
+        name=name if name is not None else f"item {i}",
+        pos=pos,
+    )
     w.items[it.id] = it
     return it
 
@@ -48,8 +53,9 @@ def test_pickup_through_step():
     ev = step(w, PickupCommand(), SeqRng())
     assert it.pos is None and it.carrier == "player"
     assert it in w.hero.inventory
-    assert it.invlet == "a"        # addinv letters the hero's pack
+    assert it.invlet == "a"  # addinv letters the hero's pack
     assert_item_locations(w)
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You pick up the elven leather helm."
-               for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You pick up the elven leather helm."
+        for e in ev
+    )

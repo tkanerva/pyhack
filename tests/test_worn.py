@@ -5,17 +5,50 @@ The item builder uses the real core.objects table (fine identity), so
 the predicates and the ARM_BONUS math are checked against the C values
 (a_ac = the table's oc1 = 10 - the macro's ac argument).
 """
+
 import itertools
 
-from core.objects import (OBJECTS, ObjClass, ObjType, W_AMUL, W_ARM,
-                          W_ARMC, W_ARMF, W_ARMG, W_ARMH,
-                          W_ARMS, W_ARMU, W_RING, W_RINGL, W_RINGR)
+from core.objects import (
+    OBJECTS,
+    ObjClass,
+    ObjType,
+    W_AMUL,
+    W_ARM,
+    W_ARMC,
+    W_ARMF,
+    W_ARMG,
+    W_ARMH,
+    W_ARMS,
+    W_ARMU,
+    W_RING,
+    W_RINGL,
+    W_RINGR,
+)
 from core.types import Item, Monster, ObjectType
-from core.worn import (AC_MAX, ac_bonus, ac_value, arm_bonus, armor_slot,
-                       can_wear, dotakeoff, dowear, is_armor, is_boots,
-                       is_cloak, is_gloves, is_helmet, is_shield, is_shirt,
-                       is_suit, is_worn, setnotworn, setworn, uac,
-                       wearing_armor, which_armor)
+from core.worn import (
+    AC_MAX,
+    ac_bonus,
+    ac_value,
+    arm_bonus,
+    armor_slot,
+    can_wear,
+    dotakeoff,
+    dowear,
+    is_armor,
+    is_boots,
+    is_cloak,
+    is_gloves,
+    is_helmet,
+    is_shield,
+    is_shirt,
+    is_suit,
+    is_worn,
+    setnotworn,
+    setworn,
+    uac,
+    wearing_armor,
+    which_armor,
+)
 from conftest import SeqRng, make_hero, make_world
 
 _ids = itertools.count()
@@ -29,16 +62,22 @@ _COARSE = {
 }
 
 
-def _item(otyp: ObjType, name: str | None = None, spe=0, cursed=False,
-          owornmask=0) -> Item:
+def _item(
+    otyp: ObjType, name: str | None = None, spe=0, cursed=False, owornmask=0
+) -> Item:
     """A runtime Item with the fine identity of table row `otyp`."""
     o = OBJECTS[otyp.value]
     oclass = int(o.oclass)
     return Item(
-        id=f"it_{next(_ids)}", otype=_COARSE[oclass],
+        id=f"it_{next(_ids)}",
+        otype=_COARSE[oclass],
         name=name if name is not None else o.name,
-        otyp=otyp.value, oclass=oclass, spe=spe, cursed=cursed,
-        owornmask=owornmask)
+        otyp=otyp.value,
+        oclass=oclass,
+        spe=spe,
+        cursed=cursed,
+        owornmask=owornmask,
+    )
 
 
 def _add(w, mon, item) -> Item:
@@ -52,6 +91,7 @@ def _add(w, mon, item) -> Item:
 # ------------------------------------------------------------
 # the obj.h predicates
 # ------------------------------------------------------------
+
 
 def test_armor_predicates_against_real_rows():
     rows = {
@@ -86,6 +126,7 @@ def test_armor_predicates_against_real_rows():
 # armor_slot (the wornmask macro, armor branch)
 # ------------------------------------------------------------
 
+
 def test_armor_slot_maps_armcat_to_mask():
     expect = {
         ObjType.CHAIN_MAIL: W_ARM,
@@ -107,6 +148,7 @@ def test_armor_slot_maps_armcat_to_mask():
 # ------------------------------------------------------------
 # arm_bonus (C ARM_BONUS)
 # ------------------------------------------------------------
+
 
 def test_arm_bonus():
     # a_ac (the table's oc1 = 10 - ac): leather 2 / chain 5 / plate 7
@@ -132,6 +174,7 @@ def test_arm_bonus():
 # ac_bonus (the gear half of find_ac)
 # ------------------------------------------------------------
 
+
 def test_ac_bonus_sums_the_seven_slots():
     w = make_world()
     hero = w.hero
@@ -154,18 +197,15 @@ def test_ac_bonus_sums_the_seven_slots():
 def test_ac_bonus_protection_rings():
     w = make_world()
     hero = w.hero
-    _add(w, hero, _item(ObjType.RIN_PROTECTION, spe=2,
-                        owornmask=W_RINGL))
-    right = _add(w, hero, _item(ObjType.RIN_PROTECTION, spe=1,
-                                owornmask=W_RINGR))
+    _add(w, hero, _item(ObjType.RIN_PROTECTION, spe=2, owornmask=W_RINGL))
+    right = _add(w, hero, _item(ObjType.RIN_PROTECTION, spe=1, owornmask=W_RINGR))
     assert ac_bonus(w, hero) == 3
     # a negative-spe protection ring worsens AC
     right.spe = -1
     assert ac_bonus(w, hero) == 1
     # a non-protection ring gives nothing
     w2 = make_world()
-    _add(w2, w2.hero, _item(ObjType.RIN_ADORNMENT, spe=9,
-                            owornmask=W_RINGL))
+    _add(w2, w2.hero, _item(ObjType.RIN_ADORNMENT, spe=9, owornmask=W_RINGL))
     assert ac_bonus(w2, w2.hero) == 0
 
 
@@ -184,17 +224,18 @@ def test_ac_bonus_amulet_of_guarding():
 # uac (C find_ac) and ac_value (C AC_VALUE)
 # ------------------------------------------------------------
 
+
 def test_uac_full_set_and_clamp():
     w = make_world(hero=make_hero(ac=10))
     hero = w.hero
     full = [
-        (W_ARM, ObjType.CHAIN_MAIL),        # 5
-        (W_ARMC, ObjType.ELVEN_CLOAK),      # 1
-        (W_ARMH, ObjType.HELMET),           # 1
-        (W_ARMS, ObjType.SMALL_SHIELD),     # 1
-        (W_ARMG, ObjType.LEATHER_GLOVES),   # 1
-        (W_ARMF, ObjType.LOW_BOOTS),        # 1
-        (W_ARMU, ObjType.HAWAIIAN_SHIRT),   # 0
+        (W_ARM, ObjType.CHAIN_MAIL),  # 5
+        (W_ARMC, ObjType.ELVEN_CLOAK),  # 1
+        (W_ARMH, ObjType.HELMET),  # 1
+        (W_ARMS, ObjType.SMALL_SHIELD),  # 1
+        (W_ARMG, ObjType.LEATHER_GLOVES),  # 1
+        (W_ARMF, ObjType.LOW_BOOTS),  # 1
+        (W_ARMU, ObjType.HAWAIIAN_SHIRT),  # 0
     ]
     for mask, otyp in full:
         _add(w, hero, _item(otyp, owornmask=mask))
@@ -225,6 +266,7 @@ def test_ac_value_negative_rolls():
 # ------------------------------------------------------------
 # the slot machinery (setworn / which_armor / wearing_armor)
 # ------------------------------------------------------------
+
 
 def test_setworn_which_armor_wearing_armor():
     w = make_world()
@@ -274,8 +316,7 @@ def test_worn_scan_reuses_for_monsters():
     """The same scan works for a non-hero carrier (future monster
     armour -- PLAN-ARMOR.md decision 1)."""
     w = make_world()
-    mon = Monster(id="m1", name="Orc", pos=(7, 4), hp=10, max_hp=10,
-                  ac=5)
+    mon = Monster(id="m1", name="Orc", pos=(7, 4), hp=10, max_hp=10, ac=5)
     w.actors["m1"] = mon
     mail = _add(w, mon, _item(ObjType.CHAIN_MAIL))
     setworn(mon, mail, W_ARM)
@@ -287,15 +328,22 @@ def test_worn_scan_reuses_for_monsters():
 # can_wear (C canwearobj + the accessory checks)
 # ------------------------------------------------------------
 
+
 def test_can_wear_table():
     w = make_world()
     hero = w.hero
     # bare hero: everything is fine
-    for otyp in (ObjType.LEATHER_ARMOR, ObjType.LEATHER_CLOAK,
-                 ObjType.HELMET, ObjType.SMALL_SHIELD,
-                 ObjType.LEATHER_GLOVES, ObjType.LOW_BOOTS,
-                 ObjType.HAWAIIAN_SHIRT, ObjType.RIN_PROTECTION,
-                 ObjType.AMULET_OF_GUARDING):
+    for otyp in (
+        ObjType.LEATHER_ARMOR,
+        ObjType.LEATHER_CLOAK,
+        ObjType.HELMET,
+        ObjType.SMALL_SHIELD,
+        ObjType.LEATHER_GLOVES,
+        ObjType.LOW_BOOTS,
+        ObjType.HAWAIIAN_SHIRT,
+        ObjType.RIN_PROTECTION,
+        ObjType.AMULET_OF_GUARDING,
+    ):
         assert can_wear(w, hero, _item(otyp)) is None, otyp
 
     # fill every slot
@@ -310,27 +358,42 @@ def test_can_wear_table():
     _add(w, hero, _item(ObjType.RIN_ADORNMENT, owornmask=W_RINGR))
     _add(w, hero, _item(ObjType.AMULET_OF_GUARDING, owornmask=W_AMUL))
 
-    assert can_wear(w, hero, _item(ObjType.LEATHER_ARMOR)) == \
-        "You are already wearing some armor."
-    assert can_wear(w, hero, _item(ObjType.LEATHER_CLOAK)) == \
-        "You are already wearing a cloak."
-    assert can_wear(w, hero, _item(ObjType.HELMET)) == \
-        "You are already wearing a helmet."
-    assert can_wear(w, hero, _item(ObjType.SMALL_SHIELD)) == \
-        "You are already wearing a shield."
-    assert can_wear(w, hero, _item(ObjType.LEATHER_GLOVES)) == \
-        "You are already wearing gloves."
-    assert can_wear(w, hero, _item(ObjType.LOW_BOOTS)) == \
-        "You are already wearing boots."
-    assert can_wear(w, hero, _item(ObjType.HAWAIIAN_SHIRT)) == \
-        "You are already wearing a shirt."
-    assert can_wear(w, hero, _item(ObjType.RIN_PROTECTION)) == \
-        "There are no more ring-fingers to fill."
-    assert can_wear(w, hero, _item(ObjType.AMULET_OF_GUARDING)) == \
-        "You are already wearing an amulet."
+    assert (
+        can_wear(w, hero, _item(ObjType.LEATHER_ARMOR))
+        == "You are already wearing some armor."
+    )
+    assert (
+        can_wear(w, hero, _item(ObjType.LEATHER_CLOAK))
+        == "You are already wearing a cloak."
+    )
+    assert (
+        can_wear(w, hero, _item(ObjType.HELMET)) == "You are already wearing a helmet."
+    )
+    assert (
+        can_wear(w, hero, _item(ObjType.SMALL_SHIELD))
+        == "You are already wearing a shield."
+    )
+    assert (
+        can_wear(w, hero, _item(ObjType.LEATHER_GLOVES))
+        == "You are already wearing gloves."
+    )
+    assert (
+        can_wear(w, hero, _item(ObjType.LOW_BOOTS)) == "You are already wearing boots."
+    )
+    assert (
+        can_wear(w, hero, _item(ObjType.HAWAIIAN_SHIRT))
+        == "You are already wearing a shirt."
+    )
+    assert (
+        can_wear(w, hero, _item(ObjType.RIN_PROTECTION))
+        == "There are no more ring-fingers to fill."
+    )
+    assert (
+        can_wear(w, hero, _item(ObjType.AMULET_OF_GUARDING))
+        == "You are already wearing an amulet."
+    )
     # non-wearable
-    assert can_wear(w, hero, _item(ObjType.SHORT_SWORD)) == \
-        "You cannot wear that!"
+    assert can_wear(w, hero, _item(ObjType.SHORT_SWORD)) == "You cannot wear that!"
     # an item that is already worn itself
     assert can_wear(w, hero, cloak) == "You are already wearing that."
 
@@ -340,15 +403,21 @@ def test_can_wear_layering():
     hero = w.hero
     # a suit over a cloak
     _add(w, hero, _item(ObjType.LEATHER_CLOAK, owornmask=W_ARMC))
-    assert can_wear(w, hero, _item(ObjType.CHAIN_MAIL)) == \
-        "You cannot wear armor over a leather cloak."
+    assert (
+        can_wear(w, hero, _item(ObjType.CHAIN_MAIL))
+        == "You cannot wear armor over a leather cloak."
+    )
     # a shirt under a cloak / a suit
-    assert can_wear(w, hero, _item(ObjType.HAWAIIAN_SHIRT)) == \
-        "You can't wear that over your leather cloak."
+    assert (
+        can_wear(w, hero, _item(ObjType.HAWAIIAN_SHIRT))
+        == "You can't wear that over your leather cloak."
+    )
     w2 = make_world()
     _add(w2, w2.hero, _item(ObjType.CHAIN_MAIL, owornmask=W_ARM))
-    assert can_wear(w2, w2.hero, _item(ObjType.HAWAIIAN_SHIRT)) == \
-        "You can't wear that over your chain mail."
+    assert (
+        can_wear(w2, w2.hero, _item(ObjType.HAWAIIAN_SHIRT))
+        == "You can't wear that over your chain mail."
+    )
 
 
 def test_can_wear_shield_vs_two_handed_weapon():
@@ -356,8 +425,10 @@ def test_can_wear_shield_vs_two_handed_weapon():
     hero = w.hero
     twoh = _add(w, hero, _item(ObjType.TWO_HANDED_SWORD))
     hero.wielded = twoh.id
-    assert can_wear(w, hero, _item(ObjType.SMALL_SHIELD)) == \
-        "You cannot wear a shield while wielding a two-handed weapon."
+    assert (
+        can_wear(w, hero, _item(ObjType.SMALL_SHIELD))
+        == "You cannot wear a shield while wielding a two-handed weapon."
+    )
     # a one-handed weapon does not block the shield
     w2 = make_world()
     one = _add(w2, w2.hero, _item(ObjType.SHORT_SWORD))
@@ -368,6 +439,7 @@ def test_can_wear_shield_vs_two_handed_weapon():
 # ------------------------------------------------------------
 # dowear (C dowear/doputon -> accessory_or_armor_on)
 # ------------------------------------------------------------
+
 
 def test_dowear_suit():
     w = make_world(hero=make_hero(ac=10))
@@ -388,8 +460,7 @@ def test_dowear_rejects_without_mutating():
     dowear(w, "player", cloak.id, SeqRng())
     # the suit is blocked by the cloak; nothing mutates
     ev = dowear(w, "player", mail.id, SeqRng())
-    assert [e.text for e in ev] == \
-        ["You cannot wear armor over a leather cloak."]
+    assert [e.text for e in ev] == ["You cannot wear armor over a leather cloak."]
     assert mail.owornmask == 0
     assert uac(w, hero) == 9
     # a floor item is not "had"
@@ -403,10 +474,12 @@ def test_dowear_rejects_without_mutating():
 def test_dowear_rings_fill_left_then_right():
     w = make_world(hero=make_hero(ac=10))
     hero = w.hero
-    r1 = _add(w, hero, _item(ObjType.RIN_PROTECTION,
-                             name="ring of protection (+1)", spe=1))
-    r2 = _add(w, hero, _item(ObjType.RIN_PROTECTION,
-                             name="ring of protection (+1)", spe=1))
+    r1 = _add(
+        w, hero, _item(ObjType.RIN_PROTECTION, name="ring of protection (+1)", spe=1)
+    )
+    r2 = _add(
+        w, hero, _item(ObjType.RIN_PROTECTION, name="ring of protection (+1)", spe=1)
+    )
     ev = dowear(w, "player", r1.id, SeqRng())
     assert [e.text for e in ev] == ["ring of protection (+1) (on left hand)"]
     ev = dowear(w, "player", r2.id, SeqRng())
@@ -415,8 +488,7 @@ def test_dowear_rings_fill_left_then_right():
     # no more fingers
     r3 = _add(w, hero, _item(ObjType.RIN_PROTECTION, spe=1))
     ev = dowear(w, "player", r3.id, SeqRng())
-    assert [e.text for e in ev] == \
-        ["There are no more ring-fingers to fill."]
+    assert [e.text for e in ev] == ["There are no more ring-fingers to fill."]
     assert uac(w, hero) == 8
 
 
@@ -434,6 +506,7 @@ def test_dowear_amulet():
 # dotakeoff (C dotakeoff/doremring -> armor_or_accessory_off)
 # ------------------------------------------------------------
 
+
 def test_dotakeoff_suit():
     w = make_world(hero=make_hero(ac=10))
     hero = w.hero
@@ -450,40 +523,41 @@ def test_dotakeoff_layering():
     hero = w.hero
     mail = _add(w, hero, _item(ObjType.CHAIN_MAIL, owornmask=W_ARM))
     cloak = _add(w, hero, _item(ObjType.LEATHER_CLOAK, owornmask=W_ARMC))
-    shirt = _add(w, hero, _item(ObjType.HAWAIIAN_SHIRT,
-                                owornmask=W_ARMU))
+    shirt = _add(w, hero, _item(ObjType.HAWAIIAN_SHIRT, owornmask=W_ARMU))
     # the suit is under the cloak
     ev = dotakeoff(w, "player", mail.id, SeqRng())
-    assert [e.text for e in ev] == \
-        ["You can't take that off without taking off "
-         "your leather cloak first."]
+    assert [e.text for e in ev] == [
+        "You can't take that off without taking off " "your leather cloak first."
+    ]
     assert mail.owornmask == W_ARM
     # the shirt is under both
     ev = dotakeoff(w, "player", shirt.id, SeqRng())
-    assert [e.text for e in ev] == \
-        ["You can't take that off without taking off "
-         "your leather cloak and chain mail first."]
+    assert [e.text for e in ev] == [
+        "You can't take that off without taking off "
+        "your leather cloak and chain mail first."
+    ]
     # the cloak itself comes off
     ev = dotakeoff(w, "player", cloak.id, SeqRng())
     assert [e.text for e in ev] == ["You were wearing the leather cloak."]
     # the shirt is still under the suit
     ev = dotakeoff(w, "player", shirt.id, SeqRng())
-    assert [e.text for e in ev] == \
-        ["You can't take that off without taking off "
-         "your chain mail first."]
+    assert [e.text for e in ev] == [
+        "You can't take that off without taking off " "your chain mail first."
+    ]
     # now the suit comes off...
-    assert [e.text for e in dotakeoff(w, "player", mail.id, SeqRng())] == \
-        ["You were wearing the chain mail."]
+    assert [e.text for e in dotakeoff(w, "player", mail.id, SeqRng())] == [
+        "You were wearing the chain mail."
+    ]
     # ...and the shirt (now under nothing)
-    assert [e.text for e in dotakeoff(w, "player", shirt.id, SeqRng())] == \
-        ["You were wearing the Hawaiian shirt."]
+    assert [e.text for e in dotakeoff(w, "player", shirt.id, SeqRng())] == [
+        "You were wearing the Hawaiian shirt."
+    ]
 
 
 def test_dotakeoff_cursed_armor_refuses():
     w = make_world()
     hero = w.hero
-    cloak = _add(w, hero, _item(ObjType.LEATHER_CLOAK,
-                                owornmask=W_ARMC, cursed=True))
+    cloak = _add(w, hero, _item(ObjType.LEATHER_CLOAK, owornmask=W_ARMC, cursed=True))
     ev = dotakeoff(w, "player", cloak.id, SeqRng())
     assert [e.text for e in ev] == ["You can't. It is cursed."]
     assert cloak.owornmask == W_ARMC  # still on

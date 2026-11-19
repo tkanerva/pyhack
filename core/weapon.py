@@ -66,19 +66,44 @@ STUBs (raise NotImplementedError; filled by the named port):
 - the gu.unweapon / update_inventory() hooks in the towel change:
   do_wear.c / invent.c / objnam.c.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, List, Optional, Protocol, Set, Tuple
 
 from .hacklib import makesingular
-from .mondata import (bigmonst, hates_blessings, hates_silver, is_swimmer,
-                      is_wooden, passes_walls, thick_skinned)
-from .monst import (MAXMCLASSES, PM_NAMES, PerMonst,
-                    S_DRAGON, S_EEL, S_GIANT, S_JABBERWOCK, S_NAGA,
-                    S_SNAKE, S_XORN)
-from .objects import (Material, NUM_OBJECTS, ObjClass, OBJECTS, ObjType,
-                      P_NUM_SKILLS, Skill, WHACK)
+from .mondata import (
+    bigmonst,
+    hates_blessings,
+    hates_silver,
+    is_swimmer,
+    is_wooden,
+    passes_walls,
+    thick_skinned,
+)
+from .monst import (
+    MAXMCLASSES,
+    PM_NAMES,
+    PerMonst,
+    S_DRAGON,
+    S_EEL,
+    S_GIANT,
+    S_JABBERWOCK,
+    S_NAGA,
+    S_SNAKE,
+    S_XORN,
+)
+from .objects import (
+    Material,
+    NUM_OBJECTS,
+    ObjClass,
+    OBJECTS,
+    ObjType,
+    P_NUM_SKILLS,
+    Skill,
+    WHACK,
+)
 
 O = ObjType  # noqa: E741 -- short alias for table lookups
 
@@ -88,12 +113,14 @@ O = ObjType  # noqa: E741 -- short alias for table lookups
 # inheritance -- see ARCHITECTURE.md)
 # ------------------------------------------------------------
 
+
 class ObjLike(Protocol):
     """The shape of an object instance as far as weapon.c cares
     (C: struct obj).  The real instance model arrives with the mkobj.c
     port; until then callers pass small stand-ins with these
     attributes.  Optional instance attributes (owt, oeroded, oeroded2,
     globby) are read via getattr with C's zero defaults."""
+
     otyp: int
     oclass: int
     spe: int
@@ -105,6 +132,7 @@ class MonLike(Protocol):
     struct monst): its base type (C: mon->data) for hitval() /
     dmgval().  The monster-weapon stubs take the same shape until the
     mon.c port widens it (minvent, mw, weapon_check, LOS)."""
+
     mdata: PerMonst
 
 
@@ -114,6 +142,7 @@ class RngLike(Protocol):
     is core.rnd.Rng; tests pass stand-ins that preset the draws.
     Named are exactly the draws this module makes: rnd(x) in [1, x],
     rn2(x) in [0, x), d(n, x) as n dice of x."""
+
     def rnd(self, n: int) -> int: ...
     def rn2(self, n: int) -> int: ...
     def d(self, n: int, x: int) -> int: ...
@@ -128,8 +157,8 @@ P_UNSKILLED = 1
 P_BASIC = 2
 P_SKILLED = 3
 P_EXPERT = 4
-P_MASTER = 5          # unarmed combat / martial arts only
-P_GRAND_MASTER = 6    # ditto
+P_MASTER = 5  # unarmed combat / martial arts only
+P_GRAND_MASTER = 6  # ditto
 
 P_FIRST_WEAPON = int(Skill.P_DAGGER)
 P_LAST_WEAPON = int(Skill.P_UNICORN_HORN)
@@ -153,6 +182,7 @@ class DefSkill:
     C terminates the array with a P_NONE row; Python sequences have a
     length, so callers simply pass the real rows.
     """
+
     skill: int
     skmax: int
 
@@ -160,6 +190,7 @@ class DefSkill:
 # ------------------------------------------------------------
 # Per-game hero skill state (C: u.weapon_skills + friends)
 # ------------------------------------------------------------
+
 
 class Skills:
     """Mutable weapon-skill state for one hero (see module docstring).
@@ -192,23 +223,63 @@ def _restricted(skills: Skills, skill: int) -> bool:
 # positive: the object type whose name is the skill name; negative:
 # index into _ODD_SKILL_NAMES (C: skill_names_indices)
 _SKILL_NAME_INDICES: Tuple[int, ...] = (
-    0, O.DAGGER.value, O.KNIFE.value, O.AXE.value, O.PICK_AXE.value,
-    O.SHORT_SWORD.value, O.BROADSWORD.value, O.LONG_SWORD.value,
-    O.TWO_HANDED_SWORD.value, -5, O.CLUB.value, O.MACE.value,
-    O.MORNING_STAR.value, O.FLAIL.value, -6, O.QUARTERSTAFF.value, -4,
-    O.SPEAR.value, O.TRIDENT.value, O.LANCE.value, O.BOW.value,
-    O.SLING.value, O.CROSSBOW.value, O.DART.value, O.SHURIKEN.value,
-    O.BOOMERANG.value, -7, O.UNICORN_HORN.value,
-    -8, -9, -10, -11, -12, -13, -14,
-    -1, -2, -3,
+    0,
+    O.DAGGER.value,
+    O.KNIFE.value,
+    O.AXE.value,
+    O.PICK_AXE.value,
+    O.SHORT_SWORD.value,
+    O.BROADSWORD.value,
+    O.LONG_SWORD.value,
+    O.TWO_HANDED_SWORD.value,
+    -5,
+    O.CLUB.value,
+    O.MACE.value,
+    O.MORNING_STAR.value,
+    O.FLAIL.value,
+    -6,
+    O.QUARTERSTAFF.value,
+    -4,
+    O.SPEAR.value,
+    O.TRIDENT.value,
+    O.LANCE.value,
+    O.BOW.value,
+    O.SLING.value,
+    O.CROSSBOW.value,
+    O.DART.value,
+    O.SHURIKEN.value,
+    O.BOOMERANG.value,
+    -7,
+    O.UNICORN_HORN.value,
+    -8,
+    -9,
+    -10,
+    -11,
+    -12,
+    -13,
+    -14,
+    -1,
+    -2,
+    -3,
 )
 
 # entry [0] isn't used (C: odd_skill_names)
 _ODD_SKILL_NAMES: Tuple[str, ...] = (
-    "no skill", "bare hands", "two weapon combat", "riding", "polearms",
-    "saber", "hammer", "whip", "attack spells", "healing spells",
-    "divination spells", "enchantment spells", "clerical spells",
-    "escape spells", "matter spells",
+    "no skill",
+    "bare hands",
+    "two weapon combat",
+    "riding",
+    "polearms",
+    "saber",
+    "hammer",
+    "whip",
+    "attack spells",
+    "healing spells",
+    "divination spells",
+    "enchantment spells",
+    "clerical spells",
+    "escape spells",
+    "matter spells",
 )
 
 # indexed by martial_bonus() (C: barehands_or_martial)
@@ -216,9 +287,23 @@ _BAREHANDS_OR_MARTIAL = ("bare handed combat", "martial arts")
 
 # defsym.h OBJCLASS_PARSE, singular names (C: def_oc_syms[].name)
 _OC_NAMES: Tuple[str, ...] = (
-    "strange object", "weapon", "armor", "ring", "amulet", "tool",
-    "food", "potion", "scroll", "spell book", "wand", "coin", "gem",
-    "large rock", "iron ball", "iron chain", "venom",
+    "strange object",
+    "weapon",
+    "armor",
+    "ring",
+    "amulet",
+    "tool",
+    "food",
+    "potion",
+    "scroll",
+    "spell book",
+    "wand",
+    "coin",
+    "gem",
+    "large rock",
+    "iron ball",
+    "iron chain",
+    "venom",
 )
 
 
@@ -254,6 +339,7 @@ def skill_level_name(level: int) -> str:
 # Object type predicates (C: the weapon macros of include/obj.h)
 # ------------------------------------------------------------
 
+
 def weapon_type(otmp: Optional[ObjLike]) -> int:
     """C: weapon_type -- the skill category of an object (positive for
     hand weapons/launchers/weptools, the launcher skill for ammo), or
@@ -268,8 +354,7 @@ def _weapon_type_otyp(otyp: int) -> int:
     table-driven contexts like skill_init over otypes)."""
     o = OBJECTS[otyp]
     ocls = int(o.oclass)
-    if ocls not in (int(ObjClass.WEAPON), int(ObjClass.TOOL),
-                    int(ObjClass.GEM)):
+    if ocls not in (int(ObjClass.WEAPON), int(ObjClass.TOOL), int(ObjClass.GEM)):
         return int(Skill.P_NONE)
     return -o.subtyp if o.subtyp < 0 else o.subtyp
 
@@ -301,8 +386,9 @@ def is_launcher(otmp: ObjLike) -> bool:
 def is_weptool(otmp: ObjLike) -> bool:
     """C: is_weptool -- a tool usable as a weapon.  A towel is NOT a
     weptool (oc_skill P_NONE): its spe is wetness, not enchantment."""
-    return (int(otmp.oclass) == int(ObjClass.TOOL)
-            and OBJECTS[int(otmp.otyp)].subtyp != int(Skill.P_NONE))
+    return int(otmp.oclass) == int(ObjClass.TOOL) and OBJECTS[
+        int(otmp.otyp)
+    ].subtyp != int(Skill.P_NONE)
 
 
 def is_blade(otmp: ObjLike) -> bool:
@@ -338,8 +424,9 @@ def is_pick(otmp: ObjLike) -> bool:
 def is_spear(otmp: ObjLike) -> bool:
     """C: is_spear (5.0: the spear skill only; the dwarvish mattock is
     NOT a spear)."""
-    return (int(otmp.oclass) == int(ObjClass.WEAPON)
-            and OBJECTS[int(otmp.otyp)].subtyp == int(Skill.P_SPEAR))
+    return int(otmp.oclass) == int(ObjClass.WEAPON) and OBJECTS[
+        int(otmp.otyp)
+    ].subtyp == int(Skill.P_SPEAR)
 
 
 def is_pole(otmp: ObjLike, snickersnee: bool = False) -> bool:
@@ -350,8 +437,7 @@ def is_pole(otmp: ObjLike, snickersnee: bool = False) -> bool:
     if int(otmp.oclass) not in (int(ObjClass.WEAPON), int(ObjClass.TOOL)):
         return False
     t = OBJECTS[int(otmp.otyp)].subtyp
-    return (t in (int(Skill.P_POLEARMS), int(Skill.P_LANCE))
-            or snickersnee)
+    return t in (int(Skill.P_POLEARMS), int(Skill.P_LANCE)) or snickersnee
 
 
 def is_missile(otmp: ObjLike) -> bool:
@@ -393,8 +479,12 @@ def is_wet_towel(otmp: ObjLike) -> bool:
 
 def is_graystone(otmp: ObjLike) -> bool:
     """C: is_graystone -- the four wishable gray stones."""
-    return int(otmp.otyp) in (O.LUCKSTONE.value, O.LOADSTONE.value,
-                              O.FLINT.value, O.TOUCHSTONE.value)
+    return int(otmp.otyp) in (
+        O.LUCKSTONE.value,
+        O.LOADSTONE.value,
+        O.FLINT.value,
+        O.TOUCHSTONE.value,
+    )
 
 
 def is_poisonable(otmp: ObjLike, permapoisoned: bool = False) -> bool:
@@ -413,8 +503,7 @@ def matching_launcher(ammo: ObjLike, launcher: Optional[ObjLike]) -> bool:
     launcher's (arrows<->bows, bolts<->crossbows, stones<->slings)."""
     if launcher is None:
         return False
-    return (OBJECTS[int(ammo.otyp)].subtyp
-            == -OBJECTS[int(launcher.otyp)].subtyp)
+    return OBJECTS[int(ammo.otyp)].subtyp == -OBJECTS[int(launcher.otyp)].subtyp
 
 
 def ammo_and_launcher(ammo: ObjLike, launcher: Optional[ObjLike]) -> bool:
@@ -434,10 +523,12 @@ def greatest_erosion(otmp: ObjLike) -> int:
 # To-hit and damage bonuses (C: hitval / dmgval)
 # ------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class CombatCtx:
     """What a bonus source may look at (C: the locals of hitval() /
     dmgval()).  Frozen data -- sources are pure in (ctx, rng)."""
+
     obj: ObjLike
     pm: PerMonst
     in_pool: bool = False  # C: is_pool(mon->mx, mon->my); map query
@@ -446,7 +537,8 @@ class CombatCtx:
 # targets that provide a +2 to-hit bonus when using a spear
 # (C: kebabable[])
 _KEBABABLE: FrozenSet[int] = frozenset(
-    {S_XORN, S_DRAGON, S_JABBERWOCK, S_NAGA, S_GIANT})
+    {S_XORN, S_DRAGON, S_JABBERWOCK, S_NAGA, S_GIANT}
+)
 
 # the shade, by import-time-resolved PM anchor (C: &mons[PM_SHADE])
 PM_SHADE = PM_NAMES.index("shade")
@@ -504,8 +596,7 @@ def hitval(otmp: ObjLike, pm: PerMonst, in_pool: bool = False) -> int:
     slot holds the strike mode for weptools, so they add it here.
     """
     ctx = CombatCtx(otmp, pm, in_pool)
-    is_weapon = (int(otmp.oclass) == int(ObjClass.WEAPON)
-                 or is_weptool(otmp))
+    is_weapon = int(otmp.oclass) == int(ObjClass.WEAPON) or is_weptool(otmp)
     tmp = 0
     if is_weapon:
         tmp += otmp.spe
@@ -523,6 +614,7 @@ def hitval(otmp: ObjLike, pm: PerMonst, in_pool: bool = False) -> int:
 class _Extra:
     """One of C's dmgval switch-case extras: a roll spec, not a lambda.
     kind 'one' -> +1; 'rnd' -> +rng.rnd(n); 'dice' -> +rng.d(n, d)."""
+
     kind: str
     n: int = 0
     d: int = 0
@@ -603,8 +695,7 @@ def _axe_dmg(ctx: CombatCtx, rng: RngLike) -> int:
 
 
 def _silver_dmg(ctx: CombatCtx, rng: RngLike) -> int:
-    if (OBJECTS[int(ctx.obj.otyp)].material == Material.SILVER
-            and hates_silver(ctx.pm)):
+    if OBJECTS[int(ctx.obj.otyp)].material == Material.SILVER and hates_silver(ctx.pm):
         return rng.rnd(20)
     return 0
 
@@ -624,8 +715,7 @@ def dmgval(otmp: ObjLike, pm: PerMonst, rng: RngLike) -> int:
     """
     otyp = int(otmp.otyp)
     ctx = CombatCtx(otmp, pm)
-    is_weapon = (int(otmp.oclass) == int(ObjClass.WEAPON)
-                 or is_weptool(otmp))
+    is_weapon = int(otmp.oclass) == int(ObjClass.WEAPON) or is_weptool(otmp)
 
     if otyp == O.CREAM_PIE.value:
         return 0
@@ -668,9 +758,11 @@ def dmgval(otmp: ObjLike, pm: PerMonst, rng: RngLike) -> int:
                 if tmp > 25:  # objects[].oc_wldam
                     tmp = 25
 
-    if (is_weapon or int(otmp.oclass) in (int(ObjClass.GEM),
-                                          int(ObjClass.BALL),
-                                          int(ObjClass.CHAIN))):
+    if is_weapon or int(otmp.oclass) in (
+        int(ObjClass.GEM),
+        int(ObjClass.BALL),
+        int(ObjClass.CHAIN),
+    ):
         # weapon vs. monster type damage bonuses: all sources may fire
         tmp += sum(src(ctx, rng) for src in DMG_BONUS_SOURCES)
 
@@ -687,14 +779,16 @@ def dmgval(otmp: ObjLike, pm: PerMonst, rng: RngLike) -> int:
 # Strength / dexterity combat bonuses (C: abon / dbon)
 # ------------------------------------------------------------
 
+
 def STR18(x: int) -> int:
     """C: STR18(x) -- 18/xx on the 5.0 linear ability scale
     (attrib.h: 18 + x, i.e. 18/50 == 68, 18/100 == 118)."""
     return 18 + x
 
 
-def abon(str: int, dex: int, ulevel: int = 1, upolyd: bool = False,
-         poly_lev: int = 0) -> int:
+def abon(
+    str: int, dex: int, ulevel: int = 1, upolyd: bool = False, poly_lev: int = 0
+) -> int:
     """Attack bonus for strength & dexterity (C: abon).
 
     C reads the globals u.*; the effective values are explicit
@@ -764,6 +858,7 @@ def dbon(str: int, upolyd: bool = False) -> int:
 # Towels (C: wet_a_towel / dry_a_towel / finish_towel_change)
 # ------------------------------------------------------------
 
+
 def _finish_towel_change(obj: ObjLike, newspe: int) -> None:
     # towel wetness is always between 0 (dry) and 7, inclusive
     newspe = min(newspe, 7)
@@ -810,6 +905,7 @@ def dry_a_towel(obj: ObjLike, amt: int, verbose: bool = False) -> Optional[str]:
 # The skill system (C: weapon.c)
 # ------------------------------------------------------------
 
+
 def slots_required(skills: Skills, skill: int) -> int:
     """C: slots_required -- the cost depends on the skill's CURRENT
     level (C reads P_SKILL(skill)).
@@ -823,28 +919,32 @@ def slots_required(skills: Skills, skill: int) -> int:
     return (tmp + 1) // 2
 
 
-def can_advance(skills: Skills, skill: int, wizard: bool = False,
-                speedy: bool = False) -> bool:
+def can_advance(
+    skills: Skills, skill: int, wizard: bool = False, speedy: bool = False
+) -> bool:
     """C: can_advance."""
-    if (_restricted(skills, skill)
-            or skills.skill[skill] >= skills.max_skill[skill]
-            or skills.skills_advanced >= P_SKILL_LIMIT):
+    if (
+        _restricted(skills, skill)
+        or skills.skill[skill] >= skills.max_skill[skill]
+        or skills.skills_advanced >= P_SKILL_LIMIT
+    ):
         return False
     if wizard and speedy:
         return True
-    return (skills.advance[skill]
-            >= practice_needed_to_advance(skills.skill[skill])
-            and skills.weapon_slots >= slots_required(skills, skill))
+    return skills.advance[skill] >= practice_needed_to_advance(
+        skills.skill[skill]
+    ) and skills.weapon_slots >= slots_required(skills, skill)
 
 
 def could_advance(skills: Skills, skill: int) -> bool:
     """C: could_advance -- advanceable if more slots were available."""
-    if (_restricted(skills, skill)
-            or skills.skill[skill] >= skills.max_skill[skill]
-            or skills.skills_advanced >= P_SKILL_LIMIT):
+    if (
+        _restricted(skills, skill)
+        or skills.skill[skill] >= skills.max_skill[skill]
+        or skills.skills_advanced >= P_SKILL_LIMIT
+    ):
         return False
-    return (skills.advance[skill]
-            >= practice_needed_to_advance(skills.skill[skill]))
+    return skills.advance[skill] >= practice_needed_to_advance(skills.skill[skill])
 
 
 def peaked_skill(skills: Skills, skill: int) -> bool:
@@ -852,9 +952,9 @@ def peaked_skill(skills: Skills, skill: int) -> bool:
     step if it had been possible."""
     if _restricted(skills, skill):
         return False
-    return (skills.skill[skill] >= skills.max_skill[skill]
-            and skills.advance[skill]
-            >= practice_needed_to_advance(skills.skill[skill]))
+    return skills.skill[skill] >= skills.max_skill[skill] and skills.advance[
+        skill
+    ] >= practice_needed_to_advance(skills.skill[skill])
 
 
 def advance_skill(skills: Skills, skill: int) -> str:
@@ -864,8 +964,7 @@ def advance_skill(skills: Skills, skill: int) -> str:
     skills.skill[skill] += 1
     skills.skill_record.append(skill)
     skills.skills_advanced += 1
-    most = "most" if skills.skill[skill] >= skills.max_skill[skill] \
-        else "more"
+    most = "most" if skills.skill[skill] >= skills.max_skill[skill] else "more"
     # STUB (read.c/spell.c port): C also calls skill_based_spellbook_id()
     # for spell skills (wizard book-id discovery).
     return f"You are now {most} skilled in {skill_name(skill)}."
@@ -946,12 +1045,10 @@ def drain_weapon_skill(skills: Skills, n: int, rng: RngLike) -> List[str]:
             curradv = practice_needed_to_advance(skills.skill[skill])
             prevadv = practice_needed_to_advance(skills.skill[skill] - 1)
             if skills.advance[skill] >= curradv:
-                skills.advance[skill] = (prevadv
-                                         + rng.rn2(curradv - prevadv))
+                skills.advance[skill] = prevadv + rng.rn2(curradv - prevadv)
     for skill in sorted(drained):
         prefix = "some of " if skills.skill[skill] >= P_BASIC else ""
-        msgs.append(f"You forget {prefix}your training in "
-                    f"{skill_name(skill)}.")
+        msgs.append(f"You forget {prefix}your training in " f"{skill_name(skill)}.")
     return msgs
 
 
@@ -965,10 +1062,14 @@ def unrestrict_weapon_skill(skills: Skills, skill: int) -> None:
         skills.advance[skill] = 0
 
 
-def skill_init(skills: Skills, class_skills: Tuple[DefSkill, ...],
-               held: Tuple[int, ...] = (), role: str = "",
-               pet_is_pony: bool = False,
-               spell_skill: int = int(Skill.P_NONE)) -> None:
+def skill_init(
+    skills: Skills,
+    class_skills: Tuple[DefSkill, ...],
+    held: Tuple[int, ...] = (),
+    role: str = "",
+    pet_is_pony: bool = False,
+    spell_skill: int = int(Skill.P_NONE),
+) -> None:
     """C: skill_init(const struct def_skill *class_skill).
 
     `class_skills` is the role's skill-max table (C: the per-role
@@ -1026,8 +1127,7 @@ def skill_init(skills: Skills, class_skills: Tuple[DefSkill, ...],
                 # (e.g. the wizard's basic enchantment spells, whose max
                 # the role table did not list).
                 skills.max_skill[i] = skills.skill[i]
-            skills.advance[i] = practice_needed_to_advance(
-                skills.skill[i] - 1)
+            skills.advance[i] = practice_needed_to_advance(skills.skill[i] - 1)
 
     # each role has a special spell; allow at least basic for its type
     # (despite the function name, this works for spell skills too)
@@ -1043,19 +1143,44 @@ def skill_init(skills: Skills, class_skills: Tuple[DefSkill, ...],
 # level -> bonus tables (C: the switches); the C default case is
 # impossible() then falls through to the unskilled value, so the table
 # default is that same value
-_WPN_HIT_BY_LEVEL = {P_ISRESTRICTED: -4, P_UNSKILLED: -4, P_BASIC: 0,
-                     P_SKILLED: 2, P_EXPERT: 3}
-_TWC_HIT_BY_LEVEL = {P_ISRESTRICTED: -9, P_UNSKILLED: -9, P_BASIC: -7,
-                     P_SKILLED: -5, P_EXPERT: -3}
-_WPN_DAM_BY_LEVEL = {P_ISRESTRICTED: -2, P_UNSKILLED: -2, P_BASIC: 0,
-                     P_SKILLED: 1, P_EXPERT: 2}
-_TWC_DAM_BY_LEVEL = {P_ISRESTRICTED: -3, P_UNSKILLED: -3, P_BASIC: -1,
-                     P_SKILLED: 0, P_EXPERT: 1}
+_WPN_HIT_BY_LEVEL = {
+    P_ISRESTRICTED: -4,
+    P_UNSKILLED: -4,
+    P_BASIC: 0,
+    P_SKILLED: 2,
+    P_EXPERT: 3,
+}
+_TWC_HIT_BY_LEVEL = {
+    P_ISRESTRICTED: -9,
+    P_UNSKILLED: -9,
+    P_BASIC: -7,
+    P_SKILLED: -5,
+    P_EXPERT: -3,
+}
+_WPN_DAM_BY_LEVEL = {
+    P_ISRESTRICTED: -2,
+    P_UNSKILLED: -2,
+    P_BASIC: 0,
+    P_SKILLED: 1,
+    P_EXPERT: 2,
+}
+_TWC_DAM_BY_LEVEL = {
+    P_ISRESTRICTED: -3,
+    P_UNSKILLED: -3,
+    P_BASIC: -1,
+    P_SKILLED: 0,
+    P_EXPERT: 1,
+}
 
 
-def weapon_hit_bonus(skills: Skills, otmp: Optional[ObjLike],
-                     twoweap: bool = False, in_hands: bool = False,
-                     mounted: bool = False, martial: bool = False) -> int:
+def weapon_hit_bonus(
+    skills: Skills,
+    otmp: Optional[ObjLike],
+    twoweap: bool = False,
+    in_hands: bool = False,
+    mounted: bool = False,
+    martial: bool = False,
+) -> int:
     """Hit bonus/penalty based on skill of weapon (C:
     weapon_hit_bonus).  `otmp` may be None (bare-handed combat).
     `in_hands` is C's (weapon == uwep || weapon == uswapwep);
@@ -1064,8 +1189,7 @@ def weapon_hit_bonus(skills: Skills, otmp: Optional[ObjLike],
     wep_type = weapon_type(otmp)
     # use the two-weapon skill only if attacking with one of the
     # wielded weapons
-    type_ = (int(Skill.P_TWO_WEAPON_COMBAT)
-             if (twoweap and in_hands) else wep_type)
+    type_ = int(Skill.P_TWO_WEAPON_COMBAT) if (twoweap and in_hands) else wep_type
     if type_ == int(Skill.P_NONE):
         bonus = 0
     elif type_ <= P_LAST_WEAPON:
@@ -1100,14 +1224,18 @@ def weapon_hit_bonus(skills: Skills, otmp: Optional[ObjLike],
     return bonus
 
 
-def weapon_dam_bonus(skills: Skills, otmp: Optional[ObjLike],
-                     twoweap: bool = False, in_hands: bool = False,
-                     mounted: bool = False, martial: bool = False) -> int:
+def weapon_dam_bonus(
+    skills: Skills,
+    otmp: Optional[ObjLike],
+    twoweap: bool = False,
+    in_hands: bool = False,
+    mounted: bool = False,
+    martial: bool = False,
+) -> int:
     """Damage bonus/penalty based on skill of weapon (C:
     weapon_dam_bonus); parameters as in weapon_hit_bonus()."""
     wep_type = weapon_type(otmp)
-    type_ = (int(Skill.P_TWO_WEAPON_COMBAT)
-             if (twoweap and in_hands) else wep_type)
+    type_ = int(Skill.P_TWO_WEAPON_COMBAT) if (twoweap and in_hands) else wep_type
     if type_ == int(Skill.P_NONE):
         bonus = 0
     elif type_ <= P_LAST_WEAPON:
@@ -1160,18 +1288,26 @@ def weapon_descr(otmp: ObjLike, martial: bool = False) -> str:
         # not a weapon or weptool: use the item class name, with
         # overrides where the class name sounds strange or the item
         # is unexpected to find being wielded
-        if otyp in (O.CORPSE.value, O.TIN.value, O.EGG.value,
-                    O.STATUE.value, O.BOULDER.value, O.TOWEL.value,
-                    O.TIN_OPENER.value):
+        if otyp in (
+            O.CORPSE.value,
+            O.TIN.value,
+            O.EGG.value,
+            O.STATUE.value,
+            O.BOULDER.value,
+            O.TOWEL.value,
+            O.TIN_OPENER.value,
+        ):
             descr = OBJECTS[otyp].name
         elif getattr(otmp, "globby", False):
             descr = "glob"
         else:
             descr = _OC_NAMES[ocls]
     elif skill == int(Skill.P_SLING) and is_ammo(otmp):
-        descr = ("stone" if (otyp == O.ROCK.value or is_graystone(otmp))
-                 else "gem" if ocls == int(ObjClass.GEM)
-                 else _OC_NAMES[ocls])
+        descr = (
+            "stone"
+            if (otyp == O.ROCK.value or is_graystone(otmp))
+            else "gem" if ocls == int(ObjClass.GEM) else _OC_NAMES[ocls]
+        )
     elif skill == int(Skill.P_BOW) and is_ammo(otmp):
         descr = "arrow"
     elif skill == int(Skill.P_CROSSBOW) and is_ammo(otmp):
@@ -1202,44 +1338,96 @@ NO_WEAPON_WANTED = 6
 # "weapons" a monster knows how to throw, in order of preference
 # (C: rwep[]); the gray stones are GEM_CLASS in the 5.0 table
 RWERP: Tuple[int, ...] = (
-    O.DWARVISH_SPEAR.value, O.SILVER_SPEAR.value, O.ELVEN_SPEAR.value,
-    O.SPEAR.value, O.ORCISH_SPEAR.value, O.JAVELIN.value,
-    O.SHURIKEN.value, O.YA.value, O.SILVER_ARROW.value,
-    O.ELVEN_ARROW.value, O.ARROW.value, O.ORCISH_ARROW.value,
-    O.CROSSBOW_BOLT.value, O.SILVER_DAGGER.value, O.ELVEN_DAGGER.value,
-    O.DAGGER.value, O.ORCISH_DAGGER.value, O.KNIFE.value,
-    O.FLINT.value, O.ROCK.value, O.LOADSTONE.value, O.LUCKSTONE.value,
-    O.DART.value, O.CREAM_PIE.value,
+    O.DWARVISH_SPEAR.value,
+    O.SILVER_SPEAR.value,
+    O.ELVEN_SPEAR.value,
+    O.SPEAR.value,
+    O.ORCISH_SPEAR.value,
+    O.JAVELIN.value,
+    O.SHURIKEN.value,
+    O.YA.value,
+    O.SILVER_ARROW.value,
+    O.ELVEN_ARROW.value,
+    O.ARROW.value,
+    O.ORCISH_ARROW.value,
+    O.CROSSBOW_BOLT.value,
+    O.SILVER_DAGGER.value,
+    O.ELVEN_DAGGER.value,
+    O.DAGGER.value,
+    O.ORCISH_DAGGER.value,
+    O.KNIFE.value,
+    O.FLINT.value,
+    O.ROCK.value,
+    O.LOADSTONE.value,
+    O.LUCKSTONE.value,
+    O.DART.value,
+    O.CREAM_PIE.value,
 )
 
 # polearms (C: pwep[])
 PWERP: Tuple[int, ...] = (
-    O.HALBERD.value, O.BARDICHE.value, O.SPETUM.value,
-    O.BILL_GUISARME.value, O.VOULGE.value, O.RANSEUR.value,
-    O.GUISARME.value, O.GLAIVE.value, O.LUCERN_HAMMER.value,
-    O.BEC_DE_CORBIN.value, O.FAUCHARD.value, O.PARTISAN.value,
+    O.HALBERD.value,
+    O.BARDICHE.value,
+    O.SPETUM.value,
+    O.BILL_GUISARME.value,
+    O.VOULGE.value,
+    O.RANSEUR.value,
+    O.GUISARME.value,
+    O.GLAIVE.value,
+    O.LUCERN_HAMMER.value,
+    O.BEC_DE_CORBIN.value,
+    O.FAUCHARD.value,
+    O.PARTISAN.value,
     O.LANCE.value,
 )
 
 # hand-to-hand weapons, in order of preference (C: hwep[])
 HWEP: Tuple[int, ...] = (
     O.CORPSE.value,  # cockatrice corpse
-    O.TSURUGI.value, O.RUNESWORD.value, O.DWARVISH_MATTOCK.value,
-    O.TWO_HANDED_SWORD.value, O.BATTLE_AXE.value,
-    O.KATANA.value, O.UNICORN_HORN.value, O.CRYSKNIFE.value,
-    O.TRIDENT.value, O.LONG_SWORD.value, O.ELVEN_BROADSWORD.value,
-    O.BROADSWORD.value, O.SCIMITAR.value, O.SILVER_SABER.value,
-    O.MORNING_STAR.value, O.ELVEN_SHORT_SWORD.value,
-    O.DWARVISH_SHORT_SWORD.value, O.SHORT_SWORD.value,
-    O.ORCISH_SHORT_SWORD.value, O.SILVER_MACE.value, O.MACE.value,
-    O.AXE.value, O.DWARVISH_SPEAR.value, O.SILVER_SPEAR.value,
-    O.ELVEN_SPEAR.value, O.SPEAR.value, O.ORCISH_SPEAR.value,
+    O.TSURUGI.value,
+    O.RUNESWORD.value,
+    O.DWARVISH_MATTOCK.value,
+    O.TWO_HANDED_SWORD.value,
+    O.BATTLE_AXE.value,
+    O.KATANA.value,
+    O.UNICORN_HORN.value,
+    O.CRYSKNIFE.value,
+    O.TRIDENT.value,
+    O.LONG_SWORD.value,
+    O.ELVEN_BROADSWORD.value,
+    O.BROADSWORD.value,
+    O.SCIMITAR.value,
+    O.SILVER_SABER.value,
+    O.MORNING_STAR.value,
+    O.ELVEN_SHORT_SWORD.value,
+    O.DWARVISH_SHORT_SWORD.value,
+    O.SHORT_SWORD.value,
+    O.ORCISH_SHORT_SWORD.value,
+    O.SILVER_MACE.value,
+    O.MACE.value,
+    O.AXE.value,
+    O.DWARVISH_SPEAR.value,
+    O.SILVER_SPEAR.value,
+    O.ELVEN_SPEAR.value,
+    O.SPEAR.value,
+    O.ORCISH_SPEAR.value,
     O.FLAIL.value,
-    O.BULLWHIP.value, O.QUARTERSTAFF.value, O.JAVELIN.value,
-    O.AKLYS.value, O.CLUB.value, O.PICK_AXE.value, O.RUBBER_HOSE.value,
-    O.WAR_HAMMER.value, O.SILVER_DAGGER.value, O.ELVEN_DAGGER.value,
-    O.DAGGER.value, O.ORCISH_DAGGER.value, O.ATHAME.value,
-    O.SCALPEL.value, O.KNIFE.value, O.WORM_TOOTH.value,
+    O.BULLWHIP.value,
+    O.QUARTERSTAFF.value,
+    O.JAVELIN.value,
+    O.AKLYS.value,
+    O.CLUB.value,
+    O.PICK_AXE.value,
+    O.RUBBER_HOSE.value,
+    O.WAR_HAMMER.value,
+    O.SILVER_DAGGER.value,
+    O.ELVEN_DAGGER.value,
+    O.DAGGER.value,
+    O.ORCISH_DAGGER.value,
+    O.ATHAME.value,
+    O.SCALPEL.value,
+    O.KNIFE.value,
+    O.WORM_TOOTH.value,
 )
 
 # C: hack.h -- crossbow bolt max range (dist2 units); re-verify with
@@ -1251,6 +1439,7 @@ AKLYS_LIM = BOLT_LIM // 2
 @dataclass(frozen=True)
 class ThrowAndReturnWeapon:
     """C: struct throw_and_return_weapon (range in dist2 units)."""
+
     otyp: int
     range: int
     tethered: int
@@ -1278,8 +1467,7 @@ def monmightthrowwep(otmp: ObjLike) -> bool:
     return int(otmp.otyp) in RWERP
 
 
-def select_rwep(mon: MonLike,
-                rng: Optional[RngLike] = None) -> Optional[ObjLike]:
+def select_rwep(mon: MonLike, rng: Optional[RngLike] = None) -> Optional[ObjLike]:
     """STUB (mon.c port): select a ranged weapon for the monster (C:
     select_rwep).  Needs the per-instance monster model: minvent,
     mw/weapon_check, misc_worn_check, mux/muy, couldsee, the
@@ -1319,19 +1507,18 @@ def setmnotwielded(mon: MonLike, obj: ObjLike) -> None:
     raise NotImplementedError("setmnotwielded: stub until the mon.c port")
 
 
-def special_dmgval(magr: MonLike, mdef: MonLike, armask: int,
-                   silverhit_p: Optional[int] = None) -> int:
+def special_dmgval(
+    magr: MonLike, mdef: MonLike, armask: int, silverhit_p: Optional[int] = None
+) -> int:
     """STUB (do_wear.c/worn.c port): blessed/silver damage for a
     non-weapon hit (C: special_dmgval).  Needs the hero equipment
     (which_armor, uleft/uright)."""
-    raise NotImplementedError(
-        "special_dmgval: stub until the equipment port")
+    raise NotImplementedError("special_dmgval: stub until the equipment port")
 
 
 def silver_sears(magr: MonLike, mdef: MonLike, silverhit: int) -> None:
     """STUB (do_wear.c/worn.c port) -- C: silver_sears message."""
-    raise NotImplementedError(
-        "silver_sears: stub until the equipment port")
+    raise NotImplementedError("silver_sears: stub until the equipment port")
 
 
 # skill ranges for the (future) skill menu (C: skill_ranges[])
@@ -1346,8 +1533,7 @@ def add_skills_to_menu(win, selectable: bool, speedy: bool) -> None:
     """STUB (cmd.c port): write the skills onto a menu (C:
     add_skills_to_menu).  The pure parts it uses (can_advance /
     could_advance / peaked_skill / skill_level_name) are real here."""
-    raise NotImplementedError(
-        "add_skills_to_menu: stub until the cmd.c port")
+    raise NotImplementedError("add_skills_to_menu: stub until the cmd.c port")
 
 
 def show_skills() -> None:
@@ -1358,14 +1544,14 @@ def show_skills() -> None:
 def enhance_weapon_skill() -> None:
     """STUB (cmd.c port) -- C: enhance_weapon_skill (#enhance).  Uses
     advance_skill() once the menu machinery exists."""
-    raise NotImplementedError(
-        "enhance_weapon_skill: stub until the cmd.c port")
+    raise NotImplementedError("enhance_weapon_skill: stub until the cmd.c port")
 
 
 # ------------------------------------------------------------
 # Validation (run by the test suite and `python -m core.weapon`;
 # deliberately NOT at import time)
 # ------------------------------------------------------------
+
 
 def _validate() -> None:
     assert len(_SKILL_NAME_INDICES) == P_NUM_SKILLS
@@ -1379,15 +1565,21 @@ def _validate() -> None:
     # (the gray stones in RWERP are GEM_CLASS in the 5.0 table)
     for otyp in RWERP + PWERP + HWEP:
         assert 0 <= otyp < NUM_OBJECTS, otyp
-        assert int(OBJECTS[otyp].oclass) in (int(ObjClass.WEAPON),
-                                             int(ObjClass.TOOL),
-                                             int(ObjClass.FOOD),
-                                             int(ObjClass.GEM)), otyp
+        assert int(OBJECTS[otyp].oclass) in (
+            int(ObjClass.WEAPON),
+            int(ObjClass.TOOL),
+            int(ObjClass.FOOD),
+            int(ObjClass.GEM),
+        ), otyp
     # the gem-sling hook in select_rwep fires at DART in RWERP order
     assert RWERP.index(O.DART.value) > RWERP.index(O.LUCKSTONE.value)
     # the level->bonus tables cover every non-restricted level
-    for table in (_WPN_HIT_BY_LEVEL, _TWC_HIT_BY_LEVEL,
-                  _WPN_DAM_BY_LEVEL, _TWC_DAM_BY_LEVEL):
+    for table in (
+        _WPN_HIT_BY_LEVEL,
+        _TWC_HIT_BY_LEVEL,
+        _WPN_DAM_BY_LEVEL,
+        _TWC_DAM_BY_LEVEL,
+    ):
         assert set(table) >= {P_UNSKILLED, P_BASIC, P_SKILLED, P_EXPERT}
     # kebabable classes are valid monster classes
     assert all(1 <= mlet < MAXMCLASSES for mlet in _KEBABABLE)
@@ -1402,40 +1594,109 @@ if __name__ == "__main__":
 
 __all__ = [
     # structural shapes
-    "ObjLike", "MonLike", "RngLike",
+    "ObjLike",
+    "MonLike",
+    "RngLike",
     # skills.h
-    "P_ISRESTRICTED", "P_UNSKILLED", "P_BASIC", "P_SKILLED", "P_EXPERT",
-    "P_MASTER", "P_GRAND_MASTER", "P_FIRST_WEAPON", "P_LAST_WEAPON",
-    "P_FIRST_SPELL", "P_LAST_SPELL", "P_FIRST_H_TO_H", "P_LAST_H_TO_H",
-    "P_SKILL_LIMIT", "practice_needed_to_advance", "DefSkill", "Skills",
-    "skill_name", "skill_level_name",
+    "P_ISRESTRICTED",
+    "P_UNSKILLED",
+    "P_BASIC",
+    "P_SKILLED",
+    "P_EXPERT",
+    "P_MASTER",
+    "P_GRAND_MASTER",
+    "P_FIRST_WEAPON",
+    "P_LAST_WEAPON",
+    "P_FIRST_SPELL",
+    "P_LAST_SPELL",
+    "P_FIRST_H_TO_H",
+    "P_LAST_H_TO_H",
+    "P_SKILL_LIMIT",
+    "practice_needed_to_advance",
+    "DefSkill",
+    "Skills",
+    "skill_name",
+    "skill_level_name",
     # obj.h predicates
-    "weapon_type", "is_ammo", "is_launcher", "is_weptool", "is_blade",
-    "is_sword", "is_axe", "is_pick", "is_spear", "is_pole", "is_missile",
-    "is_multigen", "is_blunt_weapon", "bimanual", "is_wet_towel",
-    "is_graystone", "is_poisonable", "matching_launcher",
-    "ammo_and_launcher", "greatest_erosion",
+    "weapon_type",
+    "is_ammo",
+    "is_launcher",
+    "is_weptool",
+    "is_blade",
+    "is_sword",
+    "is_axe",
+    "is_pick",
+    "is_spear",
+    "is_pole",
+    "is_missile",
+    "is_multigen",
+    "is_blunt_weapon",
+    "bimanual",
+    "is_wet_towel",
+    "is_graystone",
+    "is_poisonable",
+    "matching_launcher",
+    "ammo_and_launcher",
+    "greatest_erosion",
     # hit/damage
-    "CombatCtx", "PM_SHADE", "HIT_BONUS_SOURCES", "hitval",
-    "DMG_BONUS_SOURCES", "dmgval",
-    "WT_IRON_BALL_INCR", "WT_IRON_BALL_BASE",
+    "CombatCtx",
+    "PM_SHADE",
+    "HIT_BONUS_SOURCES",
+    "hitval",
+    "DMG_BONUS_SOURCES",
+    "dmgval",
+    "WT_IRON_BALL_INCR",
+    "WT_IRON_BALL_BASE",
     # ability bonuses
-    "STR18", "abon", "dbon",
+    "STR18",
+    "abon",
+    "dbon",
     # towels
-    "wet_a_towel", "dry_a_towel",
+    "wet_a_towel",
+    "dry_a_towel",
     # skill system
-    "slots_required", "can_advance", "could_advance", "peaked_skill",
-    "advance_skill", "use_skill", "add_weapon_skill", "lose_weapon_skill",
-    "drain_weapon_skill", "unrestrict_weapon_skill", "skill_init",
-    "weapon_hit_bonus", "weapon_dam_bonus", "uwep_skill_type",
+    "slots_required",
+    "can_advance",
+    "could_advance",
+    "peaked_skill",
+    "advance_skill",
+    "use_skill",
+    "add_weapon_skill",
+    "lose_weapon_skill",
+    "drain_weapon_skill",
+    "unrestrict_weapon_skill",
+    "skill_init",
+    "weapon_hit_bonus",
+    "weapon_dam_bonus",
+    "uwep_skill_type",
     "weapon_descr",
     # monster weapon data + stubs
-    "NEED_WEAPON", "NEED_HTH_WEAPON", "NEED_RANGED_WEAPON", "NEED_PICK_AXE",
-    "NEED_AXE", "NEED_PICK_OR_AXE", "NO_WEAPON_WANTED",
-    "RWERP", "PWERP", "HWEP", "BOLT_LIM", "AKLYS_LIM",
-    "ThrowAndReturnWeapon", "ARWEP", "autoreturn_weapon", "monmightthrowwep",
-    "select_rwep", "select_hwep", "possibly_unwield", "mon_wield_item",
-    "mwepgone", "setmnotwielded", "special_dmgval", "silver_sears",
-    "SKILL_RANGES", "add_skills_to_menu", "show_skills",
+    "NEED_WEAPON",
+    "NEED_HTH_WEAPON",
+    "NEED_RANGED_WEAPON",
+    "NEED_PICK_AXE",
+    "NEED_AXE",
+    "NEED_PICK_OR_AXE",
+    "NO_WEAPON_WANTED",
+    "RWERP",
+    "PWERP",
+    "HWEP",
+    "BOLT_LIM",
+    "AKLYS_LIM",
+    "ThrowAndReturnWeapon",
+    "ARWEP",
+    "autoreturn_weapon",
+    "monmightthrowwep",
+    "select_rwep",
+    "select_hwep",
+    "possibly_unwield",
+    "mon_wield_item",
+    "mwepgone",
+    "setmnotwielded",
+    "special_dmgval",
+    "silver_sears",
+    "SKILL_RANGES",
+    "add_skills_to_menu",
+    "show_skills",
     "enhance_weapon_skill",
 ]

@@ -29,6 +29,7 @@ kit; they differ in how the level -- and the monsters and traps on it
 -- is made.  Nothing in the demo path gained or lost an rng draw: the
 generated paths use their own draws inside their own builders.
 """
+
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
@@ -42,9 +43,24 @@ from .mkmap import mkmap
 from .monst import MONS, PM_BAT, PM_GOBLIN, PM_HILL_ORC
 from .objects import ObjClass, ObjType, W_ARM
 from .stairs import rebuild_stairs
-from .types import (Item, Map, Monster, ObjectType, Pos, PotionType,
-                    ScrollType, SpellType, STAIR_DOWN, STAIR_UP, Tile,
-                    TerrainType, Trap, TrapType, WandType, World)
+from .types import (
+    Item,
+    Map,
+    Monster,
+    ObjectType,
+    Pos,
+    PotionType,
+    ScrollType,
+    SpellType,
+    STAIR_DOWN,
+    STAIR_UP,
+    Tile,
+    TerrainType,
+    Trap,
+    TrapType,
+    WandType,
+    World,
+)
 from .vision import vision_init, vision_recalc, vision_reset
 from .weapon import P_SKILLED, Skill, Skills
 
@@ -80,16 +96,11 @@ FLOOR_ARMOR: List[Tuple[Pos, str, ObjType, bool]] = [
 
 # Demo floor scrolls at FIXED positions: all 5 implemented scroll types, including remove curse (pairs with the cursed FLOOR_ARMOR cloak).
 FLOOR_SCROLLS: List[Tuple[Pos, str, ObjType, ScrollType]] = [
-    ((17, 7), "enchant weapon", ObjType.SCR_ENCHANT_WEAPON,
-     ScrollType.ENCHANT_WEAPON),
-    ((23, 7), "enchant armor", ObjType.SCR_ENCHANT_ARMOR,
-     ScrollType.ENCHANT_ARMOR),
-    ((17, 13), "remove curse", ObjType.SCR_REMOVE_CURSE,
-     ScrollType.REMOVE_CURSE),
-    ((23, 13), "teleportation", ObjType.SCR_TELEPORTATION,
-     ScrollType.TELEPORTATION),
-    ((20, 12), "blank paper", ObjType.SCR_BLANK_PAPER,
-     ScrollType.BLANK_PAPER),
+    ((17, 7), "enchant weapon", ObjType.SCR_ENCHANT_WEAPON, ScrollType.ENCHANT_WEAPON),
+    ((23, 7), "enchant armor", ObjType.SCR_ENCHANT_ARMOR, ScrollType.ENCHANT_ARMOR),
+    ((17, 13), "remove curse", ObjType.SCR_REMOVE_CURSE, ScrollType.REMOVE_CURSE),
+    ((23, 13), "teleportation", ObjType.SCR_TELEPORTATION, ScrollType.TELEPORTATION),
+    ((20, 12), "blank paper", ObjType.SCR_BLANK_PAPER, ScrollType.BLANK_PAPER),
 ]
 
 # Demo floor weapons at FIXED positions: dagger and mace. Hero's short sword is carried and wielded.
@@ -100,20 +111,27 @@ FLOOR_WEAPONS: List[Tuple[Pos, str, ObjType]] = [
 
 # Demo floor wands at FIXED positions: wand of striking and wand of cold (both pair with FLOOR_BOOKS via shared ZapEffect).
 FLOOR_WANDS: List[Tuple[Pos, str, ObjType, WandType, int]] = [
-    ((19, 10), "wand of striking", ObjType.WAN_STRIKING,
-     WandType.STRIKING, 3),
-    ((21, 10), "wand of cold", ObjType.WAN_COLD,
-     WandType.COLD, 3),
+    ((19, 10), "wand of striking", ObjType.WAN_STRIKING, WandType.STRIKING, 3),
+    ((21, 10), "wand of cold", ObjType.WAN_COLD, WandType.COLD, 3),
 ]
 
 # Demo floor spellbooks at FIXED positions: magic missile, cone of cold, healing (5 pages each, mirroring core.objects SPELL rows).
 FLOOR_BOOKS: List[Tuple[Pos, str, ObjType, SpellType, int]] = [
-    ((18, 11), "book of magic missile", ObjType.SPE_MAGIC_MISSILE,
-     SpellType.MAGIC_MISSILE, 5),
-    ((20, 11), "book of cone of cold", ObjType.SPE_CONE_OF_COLD,
-     SpellType.CONE_OF_COLD, 5),
-    ((22, 11), "book of healing", ObjType.SPE_HEALING,
-     SpellType.HEALING, 5),
+    (
+        (18, 11),
+        "book of magic missile",
+        ObjType.SPE_MAGIC_MISSILE,
+        SpellType.MAGIC_MISSILE,
+        5,
+    ),
+    (
+        (20, 11),
+        "book of cone of cold",
+        ObjType.SPE_CONE_OF_COLD,
+        SpellType.CONE_OF_COLD,
+        5,
+    ),
+    ((22, 11), "book of healing", ObjType.SPE_HEALING, SpellType.HEALING, 5),
 ]
 
 # Demo floor foods at FIXED positions (reserved via generate_map): the
@@ -149,9 +167,13 @@ DEMO_MONSTER_KINDS: List[Tuple[int, str, int, int]] = [
 ]
 
 
-def generate_map(rng, width: int = 40, height: int = 20,
-                 wall_count: int = 15,
-                 keep_floor: Optional[List[Pos]] = None) -> Map:
+def generate_map(
+    rng,
+    width: int = 40,
+    height: int = 20,
+    wall_count: int = 15,
+    keep_floor: Optional[List[Pos]] = None,
+) -> Map:
     """The demo cave: a STONE border, ROOM floor, scattered STONE
     pillars.
 
@@ -163,12 +185,17 @@ def generate_map(rng, width: int = 40, height: int = 20,
     (S_stone), which is why the hero sees gaps in the lit floor rather
     than wall symbols.  No rng draw is added or removed.
     """
-    tiles = [[
-        Tile(typ=TerrainType.STONE)
-        if (x == 0 or y == 0 or x == width - 1 or y == height - 1)
-        else Tile(typ=TerrainType.ROOM, lit=True)
-        for x in range(width)
-    ] for y in range(height)]
+    tiles = [
+        [
+            (
+                Tile(typ=TerrainType.STONE)
+                if (x == 0 or y == 0 or x == width - 1 or y == height - 1)
+                else Tile(typ=TerrainType.ROOM, lit=True)
+            )
+            for x in range(width)
+        ]
+        for y in range(height)
+    ]
     for _ in range(wall_count):
         x = rng.randint(5, width - 6)
         y = rng.randint(5, height - 6)
@@ -204,9 +231,19 @@ def demo_monster(kind: int, ident: str, pos: Pos, lev: int = 1) -> Monster:
     mdata = MONS[pm]
     # all three kinds exist in the implemented monst subset (never None)
     assert mdata is not None
-    return Monster(id=ident, name=name, pos=pos, hp=hp, max_hp=hp,
-                   ac=mdata.ac, damage=damage, mdata=mdata, lev=lev,
-                   m_lev=mdata.mlevel, is_flying=(pm == PM_BAT))
+    return Monster(
+        id=ident,
+        name=name,
+        pos=pos,
+        hp=hp,
+        max_hp=hp,
+        ac=mdata.ac,
+        damage=damage,
+        mdata=mdata,
+        lev=lev,
+        m_lev=mdata.mlevel,
+        is_flying=(pm == PM_BAT),
+    )
 
 
 def demo_floor_items() -> List[Tuple[Item, Pos]]:
@@ -226,38 +263,89 @@ def demo_floor_items() -> List[Tuple[Item, Pos]]:
     """
     items: List[Tuple[Item, Pos]] = []
     for i, (pos, name, otyp, cursed) in enumerate(FLOOR_ARMOR):
-        items.append((Item(id=f"armor_{i}", otype=ObjectType.ARMOR,
-                           name=name, otyp=otyp.value,
-                           oclass=ObjClass.ARMOR.value, cursed=cursed),
-                      pos))
+        items.append(
+            (
+                Item(
+                    id=f"armor_{i}",
+                    otype=ObjectType.ARMOR,
+                    name=name,
+                    otyp=otyp.value,
+                    oclass=ObjClass.ARMOR.value,
+                    cursed=cursed,
+                ),
+                pos,
+            )
+        )
     for i, (pos, name, otyp, stype) in enumerate(FLOOR_SCROLLS):
-        items.append((Item(id=f"scroll_{i}", otype=ObjectType.SCROLL,
-                           name=name, otyp=otyp.value,
-                           oclass=ObjClass.SCROLL.value,
-                           scroll_type=stype),
-                      pos))
+        items.append(
+            (
+                Item(
+                    id=f"scroll_{i}",
+                    otype=ObjectType.SCROLL,
+                    name=name,
+                    otyp=otyp.value,
+                    oclass=ObjClass.SCROLL.value,
+                    scroll_type=stype,
+                ),
+                pos,
+            )
+        )
     for i, (pos, name, otyp) in enumerate(FLOOR_WEAPONS):
-        items.append((Item(id=f"weapon_{i}", otype=ObjectType.WEAPON,
-                           name=name, otyp=otyp.value,
-                           oclass=ObjClass.WEAPON.value),
-                      pos))
+        items.append(
+            (
+                Item(
+                    id=f"weapon_{i}",
+                    otype=ObjectType.WEAPON,
+                    name=name,
+                    otyp=otyp.value,
+                    oclass=ObjClass.WEAPON.value,
+                ),
+                pos,
+            )
+        )
     for i, (pos, name, otyp, wtype, spe) in enumerate(FLOOR_WANDS):
-        items.append((Item(id=f"wand_{i}", otype=ObjectType.WAND,
-                           name=name, otyp=otyp.value,
-                           oclass=ObjClass.WAND.value,
-                           wand_type=wtype, spe=spe),
-                      pos))
+        items.append(
+            (
+                Item(
+                    id=f"wand_{i}",
+                    otype=ObjectType.WAND,
+                    name=name,
+                    otyp=otyp.value,
+                    oclass=ObjClass.WAND.value,
+                    wand_type=wtype,
+                    spe=spe,
+                ),
+                pos,
+            )
+        )
     for i, (pos, name, otyp, btype, spe) in enumerate(FLOOR_BOOKS):
-        items.append((Item(id=f"book_{i}", otype=ObjectType.BOOK,
-                           name=name, otyp=otyp.value,
-                           oclass=ObjClass.SPBOOK.value,
-                           spell_type=btype, spe=spe),
-                      pos))
+        items.append(
+            (
+                Item(
+                    id=f"book_{i}",
+                    otype=ObjectType.BOOK,
+                    name=name,
+                    otyp=otyp.value,
+                    oclass=ObjClass.SPBOOK.value,
+                    spell_type=btype,
+                    spe=spe,
+                ),
+                pos,
+            )
+        )
     for i, (pos, name, otyp) in enumerate(FLOOR_FOODS):
-        items.append((Item(id=f"food_{i}", otype=ObjectType.FOOD,
-                           name=name, otyp=otyp.value,
-                           oclass=ObjClass.FOOD.value),
-                      pos))
+        items.append(
+            (
+                Item(
+                    id=f"food_{i}",
+                    otype=ObjectType.FOOD,
+                    name=name,
+                    otyp=otyp.value,
+                    oclass=ObjClass.FOOD.value,
+                ),
+                pos,
+            )
+        )
     return items
 
 
@@ -266,10 +354,21 @@ def _make_hero(pos: Pos = HERO_POS) -> Monster:
     role.c) feeding the spell and energy formulas, base AC 10 (C:
     mons[PM_HUMAN].ac -- the human row is not in the monst subset)."""
     return Monster(
-        id="player", name="Hero", pos=pos,
-        hp=HERO_HP, max_hp=HERO_HP, ac=HERO_BASE_AC, damage=2, is_hero=True,
-        ulevel=1, ustr=12, udex=12, uwis=12, uint=15,
-        skills=_hero_skills())
+        id="player",
+        name="Hero",
+        pos=pos,
+        hp=HERO_HP,
+        max_hp=HERO_HP,
+        ac=HERO_BASE_AC,
+        damage=2,
+        is_hero=True,
+        ulevel=1,
+        ustr=12,
+        udex=12,
+        uwis=12,
+        uint=15,
+        skills=_hero_skills(),
+    )
 
 
 def _starting_kit(world: World) -> None:
@@ -281,32 +380,53 @@ def _starting_kit(world: World) -> None:
     PLAN-INVENT.md single-writer rule -- which also hands the items
     their a..e letters."""
     hero = world.hero
-    sword = Item(id="sword_0", otype=ObjectType.WEAPON, name="short sword",
-                 otyp=ObjType.SHORT_SWORD.value,
-                 oclass=ObjClass.WEAPON.value, spe=0)
+    sword = Item(
+        id="sword_0",
+        otype=ObjectType.WEAPON,
+        name="short sword",
+        otyp=ObjType.SHORT_SWORD.value,
+        oclass=ObjClass.WEAPON.value,
+        spe=0,
+    )
     addinv(world, "player", sword)
     hero.wielded = sword.id
 
-    mail = Item(id="mail_0", otype=ObjectType.ARMOR, name="chain mail",
-                otyp=ObjType.CHAIN_MAIL.value, oclass=ObjClass.ARMOR.value)
+    mail = Item(
+        id="mail_0",
+        otype=ObjectType.ARMOR,
+        name="chain mail",
+        otyp=ObjType.CHAIN_MAIL.value,
+        oclass=ObjClass.ARMOR.value,
+    )
     mail.owornmask = W_ARM
     addinv(world, "player", mail)
 
-    cloak = Item(id="cloak_0", otype=ObjectType.ARMOR, name="leather cloak",
-                 otyp=ObjType.LEATHER_CLOAK.value,
-                 oclass=ObjClass.ARMOR.value)
+    cloak = Item(
+        id="cloak_0",
+        otype=ObjectType.ARMOR,
+        name="leather cloak",
+        otyp=ObjType.LEATHER_CLOAK.value,
+        oclass=ObjClass.ARMOR.value,
+    )
     addinv(world, "player", cloak)
 
-    gloves = Item(id="gloves_0", otype=ObjectType.ARMOR,
-                  name="leather gloves",
-                  otyp=ObjType.LEATHER_GLOVES.value,
-                  oclass=ObjClass.ARMOR.value)
+    gloves = Item(
+        id="gloves_0",
+        otype=ObjectType.ARMOR,
+        name="leather gloves",
+        otyp=ObjType.LEATHER_GLOVES.value,
+        oclass=ObjClass.ARMOR.value,
+    )
     addinv(world, "player", gloves)
 
-    ring = Item(id="ring_0", otype=ObjectType.RING,
-                name="ring of protection (+1)",
-                otyp=ObjType.RIN_PROTECTION.value,
-                oclass=ObjClass.RING.value, spe=1)
+    ring = Item(
+        id="ring_0",
+        otype=ObjectType.RING,
+        name="ring of protection (+1)",
+        otyp=ObjType.RIN_PROTECTION.value,
+        oclass=ObjClass.RING.value,
+        spe=1,
+    )
     addinv(world, "player", ring)
 
 
@@ -314,26 +434,31 @@ def _starting_kit(world: World) -> None:
 # The pinned demo cave
 # ============================================================
 
-def _new_world_demo(rng, width: int, height: int, levels: int,
-                    midnight: bool) -> World:
+
+def _new_world_demo(rng, width: int, height: int, levels: int, midnight: bool) -> World:
     """The pinned demo cave (the old new_world body): byte for byte the
     layout every earlier session's tests pin.  All seeded draws are in
     the same order; the midnight flag (the calendar port) and the
     experience init (PLAN-EXPERIENCE.md) add no draws."""
-    m = generate_map(rng, width, height,
-                     keep_floor=[HERO_POS]
-                     + [p for p, _, _, _ in FLOOR_ARMOR]
-                     + [p for p, _, _, _ in FLOOR_SCROLLS]
-                     + [p for p, _, _ in FLOOR_WEAPONS]
-                     + [p for p, _, _, _, _ in FLOOR_WANDS]
-                     + [p for p, _, _, _, _ in FLOOR_BOOKS]
-                     + [p for p, _, _ in FLOOR_FOODS]
-                     + [p for p, _, _, _ in FLOOR_POTIONS]
-                     + [LEVEL1_DN_STAIRS])
+    m = generate_map(
+        rng,
+        width,
+        height,
+        keep_floor=[HERO_POS]
+        + [p for p, _, _, _ in FLOOR_ARMOR]
+        + [p for p, _, _, _ in FLOOR_SCROLLS]
+        + [p for p, _, _ in FLOOR_WEAPONS]
+        + [p for p, _, _, _, _ in FLOOR_WANDS]
+        + [p for p, _, _, _, _ in FLOOR_BOOKS]
+        + [p for p, _, _ in FLOOR_FOODS]
+        + [p for p, _, _, _ in FLOOR_POTIONS]
+        + [LEVEL1_DN_STAIRS],
+    )
     # the level-1 down stairs: fixed position, zero rng draws; level 1
     # gets NO up stairs (C: dlevel == 1 -> no upstairs)
     m.tiles[LEVEL1_DN_STAIRS[1]][LEVEL1_DN_STAIRS[0]] = Tile(
-        typ=TerrainType.STAIRS, stair_dir=STAIR_DOWN)
+        typ=TerrainType.STAIRS, stair_dir=STAIR_DOWN
+    )
     world = World(map=m)
     world.max_lev = levels
     # the midnight state (C: midnight()) for mattacku's undead double
@@ -359,9 +484,14 @@ def _new_world_demo(rng, width: int, height: int, levels: int,
     # the demo floor potion (fixed position, see FLOOR_POTIONS above):
     # fine identity (ObjLike) + effect tag for quaff dispatch
     for i, (pos, name, otyp, ptype) in enumerate(FLOOR_POTIONS):
-        it = Item(id=f"potion_{i}", otype=ObjectType.POTION, name=name,
-                  otyp=otyp.value, oclass=ObjClass.POTION.value,
-                  potion_type=ptype)
+        it = Item(
+            id=f"potion_{i}",
+            otype=ObjectType.POTION,
+            name=name,
+            otyp=otyp.value,
+            oclass=ObjClass.POTION.value,
+            potion_type=ptype,
+        )
         place_object(world, it, pos, world.lev)
 
     floor = [p for p in m.floor_tiles() if p != HERO_POS]
@@ -369,11 +499,11 @@ def _new_world_demo(rng, width: int, height: int, levels: int,
     # 10 traps of the same types the old demo used
     trap_tiles = floor[:]
     rng.shuffle(trap_tiles)
-    kinds = [TrapType.PIT, TrapType.SPIKED_PIT, TrapType.FIRE_TRAP,
-             TrapType.ARROW_TRAP]
+    kinds = [TrapType.PIT, TrapType.SPIKED_PIT, TrapType.FIRE_TRAP, TrapType.ARROW_TRAP]
     for i in range(10):
         world.traps[f"trap_{i}"] = Trap(
-            id=f"trap_{i}", trap_type=rng.choice(kinds), pos=trap_tiles[i])
+            id=f"trap_{i}", trap_type=rng.choice(kinds), pos=trap_tiles[i]
+        )
 
     # Demo monsters carry PerMonst types for committed mhitu attack
     # tables (AC from table; hp/names from old demo). No rng draws.
@@ -412,6 +542,7 @@ def _new_world_demo(rng, width: int, height: int, levels: int,
 # ============================================================
 # The generated levels (mklev / cavern)
 # ============================================================
+
 
 def _scatter_floor_items(world: World, rng) -> None:
     """Lay the demo floor kit out on free room squares.
@@ -456,15 +587,15 @@ def _cavern_stairs(map_: Map, rng, lev: int, max_lev: int) -> None:
     used: List[Pos] = []
     if lev < max_lev:
         pos = floor[0]
-        map_.tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.STAIRS,
-                                          stair_dir=STAIR_DOWN)
+        map_.tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.STAIRS, stair_dir=STAIR_DOWN)
         used.append(pos)
     if lev > 1:
         for pos in floor:
             if pos in used:
                 continue
-            map_.tiles[pos[1]][pos[0]] = Tile(typ=TerrainType.STAIRS,
-                                              stair_dir=STAIR_UP)
+            map_.tiles[pos[1]][pos[0]] = Tile(
+                typ=TerrainType.STAIRS, stair_dir=STAIR_UP
+            )
             break
 
 
@@ -506,8 +637,8 @@ def require_c_rng(rng) -> None:
         raise TypeError(
             "a generated level draws through rng.%s; %s has no %s -- "
             "use core.rnd.Rng (main.make_rng(), PLAN-MKLEV.md decision 8)"
-            % (", rng.".join(C_RNG_DRAWS), type(rng).__name__,
-               ", ".join(missing)))
+            % (", rng.".join(C_RNG_DRAWS), type(rng).__name__, ", ".join(missing))
+        )
 
 
 def _generated_level(world: World, map_: Map, rng, lev: int) -> None:
@@ -527,8 +658,7 @@ def _generated_level(world: World, map_: Map, rng, lev: int) -> None:
         _cavern_level(world, map_, rng, lev)
 
 
-def _new_world_generated(rng, generator: str, levels: int,
-                         midnight: bool) -> World:
+def _new_world_generated(rng, generator: str, levels: int, midnight: bool) -> World:
     """The mklev / cavern world (WAVE3.md): a generated level 1 (rooms
     + corridors + doors, or the cavern -- with its stairs and the demo
     fill), the hero ON the down staircase (the C newgame staircase
@@ -553,6 +683,7 @@ def _new_world_generated(rng, generator: str, levels: int,
     else:
         # levels=1: no down staircase -- a room floor instead
         from .mkroom import somexy  # local import: cycle
+
         hero_pos = somexy(world.map, world.map.rooms[0], rng) or (20, 10)
     world.actors["player"] = _make_hero(pos=hero_pos)
     init_energy(world, rng)
@@ -569,8 +700,15 @@ def _new_world_generated(rng, generator: str, levels: int,
 # The factory and the lazy-level seam
 # ============================================================
 
-def new_world(rng, width: int = 40, height: int = 20, levels: int = 3,
-              midnight: bool = False, generator: str = DEMO) -> World:
+
+def new_world(
+    rng,
+    width: int = 40,
+    height: int = 20,
+    levels: int = 3,
+    midnight: bool = False,
+    generator: str = DEMO,
+) -> World:
     """The world factory behind the generator switch (WAVE3.md).
 
     ``"demo"`` (the default) is the pinned cave, byte for byte the old
@@ -588,8 +726,9 @@ def new_world(rng, width: int = 40, height: int = 20, levels: int = 3,
     ``main.make_rng()`` is the caller that picks per generator.
     """
     if generator not in GENERATORS:
-        raise ValueError("unknown generator %r (want one of %s)"
-                         % (generator, ", ".join(GENERATORS)))
+        raise ValueError(
+            "unknown generator %r (want one of %s)" % (generator, ", ".join(GENERATORS))
+        )
     if generator == DEMO:
         world = _new_world_demo(rng, width, height, levels, midnight)
     else:
@@ -619,14 +758,12 @@ def _generate_demo_level(world: World, lev: int, rng) -> Map:
     stair_positions: List[Pos] = []
     if lev < world.max_lev:
         p = rng.choice(m.floor_tiles())
-        m.tiles[p[1]][p[0]] = Tile(typ=TerrainType.STAIRS,
-                                   stair_dir=STAIR_DOWN)
+        m.tiles[p[1]][p[0]] = Tile(typ=TerrainType.STAIRS, stair_dir=STAIR_DOWN)
         stair_positions.append(p)
     if lev > 1:
         opts = [p for p in m.floor_tiles() if p not in stair_positions]
         p = rng.choice(opts)
-        m.tiles[p[1]][p[0]] = Tile(typ=TerrainType.STAIRS,
-                                   stair_dir=STAIR_UP)
+        m.tiles[p[1]][p[0]] = Tile(typ=TerrainType.STAIRS, stair_dir=STAIR_UP)
         stair_positions.append(p)
 
     floor = [p for p in m.floor_tiles() if p not in stair_positions]
@@ -634,12 +771,14 @@ def _generate_demo_level(world: World, lev: int, rng) -> Map:
     # 10 traps of the same kinds level 1 uses
     trap_tiles = floor[:]
     rng.shuffle(trap_tiles)
-    kinds = [TrapType.PIT, TrapType.SPIKED_PIT, TrapType.FIRE_TRAP,
-             TrapType.ARROW_TRAP]
+    kinds = [TrapType.PIT, TrapType.SPIKED_PIT, TrapType.FIRE_TRAP, TrapType.ARROW_TRAP]
     for i in range(10):
         world.traps[f"trap_{lev}_{i}"] = Trap(
-            id=f"trap_{lev}_{i}", trap_type=rng.choice(kinds),
-            pos=trap_tiles[i], lev=lev)
+            id=f"trap_{lev}_{i}",
+            trap_type=rng.choice(kinds),
+            pos=trap_tiles[i],
+            lev=lev,
+        )
 
     # 9 monsters, the level-1 composition (4 goblins / 2 orcs / 3
     # bats, the committed PerMonst types -- no rng draws for the data)

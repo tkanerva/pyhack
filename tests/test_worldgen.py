@@ -1,4 +1,5 @@
 """Tests for deterministic world construction."""
+
 import random
 
 from core.items import wielded_of
@@ -7,8 +8,14 @@ from core.objects import ObjClass, ObjType, W_ARM
 from core.weapon import P_SKILLED, Skill
 from core.worn import uac, which_armor
 from core.types import HungerState
-from core.worldgen import (FLOOR_ARMOR, FLOOR_FOODS, FLOOR_SCROLLS,
-                           FLOOR_WEAPONS, HERO_BASE_AC, new_world)
+from core.worldgen import (
+    FLOOR_ARMOR,
+    FLOOR_FOODS,
+    FLOOR_SCROLLS,
+    FLOOR_WEAPONS,
+    HERO_BASE_AC,
+    new_world,
+)
 
 
 def test_layout_counts():
@@ -29,13 +36,13 @@ def test_hero_spot_is_never_a_wall():
         w = new_world(random.Random(seed))
         assert w.map.is_walkable(w.hero.pos)
         assert not any(t.pos == w.hero.pos for t in w.traps.values())
-        assert not any(m.pos == w.hero.pos
-                       for m in w.actors.values() if not m.is_hero)
+        assert not any(m.pos == w.hero.pos for m in w.actors.values() if not m.is_hero)
 
 
 # ------------------------------------------------------------
 # demo combat wiring (PerMonst types + the starting short sword)
 # ------------------------------------------------------------
+
 
 def test_demo_monsters_carry_their_permonst_types():
     """The demo's three kinds run monster->hero combat on the committed
@@ -54,8 +61,11 @@ def test_demo_monsters_carry_their_permonst_types():
         assert mon.mdata is MONS[pm], mid
         assert mon.hp == hp and mon.max_hp == hp, mid
         assert mon.ac == MONS[pm].ac, mid
-    assert {mon.name for mon in w.actors.values() if not mon.is_hero} == \
-        {"Goblin", "Orc", "Bat"}
+    assert {mon.name for mon in w.actors.values() if not mon.is_hero} == {
+        "Goblin",
+        "Orc",
+        "Bat",
+    }
 
 
 def test_hero_starts_with_a_wielded_short_sword():
@@ -92,6 +102,7 @@ def test_hero_skills_and_fixed_abilities():
 # armour
 # ------------------------------------------------------------
 
+
 def test_hero_defence_is_computed():
     """The hero starts with base AC 10 (C mons[PM_HUMAN].ac; the human
     row is not in the monst subset, so HERO_BASE_AC) wearing chain
@@ -113,8 +124,12 @@ def test_hero_defence_is_computed():
     # the inventory order is the UI's letter order:
     # a=sword b=mail c=cloak d=gloves e=ring
     assert [it.name for it in hero.inventory] == [
-        "short sword", "chain mail", "leather cloak",
-        "leather gloves", "ring of protection (+1)"]
+        "short sword",
+        "chain mail",
+        "leather cloak",
+        "leather gloves",
+        "ring of protection (+1)",
+    ]
 
 
 def test_floor_armour_lies_on_floor_tiles():
@@ -193,6 +208,7 @@ def test_new_world_makes_no_new_rng_draws():
 
     class CountingRng:
         """Wraps an rng and records the kind of every call, in order."""
+
         def __init__(self, rng):
             self._r = rng
             self.calls = []
@@ -215,5 +231,4 @@ def test_new_world_makes_no_new_rng_draws():
     # newpw draw (the ONE draw the spell-power wiring adds), the
     # trap-tile shuffle, the 10 trap-kind draws, the spawn shuffle --
     # nothing else
-    assert rng.calls == ["randint"] * 31 + ["shuffle"] \
-        + ["choice"] * 10 + ["shuffle"]
+    assert rng.calls == ["randint"] * 31 + ["shuffle"] + ["choice"] * 10 + ["shuffle"]

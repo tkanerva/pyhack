@@ -30,53 +30,245 @@ Dropped / deferred (documented, not bugs):
   mvlastseen (last move the type was seen).  A diff against the 5.0
   implementation in mon.c is due with the mon.c port.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
 
 from .monst import (  # noqa: F401 -- the header's constant set, kept
-    PerMonst, Attack, DmgType, MONS, PM_NAMES, NUMMONS, SPECIAL_PM,
-    G_KNOWN, G_GENOD, G_EXTINCT, G_GONE, MV_KNOWS_EGG,
-    S_ANT, S_BLOB, S_COCKATRICE, S_DOG, S_EYE, S_FELINE, S_GREMLIN,
-    S_HUMANOID, S_IMP, S_JELLY, S_KOBOLD, S_LEPRECHAUN, S_MIMIC,
-    S_NYMPH, S_ORC, S_PIERCER, S_QUADRUPED, S_RODENT, S_SPIDER,
-    S_TRAPPER, S_UNICORN, S_VORTEX, S_WORM, S_XAN, S_LIGHT, S_ZRUTY,
-    S_ANGEL, S_BAT, S_CENTAUR, S_DRAGON, S_ELEMENTAL, S_FUNGUS,
-    S_GNOME, S_GIANT, S_INVISIBLE, S_JABBERWOCK, S_KOP, S_LICH,
-    S_MUMMY, S_NAGA, S_OGRE, S_PUDDING, S_QUANTMECH, S_RUSTMONST,
-    S_SNAKE, S_TROLL, S_UMBER, S_VAMPIRE, S_WRAITH, S_XORN, S_YETI,
-    S_ZOMBIE, S_HUMAN, S_GHOST, S_GOLEM, S_DEMON, S_EEL, S_LIZARD,
-    S_WORM_TAIL, S_MIMIC_DEF, MAXMCLASSES,
-    AT_ANY, AT_NONE, AT_CLAW, AT_BITE, AT_KICK, AT_BUTT, AT_TUCH,
-    AT_STNG, AT_HUGS, AT_SPIT, AT_ENGL, AT_BREA, AT_EXPL, AT_BOOM,
-    AT_GAZE, AT_TENT, AT_WEAP, AT_MAGC, NATTK, distance_atk_type,
-    AD_ANY, AD_PHYS, AD_MAGM, AD_FIRE, AD_COLD, AD_SLEE, AD_DISN,
-    AD_ELEC, AD_DRST, AD_ACID, AD_BLND, AD_STUN, AD_SLOW, AD_PLYS,
-    AD_DRLI, AD_DREN, AD_LEGS, AD_STON, AD_STCK, AD_SGLD, AD_SITM,
-    AD_SEDU, AD_TLPT, AD_RUST, AD_CONF, AD_DGST, AD_HEAL, AD_WRAP,
-    AD_WERE, AD_DRDX, AD_DRCO, AD_DRIN, AD_DISE, AD_DCAY, AD_SSEX,
-    AD_HALU, AD_DETH, AD_PEST, AD_FAMN, AD_SLIM, AD_ENCH, AD_CORR,
-    AD_POLY, AD_CLRC, AD_SPEL, AD_RBRE, AD_SAMU, AD_CURS,
-    M1_FLY, M1_SWIM, M1_AMORPHOUS, M1_WALLWALK, M1_CLING, M1_TUNNEL,
-    M1_NEEDPICK, M1_CONCEAL, M1_HIDE, M1_AMPHIBIOUS, M1_BREATHLESS,
-    M1_NOTAKE, M1_NOEYES, M1_NOHANDS, M1_NOLIMBS, M1_NOHEAD,
-    M1_MINDLESS, M1_HUMANOID, M1_ANIMAL, M1_SLITHY, M1_UNSOLID,
-    M1_THICK_HIDE, M1_OVIPAROUS, M1_REGEN, M1_SEE_INVIS, M1_TPORT,
-    M1_TPORT_CNTRL, M1_ACID, M1_POIS, M1_CARNIVORE, M1_HERBIVORE,
-    M1_OMNIVORE, M1_METALLIVORE,
-    M2_NOPOLY, M2_UNDEAD, M2_WERE, M2_HUMAN, M2_ELF, M2_DWARF,
-    M2_GNOME, M2_ORC, M2_DEMON, M2_MERC, M2_LORD, M2_PRINCE,
-    M2_MINION, M2_GIANT, M2_SHAPESHIFTER, M2_MALE, M2_FEMALE,
-    M2_NEUTER, M2_PNAME, M2_HOSTILE, M2_PEACEFUL, M2_DOMESTIC,
-    M2_WANDER, M2_STALK, M2_NASTY, M2_STRONG, M2_ROCKTHROW,
-    M2_GREEDY, M2_JEWELS, M2_COLLECT, M2_MAGIC,
-    M3_WANTSAMUL, M3_WANTSBELL, M3_WANTSBOOK, M3_WANTSCAND,
-    M3_WANTSARTI, M3_WANTSALL, M3_WAITFORU, M3_CLOSE, M3_COVETOUS,
-    M3_WAITMASK, M3_INFRAVISION, M3_INFRAVISIBLE, M3_DISPLACES,
-    MZ_SMALL, MZ_LARGE, MS_SILENT, MS_BUZZ, MS_BURBLE,
-    G_UNIQ, G_NOGEN, G_FREQ, PM_HIGH_CLERIC,
-    monsndx, monclass, monname, is_golem, is_dragon,
+    PerMonst,
+    Attack,
+    DmgType,
+    MONS,
+    PM_NAMES,
+    NUMMONS,
+    SPECIAL_PM,
+    G_KNOWN,
+    G_GENOD,
+    G_EXTINCT,
+    G_GONE,
+    MV_KNOWS_EGG,
+    S_ANT,
+    S_BLOB,
+    S_COCKATRICE,
+    S_DOG,
+    S_EYE,
+    S_FELINE,
+    S_GREMLIN,
+    S_HUMANOID,
+    S_IMP,
+    S_JELLY,
+    S_KOBOLD,
+    S_LEPRECHAUN,
+    S_MIMIC,
+    S_NYMPH,
+    S_ORC,
+    S_PIERCER,
+    S_QUADRUPED,
+    S_RODENT,
+    S_SPIDER,
+    S_TRAPPER,
+    S_UNICORN,
+    S_VORTEX,
+    S_WORM,
+    S_XAN,
+    S_LIGHT,
+    S_ZRUTY,
+    S_ANGEL,
+    S_BAT,
+    S_CENTAUR,
+    S_DRAGON,
+    S_ELEMENTAL,
+    S_FUNGUS,
+    S_GNOME,
+    S_GIANT,
+    S_INVISIBLE,
+    S_JABBERWOCK,
+    S_KOP,
+    S_LICH,
+    S_MUMMY,
+    S_NAGA,
+    S_OGRE,
+    S_PUDDING,
+    S_QUANTMECH,
+    S_RUSTMONST,
+    S_SNAKE,
+    S_TROLL,
+    S_UMBER,
+    S_VAMPIRE,
+    S_WRAITH,
+    S_XORN,
+    S_YETI,
+    S_ZOMBIE,
+    S_HUMAN,
+    S_GHOST,
+    S_GOLEM,
+    S_DEMON,
+    S_EEL,
+    S_LIZARD,
+    S_WORM_TAIL,
+    S_MIMIC_DEF,
+    MAXMCLASSES,
+    AT_ANY,
+    AT_NONE,
+    AT_CLAW,
+    AT_BITE,
+    AT_KICK,
+    AT_BUTT,
+    AT_TUCH,
+    AT_STNG,
+    AT_HUGS,
+    AT_SPIT,
+    AT_ENGL,
+    AT_BREA,
+    AT_EXPL,
+    AT_BOOM,
+    AT_GAZE,
+    AT_TENT,
+    AT_WEAP,
+    AT_MAGC,
+    NATTK,
+    distance_atk_type,
+    AD_ANY,
+    AD_PHYS,
+    AD_MAGM,
+    AD_FIRE,
+    AD_COLD,
+    AD_SLEE,
+    AD_DISN,
+    AD_ELEC,
+    AD_DRST,
+    AD_ACID,
+    AD_BLND,
+    AD_STUN,
+    AD_SLOW,
+    AD_PLYS,
+    AD_DRLI,
+    AD_DREN,
+    AD_LEGS,
+    AD_STON,
+    AD_STCK,
+    AD_SGLD,
+    AD_SITM,
+    AD_SEDU,
+    AD_TLPT,
+    AD_RUST,
+    AD_CONF,
+    AD_DGST,
+    AD_HEAL,
+    AD_WRAP,
+    AD_WERE,
+    AD_DRDX,
+    AD_DRCO,
+    AD_DRIN,
+    AD_DISE,
+    AD_DCAY,
+    AD_SSEX,
+    AD_HALU,
+    AD_DETH,
+    AD_PEST,
+    AD_FAMN,
+    AD_SLIM,
+    AD_ENCH,
+    AD_CORR,
+    AD_POLY,
+    AD_CLRC,
+    AD_SPEL,
+    AD_RBRE,
+    AD_SAMU,
+    AD_CURS,
+    M1_FLY,
+    M1_SWIM,
+    M1_AMORPHOUS,
+    M1_WALLWALK,
+    M1_CLING,
+    M1_TUNNEL,
+    M1_NEEDPICK,
+    M1_CONCEAL,
+    M1_HIDE,
+    M1_AMPHIBIOUS,
+    M1_BREATHLESS,
+    M1_NOTAKE,
+    M1_NOEYES,
+    M1_NOHANDS,
+    M1_NOLIMBS,
+    M1_NOHEAD,
+    M1_MINDLESS,
+    M1_HUMANOID,
+    M1_ANIMAL,
+    M1_SLITHY,
+    M1_UNSOLID,
+    M1_THICK_HIDE,
+    M1_OVIPAROUS,
+    M1_REGEN,
+    M1_SEE_INVIS,
+    M1_TPORT,
+    M1_TPORT_CNTRL,
+    M1_ACID,
+    M1_POIS,
+    M1_CARNIVORE,
+    M1_HERBIVORE,
+    M1_OMNIVORE,
+    M1_METALLIVORE,
+    M2_NOPOLY,
+    M2_UNDEAD,
+    M2_WERE,
+    M2_HUMAN,
+    M2_ELF,
+    M2_DWARF,
+    M2_GNOME,
+    M2_ORC,
+    M2_DEMON,
+    M2_MERC,
+    M2_LORD,
+    M2_PRINCE,
+    M2_MINION,
+    M2_GIANT,
+    M2_SHAPESHIFTER,
+    M2_MALE,
+    M2_FEMALE,
+    M2_NEUTER,
+    M2_PNAME,
+    M2_HOSTILE,
+    M2_PEACEFUL,
+    M2_DOMESTIC,
+    M2_WANDER,
+    M2_STALK,
+    M2_NASTY,
+    M2_STRONG,
+    M2_ROCKTHROW,
+    M2_GREEDY,
+    M2_JEWELS,
+    M2_COLLECT,
+    M2_MAGIC,
+    M3_WANTSAMUL,
+    M3_WANTSBELL,
+    M3_WANTSBOOK,
+    M3_WANTSCAND,
+    M3_WANTSARTI,
+    M3_WANTSALL,
+    M3_WAITFORU,
+    M3_CLOSE,
+    M3_COVETOUS,
+    M3_WAITMASK,
+    M3_INFRAVISION,
+    M3_INFRAVISIBLE,
+    M3_DISPLACES,
+    MZ_SMALL,
+    MZ_LARGE,
+    MS_SILENT,
+    MS_BUZZ,
+    MS_BURBLE,
+    G_UNIQ,
+    G_NOGEN,
+    G_FREQ,
+    PM_HIGH_CLERIC,
+    monsndx,
+    monclass,
+    monname,
+    is_golem,
+    is_dragon,
 )
 
 # ------------------------------------------------------------
@@ -85,26 +277,91 @@ from .monst import (  # noqa: F401 -- the header's constant set, kept
 # the constants are resolved from PM_NAMES at import time so a
 # renumbering would break loudly.
 from .mondata_data import (  # noqa: E402,F401 -- the PM_ anchor set
-    PM_AIR_ELEMENTAL, PM_BABY_GOLD_DRAGON, PM_BABY_LONG_WORM,
-    PM_BABY_PURPLE_WORM, PM_BLACK_LIGHT, PM_BLACK_PUDDING,
-    PM_BLACK_UNICORN, PM_CHICKATRICE, PM_CYCLOPS, PM_DEATH, PM_DWARF,
-    PM_ELF, PM_FAMINE, PM_PESTILENCE, PM_FIRE_ELEMENTAL, PM_FIRE_VORTEX,
-    PM_FLAMING_SPHERE, PM_FLOATING_EYE, PM_GOLD_DRAGON, PM_GOLD_GOLEM,
-    PM_HORNED_DEVIL, PM_HUMAN, PM_KI_RIN, PM_LEATHER_GOLEM,
-    PM_LONG_WORM, PM_MASTER_MIND_FLAYER, PM_MEDUSA, PM_MIND_FLAYER,
-    PM_MINOTAUR, PM_MANES, PM_BALROG, PM_ASMODEUS, PM_GREMLIN,
-    PM_HORSE, PM_WARHORSE, PM_PONY, PM_PIRANHA, PM_PURPLE_WORM,
-    PM_ROCK_MOLE, PM_WOODCHUCK, PM_RAVEN, PM_SALAMANDER, PM_SHADE,
-    PM_SHOCKING_SPHERE, PM_STALKER, PM_STRAW_GOLEM, PM_PAPER_GOLEM,
-    PM_WOOD_GOLEM, PM_IRON_GOLEM, PM_FLESH_GOLEM, PM_GHOUL,
-    PM_SKELETON, PM_TENGU, PM_VAMPIRE_BAT, PM_WHITE_UNICORN,
-    PM_GRAY_UNICORN, PM_GIANT, PM_ORC, PM_ETTIN, PM_GNOME, PM_KOBOLD,
-    PM_KOBOLD_ZOMBIE, PM_KOBOLD_MUMMY, PM_DWARF_ZOMBIE,
-    PM_DWARF_MUMMY, PM_GNOME_ZOMBIE, PM_GNOME_MUMMY, PM_ORC_ZOMBIE,
-    PM_ORC_MUMMY, PM_ELF_ZOMBIE, PM_ELF_MUMMY, PM_HUMAN_ZOMBIE,
-    PM_HUMAN_MUMMY, PM_ETTIN_ZOMBIE, PM_ETTIN_MUMMY, PM_GIANT_ZOMBIE,
-    PM_GIANT_MUMMY, PM_WATCHMAN, PM_WATCH_CAPTAIN, PM_ARCHEOLOGIST,
-    PM_WIZARD, PM_BAT, PM_GIANT_BAT, PM_VAMPIRE, PM_VAMPIRE_LEADER,
+    PM_AIR_ELEMENTAL,
+    PM_BABY_GOLD_DRAGON,
+    PM_BABY_LONG_WORM,
+    PM_BABY_PURPLE_WORM,
+    PM_BLACK_LIGHT,
+    PM_BLACK_PUDDING,
+    PM_BLACK_UNICORN,
+    PM_CHICKATRICE,
+    PM_CYCLOPS,
+    PM_DEATH,
+    PM_DWARF,
+    PM_ELF,
+    PM_FAMINE,
+    PM_PESTILENCE,
+    PM_FIRE_ELEMENTAL,
+    PM_FIRE_VORTEX,
+    PM_FLAMING_SPHERE,
+    PM_FLOATING_EYE,
+    PM_GOLD_DRAGON,
+    PM_GOLD_GOLEM,
+    PM_HORNED_DEVIL,
+    PM_HUMAN,
+    PM_KI_RIN,
+    PM_LEATHER_GOLEM,
+    PM_LONG_WORM,
+    PM_MASTER_MIND_FLAYER,
+    PM_MEDUSA,
+    PM_MIND_FLAYER,
+    PM_MINOTAUR,
+    PM_MANES,
+    PM_BALROG,
+    PM_ASMODEUS,
+    PM_GREMLIN,
+    PM_HORSE,
+    PM_WARHORSE,
+    PM_PONY,
+    PM_PIRANHA,
+    PM_PURPLE_WORM,
+    PM_ROCK_MOLE,
+    PM_WOODCHUCK,
+    PM_RAVEN,
+    PM_SALAMANDER,
+    PM_SHADE,
+    PM_SHOCKING_SPHERE,
+    PM_STALKER,
+    PM_STRAW_GOLEM,
+    PM_PAPER_GOLEM,
+    PM_WOOD_GOLEM,
+    PM_IRON_GOLEM,
+    PM_FLESH_GOLEM,
+    PM_GHOUL,
+    PM_SKELETON,
+    PM_TENGU,
+    PM_VAMPIRE_BAT,
+    PM_WHITE_UNICORN,
+    PM_GRAY_UNICORN,
+    PM_GIANT,
+    PM_ORC,
+    PM_ETTIN,
+    PM_GNOME,
+    PM_KOBOLD,
+    PM_KOBOLD_ZOMBIE,
+    PM_KOBOLD_MUMMY,
+    PM_DWARF_ZOMBIE,
+    PM_DWARF_MUMMY,
+    PM_GNOME_ZOMBIE,
+    PM_GNOME_MUMMY,
+    PM_ORC_ZOMBIE,
+    PM_ORC_MUMMY,
+    PM_ELF_ZOMBIE,
+    PM_ELF_MUMMY,
+    PM_HUMAN_ZOMBIE,
+    PM_HUMAN_MUMMY,
+    PM_ETTIN_ZOMBIE,
+    PM_ETTIN_MUMMY,
+    PM_GIANT_ZOMBIE,
+    PM_GIANT_MUMMY,
+    PM_WATCHMAN,
+    PM_WATCH_CAPTAIN,
+    PM_ARCHEOLOGIST,
+    PM_WIZARD,
+    PM_BAT,
+    PM_GIANT_BAT,
+    PM_VAMPIRE,
+    PM_VAMPIRE_LEADER,
     PM_COCKATRICE,
 )
 
@@ -122,6 +379,7 @@ def mons(pm: int) -> Optional[PerMonst]:
 # Per-game monster status (C: svm / struct monst_vars, sv* contract)
 # ------------------------------------------------------------
 
+
 @dataclass
 class MonVitals:
     """One type's population state (C: struct mvitals, hack.h).
@@ -133,6 +391,7 @@ class MonVitals:
     contract the port wrote before the 5.0 diff -- the makemon port
     uses born / died, nothing reads mvcount yet.
     """
+
     mvflags: int = 0
     mvcount: int = 0
     mvlastseen: int = 0
@@ -182,8 +441,7 @@ class MonState:
         self.svflags(pm, flags, False)
 
     # C: propagate (makemon.c 957-982)
-    def propagate(self, mndx: int, tally: bool, ghostly: bool,
-                  limit: int) -> bool:
+    def propagate(self, mndx: int, tally: bool, ghostly: bool, limit: int) -> bool:
         """Record one birth of type `mndx`; return whether another may
         still be created (C: makemon.c#propagate).
 
@@ -210,8 +468,11 @@ class MonState:
         if self.mvitals[mndx].born < 255 and tally:
             if not ghostly or result:
                 self.mvitals[mndx].born += 1
-        if self.mvitals[mndx].born >= limit and not nogen \
-                and not (self.mvitals[mndx].mvflags & G_EXTINCT):
+        if (
+            self.mvitals[mndx].born >= limit
+            and not nogen
+            and not (self.mvitals[mndx].mvflags & G_EXTINCT)
+        ):
             self.mvitals[mndx].mvflags |= G_EXTINCT
         return result
 
@@ -219,6 +480,7 @@ class MonState:
 # ------------------------------------------------------------
 # set_mon_data (C: set_mon_data)
 # ------------------------------------------------------------
+
 
 def set_mon_data(mon, data: PerMonst, movement: int) -> int:
     """Set a monster's base type (initial creation, shapechange) and
@@ -229,8 +491,7 @@ def set_mon_data(mon, data: PerMonst, movement: int) -> int:
     (mons index) attributes.  Returns the movement points to store
     (mon.movement / u.umovement).
     """
-    old_speed = mon.mdata.mmove if getattr(mon, "mdata", None) is not None \
-        else 0
+    old_speed = mon.mdata.mmove if getattr(mon, "mdata", None) is not None else 0
     new_speed = data.mmove
     if movement:
         if new_speed < old_speed:
@@ -248,6 +509,7 @@ def set_mon_data(mon, data: PerMonst, movement: int) -> int:
 # ------------------------------------------------------------
 # Attack/damage queries (C: mondata.c)
 # ------------------------------------------------------------
+
 
 def attacktype_fordmg(ptr: PerMonst, atyp: int, dtyp: int) -> Optional[Attack]:
     """The first attack of type `atyp` doing damage `dtyp`, or None
@@ -293,9 +555,11 @@ def ranged_attk(ptr: PerMonst) -> bool:
 
 def sticks(ptr: PerMonst) -> bool:
     """The creature sticks other creatures it hits (C: sticks)."""
-    return (dmgtype(ptr, AD_STCK)
-            or (dmgtype(ptr, AD_WRAP) and not attacktype(ptr, AT_ENGL))
-            or attacktype(ptr, AT_HUGS))
+    return (
+        dmgtype(ptr, AD_STCK)
+        or (dmgtype(ptr, AD_WRAP) and not attacktype(ptr, AT_ENGL))
+        or attacktype(ptr, AT_HUGS)
+    )
 
 
 def is_armed(ptr: PerMonst) -> bool:
@@ -315,6 +579,7 @@ def could_twoweap(ptr: PerMonst) -> bool:
 # ------------------------------------------------------------
 # mondata.h predicates (pure functions of a PerMonst)
 # ------------------------------------------------------------
+
 
 def verysmall(ptr: PerMonst) -> bool:
     return ptr.msize < MZ_SMALL
@@ -342,8 +607,11 @@ def is_clinger(ptr: PerMonst) -> bool:
 
 def grounded(ptr: PerMonst, has_ceiling: bool) -> bool:
     """C: grounded -- the level-ceiling bit is an explicit parameter."""
-    return (not is_flyer(ptr) and not is_floater(ptr)
-            and (not is_clinger(ptr) or not has_ceiling))
+    return (
+        not is_flyer(ptr)
+        and not is_floater(ptr)
+        and (not is_clinger(ptr) or not has_ceiling)
+    )
 
 
 def is_swimmer(ptr: PerMonst) -> bool:
@@ -391,9 +659,9 @@ def is_hider(ptr: PerMonst) -> bool:
 
 
 def ceiling_hider(ptr: PerMonst) -> bool:
-    return (is_hider(ptr)
-            and ((is_clinger(ptr) and ptr.mlet != S_MIMIC)
-                 or is_flyer(ptr)))
+    return is_hider(ptr) and (
+        (is_clinger(ptr) and ptr.mlet != S_MIMIC) or is_flyer(ptr)
+    )
 
 
 def haseyes(ptr: PerMonst) -> bool:
@@ -433,8 +701,12 @@ def is_whirly(ptr: PerMonst) -> bool:
 
 
 def flaming(ptr: PerMonst) -> bool:
-    return ptr.pmidx in (PM_FIRE_VORTEX, PM_FLAMING_SPHERE,
-                         PM_FIRE_ELEMENTAL, PM_SALAMANDER)
+    return ptr.pmidx in (
+        PM_FIRE_VORTEX,
+        PM_FLAMING_SPHERE,
+        PM_FIRE_ELEMENTAL,
+        PM_SALAMANDER,
+    )
 
 
 def is_silent(ptr: PerMonst) -> bool:
@@ -483,8 +755,7 @@ def enfolds(ptr: PerMonst) -> bool:
 
 
 def slimeproof(ptr: PerMonst) -> bool:
-    return (ptr.pmidx == _pm("green slime") or flaming(ptr)
-            or noncorporeal(ptr))
+    return ptr.pmidx == _pm("green slime") or flaming(ptr) or noncorporeal(ptr)
 
 
 def lays_eggs(ptr: PerMonst) -> bool:
@@ -512,8 +783,7 @@ def control_teleport(ptr: PerMonst) -> bool:
 
 
 def telepathic(ptr: PerMonst) -> bool:
-    return ptr.pmidx in (PM_FLOATING_EYE, PM_MIND_FLAYER,
-                         PM_MASTER_MIND_FLAYER)
+    return ptr.pmidx in (PM_FLOATING_EYE, PM_MIND_FLAYER, PM_MASTER_MIND_FLAYER)
 
 
 def acidic(ptr: PerMonst) -> bool:
@@ -639,10 +909,12 @@ def sliparm(ptr: PerMonst) -> bool:
 def breakarm(ptr: PerMonst) -> bool:
     if sliparm(ptr):
         return False
-    return (bigmonst(ptr)
-            or (ptr.msize > MZ_SMALL and not humanoid(ptr))
-            or ptr.pmidx == _pm("marilith")
-            or ptr.pmidx == _pm("winged gargoyle"))
+    return (
+        bigmonst(ptr)
+        or (ptr.msize > MZ_SMALL and not humanoid(ptr))
+        or ptr.pmidx == _pm("marilith")
+        or ptr.pmidx == _pm("winged gargoyle")
+    )
 
 
 def cantweararm(ptr: PerMonst) -> bool:
@@ -706,8 +978,7 @@ def is_unicorn(ptr: PerMonst) -> bool:
 
 
 def is_longworm(ptr: PerMonst) -> bool:
-    return ptr.pmidx in (PM_BABY_LONG_WORM, PM_LONG_WORM,
-                         _pm("long worm tail"))
+    return ptr.pmidx in (PM_BABY_LONG_WORM, PM_LONG_WORM, _pm("long worm tail"))
 
 
 def is_covetous(ptr: PerMonst) -> bool:
@@ -753,9 +1024,12 @@ def unique_corpstat(ptr: PerMonst) -> bool:
 
 def emits_light(ptr: PerMonst) -> int:
     """Light range (1) or 0 (C: emits_light)."""
-    if (ptr.mlet == S_LIGHT
-            or ptr.pmidx in (PM_FLAMING_SPHERE, PM_SHOCKING_SPHERE,
-                             PM_BABY_GOLD_DRAGON, PM_FIRE_VORTEX)):
+    if ptr.mlet == S_LIGHT or ptr.pmidx in (
+        PM_FLAMING_SPHERE,
+        PM_SHOCKING_SPHERE,
+        PM_BABY_GOLD_DRAGON,
+        PM_FIRE_VORTEX,
+    ):
         return 1
     if ptr.pmidx in (PM_FIRE_ELEMENTAL, PM_GOLD_DRAGON):
         return 1
@@ -824,20 +1098,17 @@ def vegan(ptr: PerMonst) -> bool:
         return True
     if ptr.mlet == S_ELEMENTAL and ptr.pmidx != PM_STALKER:
         return True
-    if (ptr.mlet == S_GOLEM
-            and ptr.pmidx not in (PM_FLESH_GOLEM, PM_LEATHER_GOLEM)):
+    if ptr.mlet == S_GOLEM and ptr.pmidx not in (PM_FLESH_GOLEM, PM_LEATHER_GOLEM):
         return True
     return noncorporeal(ptr)
 
 
 def vegetarian(ptr: PerMonst) -> bool:
-    return vegan(ptr) or (ptr.mlet == S_PUDDING
-                          and ptr.pmidx != PM_BLACK_PUDDING)
+    return vegan(ptr) or (ptr.mlet == S_PUDDING and ptr.pmidx != PM_BLACK_PUDDING)
 
 
 def corpse_eater(ptr: PerMonst) -> bool:
-    return ptr.pmidx in (PM_PURPLE_WORM, PM_BABY_PURPLE_WORM,
-                         PM_GHOUL, PM_PIRANHA)
+    return ptr.pmidx in (PM_PURPLE_WORM, PM_BABY_PURPLE_WORM, PM_GHOUL, PM_PIRANHA)
 
 
 def cantvomit(ptr: PerMonst) -> bool:
@@ -849,16 +1120,19 @@ def cantvomit(ptr: PerMonst) -> bool:
 def num_horns(ptr: PerMonst) -> int:
     if ptr.pmidx in (PM_HORNED_DEVIL, PM_MINOTAUR, PM_ASMODEUS, PM_BALROG):
         return 2
-    if ptr.pmidx in (PM_WHITE_UNICORN, PM_GRAY_UNICORN, PM_BLACK_UNICORN,
-                     PM_KI_RIN):
+    if ptr.pmidx in (PM_WHITE_UNICORN, PM_GRAY_UNICORN, PM_BLACK_UNICORN, PM_KI_RIN):
         return 1
     return 0
 
 
 def hates_silver(ptr: PerMonst) -> bool:
-    return (is_were(ptr) or ptr.mlet == S_VAMPIRE or is_demon(ptr)
-            or ptr.pmidx == PM_SHADE
-            or (ptr.mlet == S_IMP and ptr.pmidx != PM_TENGU))
+    return (
+        is_were(ptr)
+        or ptr.mlet == S_VAMPIRE
+        or is_demon(ptr)
+        or ptr.pmidx == PM_SHADE
+        or (ptr.mlet == S_IMP and ptr.pmidx != PM_TENGU)
+    )
 
 
 def hates_blessings(ptr: PerMonst) -> bool:
@@ -866,17 +1140,30 @@ def hates_blessings(ptr: PerMonst) -> bool:
 
 
 def passes_bars(ptr: PerMonst) -> bool:
-    return (passes_walls(ptr) or amorphous(ptr) or unsolid(ptr)
-            or is_whirly(ptr) or verysmall(ptr)
-            or dmgtype(ptr, AD_RUST) or dmgtype(ptr, AD_CORR)
-            or metallivorous(ptr)
-            or (slithy(ptr) and not bigmonst(ptr)))
+    return (
+        passes_walls(ptr)
+        or amorphous(ptr)
+        or unsolid(ptr)
+        or is_whirly(ptr)
+        or verysmall(ptr)
+        or dmgtype(ptr, AD_RUST)
+        or dmgtype(ptr, AD_CORR)
+        or metallivorous(ptr)
+        or (slithy(ptr) and not bigmonst(ptr))
+    )
 
 
 def olfaction(ptr: PerMonst) -> bool:
     """Presumed sense of smell (C: olfaction)."""
-    if (is_golem(ptr) or ptr.mlet in (S_EYE, S_JELLY, S_BLOB, S_VORTEX,
-                                      S_ELEMENTAL, S_FUNGUS, S_LIGHT)):
+    if is_golem(ptr) or ptr.mlet in (
+        S_EYE,
+        S_JELLY,
+        S_BLOB,
+        S_VORTEX,
+        S_ELEMENTAL,
+        S_FUNGUS,
+        S_LIGHT,
+    ):
         return False
     return True
 
@@ -885,6 +1172,7 @@ def olfaction(ptr: PerMonst) -> bool:
 # Zombie/undead type mapping (C: zombie_maker, zombie_form,
 # undead_to_corpse, genus, pm_to_cham)
 # ------------------------------------------------------------
+
 
 def zombie_maker(mon) -> bool:
     """True if mon can turn others into zombies (C: zombie_maker)."""
@@ -929,16 +1217,24 @@ def zombie_form(pm: PerMonst) -> int:
 def undead_to_corpse(mndx: int) -> int:
     """Living counterpart of an undead (C: undead_to_corpse)."""
     mapping = {
-        PM_KOBOLD_ZOMBIE: PM_KOBOLD, PM_KOBOLD_MUMMY: PM_KOBOLD,
-        PM_DWARF_ZOMBIE: PM_DWARF, PM_DWARF_MUMMY: PM_DWARF,
-        PM_GNOME_ZOMBIE: PM_GNOME, PM_GNOME_MUMMY: PM_GNOME,
-        PM_ORC_ZOMBIE: PM_ORC, PM_ORC_MUMMY: PM_ORC,
-        PM_ELF_ZOMBIE: PM_ELF, PM_ELF_MUMMY: PM_ELF,
-        PM_VAMPIRE: PM_HUMAN, PM_VAMPIRE_LEADER: PM_HUMAN,
+        PM_KOBOLD_ZOMBIE: PM_KOBOLD,
+        PM_KOBOLD_MUMMY: PM_KOBOLD,
+        PM_DWARF_ZOMBIE: PM_DWARF,
+        PM_DWARF_MUMMY: PM_DWARF,
+        PM_GNOME_ZOMBIE: PM_GNOME,
+        PM_GNOME_MUMMY: PM_GNOME,
+        PM_ORC_ZOMBIE: PM_ORC,
+        PM_ORC_MUMMY: PM_ORC,
+        PM_ELF_ZOMBIE: PM_ELF,
+        PM_ELF_MUMMY: PM_ELF,
+        PM_VAMPIRE: PM_HUMAN,
+        PM_VAMPIRE_LEADER: PM_HUMAN,
         PM_HUMAN_ZOMBIE: PM_HUMAN,
         PM_HUMAN_MUMMY: PM_HUMAN,
-        PM_GIANT_ZOMBIE: PM_GIANT, PM_GIANT_MUMMY: PM_GIANT,
-        PM_ETTIN_ZOMBIE: PM_ETTIN, PM_ETTIN_MUMMY: PM_ETTIN,
+        PM_GIANT_ZOMBIE: PM_GIANT,
+        PM_GIANT_MUMMY: PM_GIANT,
+        PM_ETTIN_ZOMBIE: PM_ETTIN,
+        PM_ETTIN_MUMMY: PM_ETTIN,
     }
     return mapping.get(mndx, mndx)
 
@@ -1012,9 +1308,13 @@ M_SEEN_REFL = 0x0100
 
 def cvt_adtyp_to_mseenres(adtyp: DmgType) -> int:
     table = {
-        AD_MAGM: M_SEEN_MAGR, AD_FIRE: M_SEEN_FIRE, AD_COLD: M_SEEN_COLD,
-        AD_SLEE: M_SEEN_SLEEP, AD_DISN: M_SEEN_DISINT,
-        AD_ELEC: M_SEEN_ELEC, AD_DRST: M_SEEN_POISON,
+        AD_MAGM: M_SEEN_MAGR,
+        AD_FIRE: M_SEEN_FIRE,
+        AD_COLD: M_SEEN_COLD,
+        AD_SLEE: M_SEEN_SLEEP,
+        AD_DISN: M_SEEN_DISINT,
+        AD_ELEC: M_SEEN_ELEC,
+        AD_DRST: M_SEEN_POISON,
         AD_ACID: M_SEEN_ACID,
     }
     return table.get(adtyp, M_SEEN_NOTHING)
@@ -1022,15 +1322,15 @@ def cvt_adtyp_to_mseenres(adtyp: DmgType) -> int:
 
 def cvt_prop_to_mseenres(prop: int) -> int:
     table = {
-        1: M_SEEN_MAGR,    # ANTIMAGIC
-        2: M_SEEN_FIRE,    # FIRE_RES
-        3: M_SEEN_COLD,    # COLD_RES
-        4: M_SEEN_SLEEP,   # SLEEP_RES
+        1: M_SEEN_MAGR,  # ANTIMAGIC
+        2: M_SEEN_FIRE,  # FIRE_RES
+        3: M_SEEN_COLD,  # COLD_RES
+        4: M_SEEN_SLEEP,  # SLEEP_RES
         5: M_SEEN_DISINT,  # DISINT_RES
         6: M_SEEN_POISON,  # POISON_RES
-        7: M_SEEN_ELEC,    # SHOCK_RES
-        8: M_SEEN_ACID,    # ACID_RES
-        9: M_SEEN_REFL,    # REFLECTING
+        7: M_SEEN_ELEC,  # SHOCK_RES
+        8: M_SEEN_ACID,  # ACID_RES
+        9: M_SEEN_REFL,  # REFLECTING
     }
     return table.get(prop, M_SEEN_NOTHING)
 
@@ -1058,15 +1358,23 @@ def mon_learns_traps(mon, ttyp: int) -> None:
     elif ttyp == NO_TRAP:
         mon.mtrapseen = 0
     else:
-        mon.mtrapseen |= (1 << (ttyp - 1))
+        mon.mtrapseen |= 1 << (ttyp - 1)
 
 
 # ------------------------------------------------------------
 # Breath damage randomization (C: get_atkdam_type)
 # ------------------------------------------------------------
 
-_RND_BREATH_TYP = (AD_MAGM, AD_FIRE, AD_COLD, AD_SLEE,
-                   AD_DISN, AD_ELEC, AD_DRST, AD_ACID)
+_RND_BREATH_TYP = (
+    AD_MAGM,
+    AD_FIRE,
+    AD_COLD,
+    AD_SLEE,
+    AD_DISN,
+    AD_ELEC,
+    AD_DRST,
+    AD_ACID,
+)
 
 
 def get_atkdam_type(adtyp: int, rng) -> int:
@@ -1080,52 +1388,181 @@ def get_atkdam_type(adtyp: int, rng) -> int:
 # poly_when_stoned (C: poly_when_stoned)
 # ------------------------------------------------------------
 
+
 def poly_when_stoned(ptr: PerMonst, state: MonState) -> bool:
     """Non-stone golems turn into stone golems unless the latter are
     genocided (C: poly_when_stoned)."""
-    return (is_golem(ptr) and ptr.pmidx != _pm("stone golem")
-            and not (state.mvitals[_pm("stone golem")].mvflags & G_GENOD))
+    return (
+        is_golem(ptr)
+        and ptr.pmidx != _pm("stone golem")
+        and not (state.mvitals[_pm("stone golem")].mvflags & G_GENOD)
+    )
 
 
 __all__ = [
-    "MonVitals", "MonState", "mons", "set_mon_data",
-    "attacktype_fordmg", "attacktype", "dmgtype_fromattack", "dmgtype",
-    "noattacks", "ranged_attk", "sticks", "is_armed", "can_breathe",
+    "MonVitals",
+    "MonState",
+    "mons",
+    "set_mon_data",
+    "attacktype_fordmg",
+    "attacktype",
+    "dmgtype_fromattack",
+    "dmgtype",
+    "noattacks",
+    "ranged_attk",
+    "sticks",
+    "is_armed",
+    "can_breathe",
     "could_twoweap",
-    "verysmall", "bigmonst", "pm_resistance",
-    "is_flyer", "is_floater", "is_clinger", "grounded", "is_swimmer",
-    "breathless", "amphibious", "cant_drown", "passes_walls", "amorphous",
-    "noncorporeal", "tunnels", "needspick", "hides_under", "is_hider",
-    "ceiling_hider", "haseyes", "eyecount", "nohands", "nolimbs", "notake",
-    "has_head", "has_horns", "is_whirly", "flaming", "is_silent", "unsolid",
-    "mindless", "humanoid", "is_animal", "slithy", "is_wooden",
-    "thick_skinned", "hug_throttles", "digests", "enfolds", "slimeproof",
-    "lays_eggs", "eggs_in_water", "regenerates", "perceives",
-    "can_teleport", "control_teleport", "telepathic", "acidic",
-    "poisonous", "carnivorous", "herbivorous", "metallivorous", "polyok",
-    "is_shapeshifter", "is_undead", "is_were", "is_elf", "is_dwarf",
-    "is_gnome", "is_orc", "is_human", "is_bat", "is_bird", "is_giant",
-    "is_domestic", "is_demon", "is_mercenary", "is_male", "is_female",
-    "is_neuter", "is_wanderer", "always_hostile", "always_peaceful",
-    "extra_nasty", "strongmonst", "cantwield", "sliparm", "breakarm",
-    "cantweararm", "throws_rocks", "type_is_pname", "is_lord", "is_prince",
-    "is_ndemon", "is_dlord", "is_dprince", "is_minion", "likes_gold",
-    "likes_gems", "likes_objs", "likes_magic", "webmaker", "is_unicorn",
-    "is_longworm", "is_covetous", "infravision", "infravisible",
-    "is_displacer", "is_mplayer", "is_watch", "is_rider",
-    "is_placeholder", "is_reviver", "unique_corpstat", "emits_light",
-    "pm_invisible", "likes_lava", "likes_fire", "touch_petrifies",
-    "flesh_petrifies", "passes_rocks", "is_mind_flayer", "is_vampire",
-    "hates_light", "weirdnonliving", "nonliving", "completelyburns",
-    "completelyrots", "completelyrusts", "vegan", "vegetarian",
-    "corpse_eater", "cantvomit", "num_horns", "hates_silver",
-    "hates_blessings", "passes_bars", "olfaction",
-    "zombie_maker", "zombie_form", "undead_to_corpse", "genus",
+    "verysmall",
+    "bigmonst",
+    "pm_resistance",
+    "is_flyer",
+    "is_floater",
+    "is_clinger",
+    "grounded",
+    "is_swimmer",
+    "breathless",
+    "amphibious",
+    "cant_drown",
+    "passes_walls",
+    "amorphous",
+    "noncorporeal",
+    "tunnels",
+    "needspick",
+    "hides_under",
+    "is_hider",
+    "ceiling_hider",
+    "haseyes",
+    "eyecount",
+    "nohands",
+    "nolimbs",
+    "notake",
+    "has_head",
+    "has_horns",
+    "is_whirly",
+    "flaming",
+    "is_silent",
+    "unsolid",
+    "mindless",
+    "humanoid",
+    "is_animal",
+    "slithy",
+    "is_wooden",
+    "thick_skinned",
+    "hug_throttles",
+    "digests",
+    "enfolds",
+    "slimeproof",
+    "lays_eggs",
+    "eggs_in_water",
+    "regenerates",
+    "perceives",
+    "can_teleport",
+    "control_teleport",
+    "telepathic",
+    "acidic",
+    "poisonous",
+    "carnivorous",
+    "herbivorous",
+    "metallivorous",
+    "polyok",
+    "is_shapeshifter",
+    "is_undead",
+    "is_were",
+    "is_elf",
+    "is_dwarf",
+    "is_gnome",
+    "is_orc",
+    "is_human",
+    "is_bat",
+    "is_bird",
+    "is_giant",
+    "is_domestic",
+    "is_demon",
+    "is_mercenary",
+    "is_male",
+    "is_female",
+    "is_neuter",
+    "is_wanderer",
+    "always_hostile",
+    "always_peaceful",
+    "extra_nasty",
+    "strongmonst",
+    "cantwield",
+    "sliparm",
+    "breakarm",
+    "cantweararm",
+    "throws_rocks",
+    "type_is_pname",
+    "is_lord",
+    "is_prince",
+    "is_ndemon",
+    "is_dlord",
+    "is_dprince",
+    "is_minion",
+    "likes_gold",
+    "likes_gems",
+    "likes_objs",
+    "likes_magic",
+    "webmaker",
+    "is_unicorn",
+    "is_longworm",
+    "is_covetous",
+    "infravision",
+    "infravisible",
+    "is_displacer",
+    "is_mplayer",
+    "is_watch",
+    "is_rider",
+    "is_placeholder",
+    "is_reviver",
+    "unique_corpstat",
+    "emits_light",
+    "pm_invisible",
+    "likes_lava",
+    "likes_fire",
+    "touch_petrifies",
+    "flesh_petrifies",
+    "passes_rocks",
+    "is_mind_flayer",
+    "is_vampire",
+    "hates_light",
+    "weirdnonliving",
+    "nonliving",
+    "completelyburns",
+    "completelyrots",
+    "completelyrusts",
+    "vegan",
+    "vegetarian",
+    "corpse_eater",
+    "cantvomit",
+    "num_horns",
+    "hates_silver",
+    "hates_blessings",
+    "passes_bars",
+    "olfaction",
+    "zombie_maker",
+    "zombie_form",
+    "undead_to_corpse",
+    "genus",
     "pm_to_cham",
-    "M_SEEN_NOTHING", "M_SEEN_MAGR", "M_SEEN_FIRE", "M_SEEN_COLD",
-    "M_SEEN_SLEEP", "M_SEEN_DISINT", "M_SEEN_ELEC", "M_SEEN_POISON",
-    "M_SEEN_ACID", "M_SEEN_REFL",
-    "cvt_adtyp_to_mseenres", "cvt_prop_to_mseenres",
-    "NO_TRAP", "ALL_TRAPS", "mon_knows_traps", "mon_learns_traps",
-    "get_atkdam_type", "poly_when_stoned",
+    "M_SEEN_NOTHING",
+    "M_SEEN_MAGR",
+    "M_SEEN_FIRE",
+    "M_SEEN_COLD",
+    "M_SEEN_SLEEP",
+    "M_SEEN_DISINT",
+    "M_SEEN_ELEC",
+    "M_SEEN_POISON",
+    "M_SEEN_ACID",
+    "M_SEEN_REFL",
+    "cvt_adtyp_to_mseenres",
+    "cvt_prop_to_mseenres",
+    "NO_TRAP",
+    "ALL_TRAPS",
+    "mon_knows_traps",
+    "mon_learns_traps",
+    "get_atkdam_type",
+    "poly_when_stoned",
 ]

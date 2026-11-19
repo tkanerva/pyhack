@@ -6,6 +6,7 @@ Two test styles, mirroring the repo's existing convention:
 - Real Rng: structural properties (ranges, determinism, the
   randint/choice duck-type the older core relies on).
 """
+
 from core.rnd import Rng
 
 
@@ -95,8 +96,7 @@ def test_real_rng_ranges_and_determinism():
 
 def test_real_rng_rejects_bad_args():
     rng = Rng(b"x")
-    for fn in (lambda: rng.rn2(0), lambda: rng.rnd(0),
-               lambda: rng.d(1, 0)):
+    for fn in (lambda: rng.rn2(0), lambda: rng.rnd(0), lambda: rng.d(1, 0)):
         try:
             fn()
             assert False, "expected ValueError"
@@ -134,8 +134,9 @@ def test_display_stream_is_separate_and_deterministic():
     # both streams are deterministic under a fixed seed
     c, d = Rng(b"disp"), Rng(b"disp")
     assert [c.rn2(1000) for _ in range(50)] == [d.rn2(1000) for _ in range(50)]
-    assert [c.rn2_display(1000) for _ in range(50)] == \
-           [d.rn2_display(1000) for _ in range(50)]
+    assert [c.rn2_display(1000) for _ in range(50)] == [
+        d.rn2_display(1000) for _ in range(50)
+    ]
     # drawing from the display stream must not advance the main stream
     a, b = Rng(b"disp"), Rng(b"disp")
     a.rn2_display(1000)

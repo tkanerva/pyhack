@@ -39,6 +39,7 @@ with no cycle, so the C-like integer constants stay unannotated and
 still type-check.  Import core.objects (the public API); import this
 module only from objects.py and objects_data.py.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -85,8 +86,9 @@ DRAGON_SILVER = CLR_BRIGHT_CYAN
 # Object classes (defsym.h)
 # ------------------------------------------------------------
 
+
 class ObjClass(IntEnum):
-    RANDOM = 0        # used for generating random objects
+    RANDOM = 0  # used for generating random objects
     ILLOBJ = 1
     WEAPON = 2
     ARMOR = 3
@@ -122,11 +124,13 @@ MAXOCLASSES = 18
 # lookup is def_oc_syms[oclass].sym.  The values are defsym.h's
 # exactly (NetHack 5.0, rev 1.27 of the table).
 
+
 @dataclass(frozen=True)
 class ClassSym:
     """C: struct class_sym (objclass.h) -- one default object class
     symbol: the floor glyph (sym) + the name / explain strings
     (object_detect / do_look wording in C)."""
+
     sym: str
     name: str
     explain: str
@@ -144,7 +148,7 @@ POTION_SYM = "!"
 SCROLL_SYM = "?"
 SPBOOK_SYM = "+"
 WAND_SYM = "/"
-GOLD_SYM = "$"   # the COIN row's sname (defsym.h OBJCLASS2)
+GOLD_SYM = "$"  # the COIN row's sname (defsym.h OBJCLASS2)
 GEM_SYM = "*"
 ROCK_SYM = "`"
 BALL_SYM = "0"
@@ -161,8 +165,7 @@ DEF_OC_SYMS: "tuple[ClassSym, ...]" = (
     ClassSym(ARMOR_SYM, "armor", "suit or piece of armor"),
     ClassSym(RING_SYM, "rings", "ring"),
     ClassSym(AMULET_SYM, "amulets", "amulet"),
-    ClassSym(TOOL_SYM, "tools",
-             "useful item (pick-axe, key, lamp...)"),
+    ClassSym(TOOL_SYM, "tools", "useful item (pick-axe, key, lamp...)"),
     ClassSym(FOOD_SYM, "food", "piece of food"),
     ClassSym(POTION_SYM, "potions", "potion"),
     ClassSym(SCROLL_SYM, "scrolls", "scroll"),
@@ -190,6 +193,7 @@ def class_glyph(oclass: int) -> str:
 # ------------------------------------------------------------
 # Materials (objclass.h)
 # ------------------------------------------------------------
+
 
 class Material(IntEnum):
     NO_MATERIAL = 0
@@ -219,6 +223,7 @@ class Material(IntEnum):
 # ------------------------------------------------------------
 # Intrinsic properties conveyed (prop.h)
 # ------------------------------------------------------------
+
 
 class Prop(IntEnum):
     FIRE_RES = 1
@@ -300,31 +305,32 @@ class Prop(IntEnum):
 # src/worn.c), used for the hero and future monsters alike.  C values
 # preserved exactly.
 
-W_ARM = 0x00000001      # Body armor
-W_ARMC = 0x00000002     # Cloak
-W_ARMH = 0x00000004     # Helmet/hat
-W_ARMS = 0x00000008     # Shield
-W_ARMG = 0x00000010     # Gloves/gauntlets
-W_ARMF = 0x00000020     # Footwear
-W_ARMU = 0x00000040     # Undershirt
+W_ARM = 0x00000001  # Body armor
+W_ARMC = 0x00000002  # Cloak
+W_ARMH = 0x00000004  # Helmet/hat
+W_ARMS = 0x00000008  # Shield
+W_ARMG = 0x00000010  # Gloves/gauntlets
+W_ARMF = 0x00000020  # Footwear
+W_ARMU = 0x00000040  # Undershirt
 W_ARMOR = W_ARM | W_ARMC | W_ARMH | W_ARMS | W_ARMG | W_ARMF | W_ARMU
 
-W_WEP = 0x00000100      # Wielded weapon
-W_QUIVER = 0x00000200   # Quiver for (f)iring ammo
+W_WEP = 0x00000100  # Wielded weapon
+W_QUIVER = 0x00000200  # Quiver for (f)iring ammo
 W_SWAPWEP = 0x00000400  # Secondary weapon
 W_WEAPONS = W_WEP | W_SWAPWEP | W_QUIVER
 
-W_AMUL = 0x00010000     # Amulet
-W_RINGL = 0x00020000    # Left ring
-W_RINGR = 0x00040000    # Right ring
+W_AMUL = 0x00010000  # Amulet
+W_RINGL = 0x00020000  # Left ring
+W_RINGR = 0x00040000  # Right ring
 W_RING = W_RINGL | W_RINGR
-W_TOOL = 0x00080000     # Eyewear
+W_TOOL = 0x00080000  # Eyewear
 W_ACCESSORY = W_RING | W_AMUL | W_TOOL
 
 
 # ------------------------------------------------------------
 # Skills (skills.h) -- used as oc_subtyp (oc_skill / oc_armcat)
 # ------------------------------------------------------------
+
 
 class Skill(IntEnum):
     P_NONE = 0
@@ -382,35 +388,36 @@ PIERCE, SLASH, WHACK = 1, 2, 4
 # The table row (struct objclass)
 # ------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Object:
-    name: str                    # actual name
-    descr: str | None            # description when name unknown (NoDes = None)
-    oprop: int = 0               # intrinsic property conveyed
+    name: str  # actual name
+    descr: str | None  # description when name unknown (NoDes = None)
+    oprop: int = 0  # intrinsic property conveyed
     oclass: int = ObjClass.ILLOBJ
-    delay: int = 0               # delay when using such an object
+    delay: int = 0  # delay when using such an object
     color: int = CLR_GRAY
-    prob: int = 0                # probability, used in mkobj()
-    weight: int = 0              # encumbrance (1 cn = 0.1 lb.)
-    cost: int = 0                # base cost in shops
-    wsdam: int = 0               # max small monster damage (weapons)
-    wldam: int = 0               # max large monster damage
-    oc1: int = 0                 # hit bonus / armor AC
-    oc2: int = 0                 # armor "can" / spell level
-    nutrition: int = 0           # food value
+    prob: int = 0  # probability, used in mkobj()
+    weight: int = 0  # encumbrance (1 cn = 0.1 lb.)
+    cost: int = 0  # base cost in shops
+    wsdam: int = 0  # max small monster damage (weapons)
+    wldam: int = 0  # max large monster damage
+    oc1: int = 0  # hit bonus / armor AC
+    oc2: int = 0  # armor "can" / spell level
+    nutrition: int = 0  # food value
     # the BITS() bitfields
-    name_known: bool = False     # oc_name_known
-    merge: bool = False          # oc_merge
-    uses_known: bool = False     # oc_uses_known
-    magic: bool = False          # oc_magic
-    charged: bool = False        # oc_charged
-    unique: bool = False         # oc_unique
-    nowish: bool = False         # oc_nowish
-    big: bool = False            # oc_big (bimanual/bulky)
-    tough: bool = False          # oc_tough (hard gems/rings)
-    dir: int = 0                 # zap style or strike mode (overloaded)
+    name_known: bool = False  # oc_name_known
+    merge: bool = False  # oc_merge
+    uses_known: bool = False  # oc_uses_known
+    magic: bool = False  # oc_magic
+    charged: bool = False  # oc_charged
+    unique: bool = False  # oc_unique
+    nowish: bool = False  # oc_nowish
+    big: bool = False  # oc_big (bimanual/bulky)
+    tough: bool = False  # oc_tough (hard gems/rings)
+    dir: int = 0  # zap style or strike mode (overloaded)
     material: int = Material.NO_MATERIAL
-    subtyp: int = 0              # oc_skill / oc_armcat
+    subtyp: int = 0  # oc_skill / oc_armcat
 
     # C macro convenience overloads
     @property
@@ -434,108 +441,286 @@ class Object:
 # Builders mirroring the C macros in objects.h
 # ------------------------------------------------------------
 
+
 def _hardgem(mohs: int) -> bool:
     return mohs >= 8
 
 
 def _generic(descr: str, cls: int) -> Object:
     # GENERIC(): unique, no prob/weight/cost/damage, gray
-    return Object(name=f"generic {descr}", descr=descr,
-                  unique=True, oclass=cls, color=CLR_GRAY)
+    return Object(
+        name=f"generic {descr}", descr=descr, unique=True, oclass=cls, color=CLR_GRAY
+    )
 
 
-def _weapon(name, descr, kn, mg, bi, prob, wt, cost, sdam, ldam, hitbon,
-            typ, sub, metal, color) -> Object:
+def _weapon(
+    name, descr, kn, mg, bi, prob, wt, cost, sdam, ldam, hitbon, typ, sub, metal, color
+) -> Object:
     # WEAPON(): BITS(kn, mg, 1, -, 0, 1, 0, 0, bi, 0, typ, sub, metal)
-    return Object(name=name, descr=descr,
-                  name_known=kn, merge=mg, uses_known=True, charged=True,
-                  big=bi, dir=typ, material=metal, subtyp=sub,
-                  oclass=ObjClass.WEAPON, prob=prob, weight=wt, cost=cost,
-                  wsdam=sdam, wldam=ldam, oc1=hitbon, nutrition=wt,
-                  color=color)
+    return Object(
+        name=name,
+        descr=descr,
+        name_known=kn,
+        merge=mg,
+        uses_known=True,
+        charged=True,
+        big=bi,
+        dir=typ,
+        material=metal,
+        subtyp=sub,
+        oclass=ObjClass.WEAPON,
+        prob=prob,
+        weight=wt,
+        cost=cost,
+        wsdam=sdam,
+        wldam=ldam,
+        oc1=hitbon,
+        nutrition=wt,
+        color=color,
+    )
 
 
-def _projectile(name, descr, kn, prob, wt, cost, sdam, ldam, hitbon,
-                metal, sub, color) -> Object:
+def _projectile(
+    name, descr, kn, prob, wt, cost, sdam, ldam, hitbon, metal, sub, color
+) -> Object:
     # PROJECTILE(): BITS(kn, 1, 1, -, 0, 1, 0, 0, 0, 0, PIERCE, sub, metal)
-    return _weapon(name, descr, kn, True, False, prob, wt, cost, sdam,
-                   ldam, hitbon, PIERCE, sub, metal, color)
+    return _weapon(
+        name,
+        descr,
+        kn,
+        True,
+        False,
+        prob,
+        wt,
+        cost,
+        sdam,
+        ldam,
+        hitbon,
+        PIERCE,
+        sub,
+        metal,
+        color,
+    )
 
 
-def _bow(name, descr, kn, prob, wt, cost, hitbon, metal, sub,
-         color) -> Object:
+def _bow(name, descr, kn, prob, wt, cost, hitbon, metal, sub, color) -> Object:
     # BOW(): BITS(kn, 0, 1, -, 0, 1, 0, 0, 0, 0, 0, sub, metal);
     # sdam=ldam=2
-    return _weapon(name, descr, kn, False, False, prob, wt, cost, 2, 2,
-                   hitbon, 0, sub, metal, color)
+    return _weapon(
+        name,
+        descr,
+        kn,
+        False,
+        False,
+        prob,
+        wt,
+        cost,
+        2,
+        2,
+        hitbon,
+        0,
+        sub,
+        metal,
+        color,
+    )
 
 
-def _armor(name, descr, kn, mgc, blk, power, prob, delay, wt, cost, ac,
-           can, sub, metal, color) -> Object:
+def _armor(
+    name, descr, kn, mgc, blk, power, prob, delay, wt, cost, ac, can, sub, metal, color
+) -> Object:
     # ARMOR(): BITS(kn, 0, 1, -, mgc, 1, 0, 0, blk, 0, 0, sub, metal);
     # oc1 = 10 - ac  (a_ac), oc2 = can (a_can), nutrition = weight
-    return Object(name=name, descr=descr, oprop=power, oclass=ObjClass.ARMOR,
-                  delay=delay, color=color, prob=prob, weight=wt, cost=cost,
-                  oc1=10 - ac, oc2=can, nutrition=wt,
-                  name_known=kn, uses_known=True, magic=mgc, charged=True,
-                  big=blk, material=metal, subtyp=sub)
+    return Object(
+        name=name,
+        descr=descr,
+        oprop=power,
+        oclass=ObjClass.ARMOR,
+        delay=delay,
+        color=color,
+        prob=prob,
+        weight=wt,
+        cost=cost,
+        oc1=10 - ac,
+        oc2=can,
+        nutrition=wt,
+        name_known=kn,
+        uses_known=True,
+        magic=mgc,
+        charged=True,
+        big=blk,
+        material=metal,
+        subtyp=sub,
+    )
 
 
-def _helmet(name, descr, kn, mgc, power, prob, delay, wt, cost, ac, can,
-            metal, color) -> Object:
-    return _armor(name, descr, kn, mgc, False, power, prob, delay, wt, cost,
-                  ac, can, ARM_HELM, metal, color)
+def _helmet(
+    name, descr, kn, mgc, power, prob, delay, wt, cost, ac, can, metal, color
+) -> Object:
+    return _armor(
+        name,
+        descr,
+        kn,
+        mgc,
+        False,
+        power,
+        prob,
+        delay,
+        wt,
+        cost,
+        ac,
+        can,
+        ARM_HELM,
+        metal,
+        color,
+    )
 
 
-def _cloak(name, descr, kn, mgc, power, prob, delay, wt, cost, ac, can,
-           metal, color) -> Object:
-    return _armor(name, descr, kn, mgc, False, power, prob, delay, wt, cost,
-                  ac, can, ARM_CLOAK, metal, color)
+def _cloak(
+    name, descr, kn, mgc, power, prob, delay, wt, cost, ac, can, metal, color
+) -> Object:
+    return _armor(
+        name,
+        descr,
+        kn,
+        mgc,
+        False,
+        power,
+        prob,
+        delay,
+        wt,
+        cost,
+        ac,
+        can,
+        ARM_CLOAK,
+        metal,
+        color,
+    )
 
 
-def _shield(name, descr, kn, mgc, blk, power, prob, delay, wt, cost, ac, can,
-            metal, color) -> Object:
-    return _armor(name, descr, kn, mgc, blk, power, prob, delay, wt, cost,
-                  ac, can, ARM_SHIELD, metal, color)
+def _shield(
+    name, descr, kn, mgc, blk, power, prob, delay, wt, cost, ac, can, metal, color
+) -> Object:
+    return _armor(
+        name,
+        descr,
+        kn,
+        mgc,
+        blk,
+        power,
+        prob,
+        delay,
+        wt,
+        cost,
+        ac,
+        can,
+        ARM_SHIELD,
+        metal,
+        color,
+    )
 
 
-def _gloves(name, descr, kn, mgc, power, prob, delay, wt, cost, ac, can,
-            metal, color) -> Object:
-    return _armor(name, descr, kn, mgc, False, power, prob, delay, wt, cost,
-                  ac, can, ARM_GLOVES, metal, color)
+def _gloves(
+    name, descr, kn, mgc, power, prob, delay, wt, cost, ac, can, metal, color
+) -> Object:
+    return _armor(
+        name,
+        descr,
+        kn,
+        mgc,
+        False,
+        power,
+        prob,
+        delay,
+        wt,
+        cost,
+        ac,
+        can,
+        ARM_GLOVES,
+        metal,
+        color,
+    )
 
 
-def _boots(name, descr, kn, mgc, power, prob, delay, wt, cost, ac, can,
-           metal, color) -> Object:
-    return _armor(name, descr, kn, mgc, False, power, prob, delay, wt, cost,
-                  ac, can, ARM_BOOTS, metal, color)
+def _boots(
+    name, descr, kn, mgc, power, prob, delay, wt, cost, ac, can, metal, color
+) -> Object:
+    return _armor(
+        name,
+        descr,
+        kn,
+        mgc,
+        False,
+        power,
+        prob,
+        delay,
+        wt,
+        cost,
+        ac,
+        can,
+        ARM_BOOTS,
+        metal,
+        color,
+    )
 
 
 def _ring(name, stone, power, cost, mgc, spec, mohs, metal, color) -> Object:
     # RING(): BITS(0, 0, spec, -, mgc, spec, 0, 0, 0, HARDGEM(mohs), 0,
     #              P_NONE, metal); prob=1, wt=3, nutrition=15
-    return Object(name=name, descr=stone, oprop=power, oclass=ObjClass.RING,
-                  color=color, prob=1, weight=3, cost=cost, nutrition=15,
-                  uses_known=spec, magic=mgc, charged=spec,
-                  tough=_hardgem(mohs), material=metal)
+    return Object(
+        name=name,
+        descr=stone,
+        oprop=power,
+        oclass=ObjClass.RING,
+        color=color,
+        prob=1,
+        weight=3,
+        cost=cost,
+        nutrition=15,
+        uses_known=spec,
+        magic=mgc,
+        charged=spec,
+        tough=_hardgem(mohs),
+        material=metal,
+    )
 
 
 def _amulet(name, descr, power, prob) -> Object:
     # AMULET(): BITS(0, 0, 0, -, 1, 0, 0, 0, 0, 0, 0, P_NONE, IRON);
     # wt=20, cost=150, nutrition=20, HI_METAL
-    return Object(name=name, descr=descr, oprop=power,
-                  oclass=ObjClass.AMULET, color=HI_METAL, prob=prob,
-                  weight=20, cost=150, nutrition=20, magic=True,
-                  material=Material.IRON)
+    return Object(
+        name=name,
+        descr=descr,
+        oprop=power,
+        oclass=ObjClass.AMULET,
+        color=HI_METAL,
+        prob=prob,
+        weight=20,
+        cost=150,
+        nutrition=20,
+        magic=True,
+        material=Material.IRON,
+    )
 
 
 def _tool(name, descr, kn, mrg, mgc, chg, prob, wt, cost, mat, color) -> Object:
     # TOOL(): BITS(kn, mrg, chg, -, mgc, chg, 0, 0, 0, 0, 0, P_NONE, mat);
     # nutrition = weight
-    return Object(name=name, descr=descr, oclass=ObjClass.TOOL, color=color,
-                  prob=prob, weight=wt, cost=cost, nutrition=wt,
-                  name_known=kn, merge=mrg, uses_known=chg, magic=mgc,
-                  charged=chg, material=mat)
+    return Object(
+        name=name,
+        descr=descr,
+        oclass=ObjClass.TOOL,
+        color=color,
+        prob=prob,
+        weight=wt,
+        cost=cost,
+        nutrition=wt,
+        name_known=kn,
+        merge=mrg,
+        uses_known=chg,
+        magic=mgc,
+        charged=chg,
+        material=mat,
+    )
 
 
 def _container(name, descr, kn, mgc, chg, prob, wt, cost, mat, color) -> Object:
@@ -550,87 +735,191 @@ def _eyewear(name, descr, kn, prop, prob, wt, cost, mat, color) -> Object:
     return Object(**{**o.__dict__, "oprop": prop})
 
 
-def _weptool(name, descr, kn, mgc, bi, prob, wt, cost, sdam, ldam, strike,
-             sub, mat, color) -> Object:
+def _weptool(
+    name, descr, kn, mgc, bi, prob, wt, cost, sdam, ldam, strike, sub, mat, color
+) -> Object:
     # WEPTOOL(): BITS(kn, 0, 1, -, mgc, 1, 0, 0, bi, 0, strike, sub, mat);
     # note: the C "hitbon" slot gets the strike mode (oc1 is only read
     # for weapons), dir gets it too
-    return Object(name=name, descr=descr, oclass=ObjClass.TOOL, color=color,
-                  prob=prob, weight=wt, cost=cost, wsdam=sdam, wldam=ldam,
-                  oc1=strike, nutrition=wt,
-                  name_known=kn, uses_known=True, magic=mgc, charged=True,
-                  big=bi, dir=strike, material=mat, subtyp=sub)
+    return Object(
+        name=name,
+        descr=descr,
+        oclass=ObjClass.TOOL,
+        color=color,
+        prob=prob,
+        weight=wt,
+        cost=cost,
+        wsdam=sdam,
+        wldam=ldam,
+        oc1=strike,
+        nutrition=wt,
+        name_known=kn,
+        uses_known=True,
+        magic=mgc,
+        charged=True,
+        big=bi,
+        dir=strike,
+        material=mat,
+        subtyp=sub,
+    )
 
 
 def _food(name, prob, delay, wt, unk, mat, nutrition, color) -> Object:
     # FOOD(): BITS(1, 1, unk, -, 0, 0, ...); descr = NoDes (None);
     # cost = nutrition/20 + 5
-    return Object(name=name, descr=None, oclass=ObjClass.FOOD, color=color,
-                  prob=prob, delay=delay, weight=wt,
-                  cost=nutrition // 20 + 5, nutrition=nutrition,
-                  name_known=True, merge=True, uses_known=unk, material=mat)
+    return Object(
+        name=name,
+        descr=None,
+        oclass=ObjClass.FOOD,
+        color=color,
+        prob=prob,
+        delay=delay,
+        weight=wt,
+        cost=nutrition // 20 + 5,
+        nutrition=nutrition,
+        name_known=True,
+        merge=True,
+        uses_known=unk,
+        material=mat,
+    )
 
 
 def _potion(name, descr, mgc, power, prob, cost, color) -> Object:
     # POTION(): BITS(0, 1, 0, -, mgc, 0, ...); wt=20, nutrition=10
-    return Object(name=name, descr=descr, oprop=power,
-                  oclass=ObjClass.POTION, color=color, prob=prob,
-                  weight=20, cost=cost, nutrition=10, merge=True,
-                  magic=mgc, material=Material.GLASS)
+    return Object(
+        name=name,
+        descr=descr,
+        oprop=power,
+        oclass=ObjClass.POTION,
+        color=color,
+        prob=prob,
+        weight=20,
+        cost=cost,
+        nutrition=10,
+        merge=True,
+        magic=mgc,
+        material=Material.GLASS,
+    )
 
 
 def _scroll(name, text, mgc, prob, cost) -> Object:
     # SCROLL(): BITS(0, 1, 0, -, mgc, 0, ...); wt=5, nutrition=6, HI_PAPER
-    return Object(name=name, descr=text, oclass=ObjClass.SCROLL,
-                  color=HI_PAPER, prob=prob, weight=5, cost=cost,
-                  nutrition=6, merge=True, magic=mgc,
-                  material=Material.PAPER)
+    return Object(
+        name=name,
+        descr=text,
+        oclass=ObjClass.SCROLL,
+        color=HI_PAPER,
+        prob=prob,
+        weight=5,
+        cost=cost,
+        nutrition=6,
+        merge=True,
+        magic=mgc,
+        material=Material.PAPER,
+    )
 
 
-def _spell(name, descr, sub, prob, delay, level, mgc, dir, color,
-           mat=None) -> Object:
+def _spell(name, descr, sub, prob, delay, level, mgc, dir, color, mat=None) -> Object:
     # SPELL(): BITS(0, 0, 0, -, mgc, 0, 0, 0, 0, 0, dir, sub, PAPER);
     # wt=50, cost = level*100, oc2 = level, nutrition=20.
     # "dig" uses LEATHER pages (see the C note); pass mat=Material.LEATHER.
     if mat is None:
         mat = Material.PAPER
-    return Object(name=name, descr=descr, oclass=ObjClass.SPBOOK,
-                  color=color, prob=prob, delay=delay, weight=50,
-                  cost=level * 100, oc2=level, nutrition=20,
-                  magic=mgc, dir=dir, material=mat, subtyp=sub)
+    return Object(
+        name=name,
+        descr=descr,
+        oclass=ObjClass.SPBOOK,
+        color=color,
+        prob=prob,
+        delay=delay,
+        weight=50,
+        cost=level * 100,
+        oc2=level,
+        nutrition=20,
+        magic=mgc,
+        dir=dir,
+        material=mat,
+        subtyp=sub,
+    )
 
 
 def _wand(name, typ, prob, cost, mgc, dir, metal, color) -> Object:
     # WAND(): BITS(0, 0, 1, -, mgc, 1, ...); wt=7, nutrition=30
-    return Object(name=name, descr=typ, oclass=ObjClass.WAND, color=color,
-                  prob=prob, weight=7, cost=cost, nutrition=30,
-                  uses_known=True, magic=mgc, charged=True, dir=dir,
-                  material=metal)
+    return Object(
+        name=name,
+        descr=typ,
+        oclass=ObjClass.WAND,
+        color=color,
+        prob=prob,
+        weight=7,
+        cost=cost,
+        nutrition=30,
+        uses_known=True,
+        magic=mgc,
+        charged=True,
+        dir=dir,
+        material=metal,
+    )
 
 
 def _coin(name, prob, metal, worth) -> Object:
     # COIN(): BITS(1, 1, 0, -, 0, 0, ...); descr is NoDes (None);
     # wt=1, nutrition=0, HI_GOLD
-    return Object(name=name, descr=None, oclass=ObjClass.COIN, color=HI_GOLD,
-                  prob=prob, weight=1, cost=worth,
-                  name_known=True, merge=True, material=metal)
+    return Object(
+        name=name,
+        descr=None,
+        oclass=ObjClass.COIN,
+        color=HI_GOLD,
+        prob=prob,
+        weight=1,
+        cost=worth,
+        name_known=True,
+        merge=True,
+        material=metal,
+    )
 
 
 def _gem(name, desc, prob, wt, gval, nutr, mohs, mat, color) -> Object:
     # GEM(): BITS(0, 1, 0, -, 0, 0, 0, 0, 0, HARDGEM(mohs), 0, -P_SLING,
     #            mat); sdam=ldam=3
-    return Object(name=name, descr=desc, oclass=ObjClass.GEM, color=color,
-                  prob=prob, weight=wt, cost=gval, wsdam=3, wldam=3,
-                  nutrition=nutr, merge=True, tough=_hardgem(mohs),
-                  material=mat, subtyp=-Skill.P_SLING)
+    return Object(
+        name=name,
+        descr=desc,
+        oclass=ObjClass.GEM,
+        color=color,
+        prob=prob,
+        weight=wt,
+        cost=gval,
+        wsdam=3,
+        wldam=3,
+        nutrition=nutr,
+        merge=True,
+        tough=_hardgem(mohs),
+        material=mat,
+        subtyp=-Skill.P_SLING,
+    )
 
 
-def _rock(name, desc, kn, prob, wt, gval, sdam, ldam, mgc, nutr, mohs,
-          mat, color) -> Object:
+def _rock(
+    name, desc, kn, prob, wt, gval, sdam, ldam, mgc, nutr, mohs, mat, color
+) -> Object:
     # ROCK(): BITS(kn, 1, 0, -, mgc, 0, 0, 0, 0, HARDGEM(mohs), 0, -P_SLING,
     #             mat)
-    return Object(name=name, descr=desc, oclass=ObjClass.GEM, color=color,
-                  prob=prob, weight=wt, cost=gval, wsdam=sdam, wldam=ldam,
-                  nutrition=nutr, name_known=kn, merge=True, magic=mgc,
-                  tough=_hardgem(mohs), material=mat,
-                  subtyp=-Skill.P_SLING)
+    return Object(
+        name=name,
+        descr=desc,
+        oclass=ObjClass.GEM,
+        color=color,
+        prob=prob,
+        weight=wt,
+        cost=gval,
+        wsdam=sdam,
+        wldam=ldam,
+        nutrition=nutr,
+        name_known=kn,
+        merge=True,
+        magic=mgc,
+        tough=_hardgem(mohs),
+        material=mat,
+        subtyp=-Skill.P_SLING,
+    )

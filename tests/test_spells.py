@@ -1,4 +1,5 @@
 """Tests for the spell system."""
+
 from core import Direction
 from core.spells import cast_spell
 from core.types import Item, ObjectType, SpellType, Tile, TerrainType
@@ -9,8 +10,14 @@ from conftest import SeqRng, make_monster, make_world
 def world_with_book(spell_type, monsters=(), uen=10):
     w = make_world(monsters=monsters)
     w.hero.uen = w.hero.uenmax = uen
-    book = Item(id="book_0", otype=ObjectType.BOOK, name="Book",
-                spe=1, spell_type=spell_type, carrier="player")
+    book = Item(
+        id="book_0",
+        otype=ObjectType.BOOK,
+        name="Book",
+        spe=1,
+        spell_type=spell_type,
+        carrier="player",
+    )
     w.items["book_0"] = book
     w.hero.inventory.append(book)
     return w
@@ -19,10 +26,13 @@ def world_with_book(spell_type, monsters=(), uen=10):
 def test_beam_hits_first_monster_only():
     """NetHack beams stop at the first hit monster; the monster behind
     is untouched (the old spell.py beam hit everything in range)."""
-    w = world_with_book(SpellType.MAGIC_MISSILE, monsters=[
-        make_monster(pos=(7, 4)),
-        make_monster(kind="orc", pos=(9, 4)),
-    ])
+    w = world_with_book(
+        SpellType.MAGIC_MISSILE,
+        monsters=[
+            make_monster(pos=(7, 4)),
+            make_monster(kind="orc", pos=(9, 4)),
+        ],
+    )
     # draws: the failure check (2 <= 78), the beam range (3), the damage
     # (1d6 = 5: the level-1 caster's spell power is ulevel/2 + 1 = 1 die)
     cast_spell(w, "player", "book_0", Direction.E, SeqRng(2, 3, 5))
@@ -31,8 +41,7 @@ def test_beam_hits_first_monster_only():
 
 
 def test_wall_stops_beam():
-    w = world_with_book(SpellType.MAGIC_MISSILE,
-                        monsters=[make_monster(pos=(10, 4))])
+    w = world_with_book(SpellType.MAGIC_MISSILE, monsters=[make_monster(pos=(10, 4))])
     # wall at (x=8, y=4): replace the tile and refresh the sight rows
     set_tile(w, (8, 4), Tile(typ=TerrainType.STONE))
     # draws: the failure check (2 <= 78), the beam range (3) -- the beam
@@ -43,8 +52,7 @@ def test_wall_stops_beam():
 
 def test_sleep_spell():
     # SLEEP is level 3 -> cost 15 Pw
-    w = world_with_book(SpellType.SLEEP,
-                        monsters=[make_monster(pos=(8, 4))], uen=15)
+    w = world_with_book(SpellType.SLEEP, monsters=[make_monster(pos=(8, 4))], uen=15)
     # draws: the failure check (2 <= 74), the beam range (3) -- the sleep
     # ray itself draws nothing (the flat 25 turns)
     cast_spell(w, "player", "book_0", Direction.E, SeqRng(2, 3))
@@ -63,9 +71,9 @@ def test_healing_spell():
 
 def test_death_spell_ignored_by_undead():
     # DEATH (finger of death) is level 7 -> cost 35 Pw
-    w = world_with_book(SpellType.DEATH,
-                        monsters=[make_monster(is_undead=True, pos=(8, 4))],
-                        uen=35)
+    w = world_with_book(
+        SpellType.DEATH, monsters=[make_monster(is_undead=True, pos=(8, 4))], uen=35
+    )
     # draws: the failure check (2 <= 58), the beam range (3) -- the
     # resistance check comes before the damage roll, so a resisted zap
     # draws no dice
@@ -74,8 +82,7 @@ def test_death_spell_ignored_by_undead():
 
 
 def test_book_consumed_after_last_charge():
-    w = world_with_book(SpellType.MAGIC_MISSILE,
-                        monsters=[make_monster(pos=(8, 4))])
+    w = world_with_book(SpellType.MAGIC_MISSILE, monsters=[make_monster(pos=(8, 4))])
     # draws: the failure check (2 <= 78), the beam range (3), the damage
     # (1d6 = 5)
     cast_spell(w, "player", "book_0", Direction.E, SeqRng(2, 3, 5))
@@ -85,6 +92,7 @@ def test_book_consumed_after_last_charge():
 # ------------------------------------------------------------
 # Energy system integration (Phase 3)
 # ------------------------------------------------------------
+
 
 def test_cast_spell_drains_energy():
     """Casting a spell drains the appropriate Pw from the caster."""

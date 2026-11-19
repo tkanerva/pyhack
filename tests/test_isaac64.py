@@ -6,17 +6,19 @@ range, seed sensitivity, block structure, and the rejection logic of
 next_uint().  If you can compile the C original, add a golden-sequence
 test here.
 """
+
 import random
 
-from core.isaac64 import (ISAAC64_SEED_SZ_MAX, ISAAC64_SZ, Isaac64, MASK)
+from core.isaac64 import ISAAC64_SEED_SZ_MAX, ISAAC64_SZ, Isaac64, MASK
 
 
 def test_same_seed_same_sequence():
     a, b = Isaac64(), Isaac64()
     a.init(b"\x01\x02\x03")
     b.init(b"\x01\x02\x03")
-    assert [a.next_uint64() for _ in range(1000)] == \
-           [b.next_uint64() for _ in range(1000)]
+    assert [a.next_uint64() for _ in range(1000)] == [
+        b.next_uint64() for _ in range(1000)
+    ]
 
 
 def test_different_seeds_diverge():
@@ -57,11 +59,11 @@ def test_first_block_consumed_in_reverse():
     last = None
     for _ in range(ISAAC64_SZ - 1):  # exhaust the first block
         last = isaac.next_uint64()
-    assert last == saved_r0          # the 256th draw was r[0]
+    assert last == saved_r0  # the 256th draw was r[0]
     assert isaac._n == 0
-    fresh = isaac.next_uint64()      # rolls a new block
+    fresh = isaac.next_uint64()  # rolls a new block
     assert isaac._n == ISAAC64_SZ - 1
-    assert fresh != saved_r255       # new block differs (overwhelmingly likely)
+    assert fresh != saved_r255  # new block differs (overwhelmingly likely)
 
 
 def test_next_uint_range():
@@ -98,8 +100,9 @@ def test_seed_longer_than_max_is_truncated():
     a, b = Isaac64(), Isaac64()
     a.init(common + b"EXTRA-STUFF")
     b.init(common + b"OTHER-STUFF")
-    assert [a.next_uint64() for _ in range(100)] == \
-           [b.next_uint64() for _ in range(100)]
+    assert [a.next_uint64() for _ in range(100)] == [
+        b.next_uint64() for _ in range(100)
+    ]
 
 
 def test_odd_length_seed():

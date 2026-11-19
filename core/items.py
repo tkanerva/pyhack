@@ -5,6 +5,7 @@ gone) live in core.invent (the pack half) and core.mkobj (the
 place_object / add_to_container half) -- the PLAN-INVENT.md
 "single writer" rule.  This module is query-only.
 """
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -26,11 +27,15 @@ def cancel_items(world: World, monster: Monster) -> List[Event]:
             item.spe = 0
             changed = True
     if changed:
-        text = ("Your magical items are cancelled!" if monster.is_hero
-                else f"{monster.name}'s magical items are cancelled!")
+        text = (
+            "Your magical items are cancelled!"
+            if monster.is_hero
+            else f"{monster.name}'s magical items are cancelled!"
+        )
         return [MessageEvent(text)]
-    text = "Nothing happens." if monster.is_hero \
-        else f"Nothing happens to {monster.name}."
+    text = (
+        "Nothing happens." if monster.is_hero else f"Nothing happens to {monster.name}."
+    )
     return [MessageEvent(text)]
 
 

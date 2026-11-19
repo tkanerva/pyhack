@@ -84,6 +84,7 @@ Simplifications (documented, not bugs):
   way C does; a single hero attack has no such sequence, so this is
   unobservable.
 """
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -91,16 +92,26 @@ from typing import List, Optional
 from .events import DamageEvent, Event, MessageEvent
 from .items import wielded_of
 from .mondata import is_flyer
-from .monst import (Attack, MZ_LARGE, PerMonst, S_BLOB, S_ELEMENTAL, S_EYE,
-                    S_FUNGUS, S_JELLY, S_LIGHT, S_VORTEX)
+from .monst import (
+    Attack,
+    MZ_LARGE,
+    PerMonst,
+    S_BLOB,
+    S_ELEMENTAL,
+    S_EYE,
+    S_FUNGUS,
+    S_JELLY,
+    S_LIGHT,
+    S_VORTEX,
+)
 from .rules import current_ability
 from .types import DamageType, Monster, World
 from .weapon import Skills, abon, dmgval, hitval, weapon_hit_bonus
 
-
 # ------------------------------------------------------------
 # RNG adapters (C rnd/d over the runtime rng.randint duck-type)
 # ------------------------------------------------------------
+
 
 def _rnd(rng, n: int) -> int:
     """C ``rnd(n)``: a roll in 1..n."""
@@ -143,6 +154,7 @@ class _RngLike:
 # To-hit (C: known_hitum)
 # ------------------------------------------------------------
 
+
 def known_hitum(mdat: PerMonst, hero: Monster) -> int:
     """The bare-hand to-hit base: the target number the hero must roll
     (d20) at or under to hit the monster of type ``mdat`` (C:
@@ -160,6 +172,7 @@ def known_hitum(mdat: PerMonst, hero: Monster) -> int:
 # Pure predicates
 # ------------------------------------------------------------
 
+
 def backstabbable(mon: Monster) -> bool:
     """True if the monster can be backstabbed (C: backstabbable): it does
     not fly, is not large or bigger, and has a normal body (not an
@@ -175,8 +188,7 @@ def backstabbable(mon: Monster) -> bool:
         return False
     if mdat.msize >= MZ_LARGE:
         return False
-    if mdat.mlet in (S_BLOB, S_EYE, S_LIGHT, S_VORTEX, S_JELLY, S_FUNGUS,
-                     S_ELEMENTAL):
+    if mdat.mlet in (S_BLOB, S_EYE, S_LIGHT, S_VORTEX, S_JELLY, S_FUNGUS, S_ELEMENTAL):
         return False
     return True
 
@@ -187,13 +199,17 @@ def hmonas(mon: Monster, hero: Monster) -> bool:
     type (no polymorph), so this is always False; it becomes live once
     the hero can be polymorphed.
     """
-    return (hero.mdata is not None and mon.mdata is not None
-            and hero.mdata.pmidx == mon.mdata.pmidx)
+    return (
+        hero.mdata is not None
+        and mon.mdata is not None
+        and hero.mdata.pmidx == mon.mdata.pmidx
+    )
 
 
 # ------------------------------------------------------------
 # The melee-weapon path (the demo's weapon subset)
 # ------------------------------------------------------------
+
 
 def _weapon_hit_bonus(hero: Monster, weapon, mdat: PerMonst) -> int:
     """The hero's total to-hit bonus with ``weapon`` against the
@@ -218,14 +234,16 @@ def _weapon_hit_bonus(hero: Monster, weapon, mdat: PerMonst) -> int:
     # current_ability), not the raw base fields: a worn ability ring
     # feeds the to-hit bonus (C: abon(ACURR(A_STR), ACURR(A_DEX), ulev)).
     # A ring-less hero reads back its base, so the demo is unchanged.
-    return (weapon_hit_bonus(skills, weapon)
-            + abon(current_ability(hero, "str"),
-                   current_ability(hero, "dex"), hero.ulevel)
-            + hitval(weapon, mdat, in_pool=False))
+    return (
+        weapon_hit_bonus(skills, weapon)
+        + abon(current_ability(hero, "str"), current_ability(hero, "dex"), hero.ulevel)
+        + hitval(weapon, mdat, in_pool=False)
+    )
 
 
-def _weapon_attack(mdat: PerMonst, mon: Monster, hero: Monster, weapon,
-                   rng) -> List[Event]:
+def _weapon_attack(
+    mdat: PerMonst, mon: Monster, hero: Monster, weapon, rng
+) -> List[Event]:
     """The hero's melee weapon attack (C: the ``hmon_hitmon_weapon_melee``
     subset).
 
@@ -241,19 +259,24 @@ def _weapon_attack(mdat: PerMonst, mon: Monster, hero: Monster, weapon,
     Like ``uhitm`` this is a producer: it returns the event *intents*
     and mutates nothing.
     """
-    threshold = known_hitum(mdat, hero) + _weapon_hit_bonus(
-        hero, weapon, mdat)
+    threshold = known_hitum(mdat, hero) + _weapon_hit_bonus(hero, weapon, mdat)
     roll = _rnd(rng, 20)
     if roll <= threshold:
         dmg = dmgval(weapon, mdat, _RngLike(rng))
         events: List[Event] = [
-            MessageEvent(f"⚔️ You hit {mon.name} for {dmg} damage with "
-                         f"your {weapon.name}.")
+            MessageEvent(
+                f"⚔️ You hit {mon.name} for {dmg} damage with " f"your {weapon.name}."
+            )
         ]
         if dmg > 0:
-            events.append(DamageEvent(target=mon.id, amount=dmg,
-                                      damage_type=DamageType.MELEE,
-                                      source="player"))
+            events.append(
+                DamageEvent(
+                    target=mon.id,
+                    amount=dmg,
+                    damage_type=DamageType.MELEE,
+                    source="player",
+                )
+            )
         return events
     return [MessageEvent("🛡️ You miss.")]
 
@@ -261,6 +284,7 @@ def _weapon_attack(mdat: PerMonst, mon: Monster, hero: Monster, weapon,
 # ------------------------------------------------------------
 # The main entry point (C: uhitm)
 # ------------------------------------------------------------
+
 
 def uhitm(world: World, mon_id: str, rng) -> List[Event]:
     """The hero attacks the monster at ``mon_id`` (C: uhitm).
@@ -287,13 +311,16 @@ def uhitm(world: World, mon_id: str, rng) -> List[Event]:
     roll = _rnd(rng, 20)
     if roll <= threshold:
         dmg = _dice(rng, 1, hero.damage)
-        events: List[Event] = [
-            MessageEvent(f"⚔️ You hit {mon.name} for {dmg} damage.")
-        ]
+        events: List[Event] = [MessageEvent(f"⚔️ You hit {mon.name} for {dmg} damage.")]
         if dmg > 0:
-            events.append(DamageEvent(target=mon_id, amount=dmg,
-                                      damage_type=DamageType.MELEE,
-                                      source="player"))
+            events.append(
+                DamageEvent(
+                    target=mon_id,
+                    amount=dmg,
+                    damage_type=DamageType.MELEE,
+                    source="player",
+                )
+            )
         return events
     return [MessageEvent("🛡️ You miss.")]
 
@@ -301,6 +328,7 @@ def uhitm(world: World, mon_id: str, rng) -> List[Event]:
 # ------------------------------------------------------------
 # STUBs -- the C API surface, filled by the named ports
 # ------------------------------------------------------------
+
 
 def hitum(mon: Monster, mattk: Attack) -> bool:
     """STUB (C: hitum): the hero's full hit handler for one of the
@@ -332,8 +360,7 @@ def double_punch() -> bool:
     raise NotImplementedError("double_punch: two-weapon combat is not ported yet")
 
 
-def mhitm_really_poison(mon: Monster, mattk: Attack, hero: Monster,
-                        mhm) -> None:
+def mhitm_really_poison(mon: Monster, mattk: Attack, hero: Monster, mhm) -> None:
     """STUB (C: mhitm_really_poison): apply a poisoned-weapon attack to
     the hero.  Needs the hero weapon (opoisoned) -- the hero weapon port."""
     raise NotImplementedError("mhitm_really_poison: weapon poison is not ported yet")
@@ -351,8 +378,7 @@ def steal_it(mon: Monster, mattk: Attack) -> None:
     raise NotImplementedError("steal_it: the money system is not ported yet")
 
 
-def mhitm_mgc_atk_negated(magr: Monster, mdef: Monster,
-                          verbosely: bool) -> bool:
+def mhitm_mgc_atk_negated(magr: Monster, mdef: Monster, verbosely: bool) -> bool:
     """STUB (C: mhitm_mgc_atk_negated): whether the target's armor /
     protection negates a magical attack.  Needs the equipment /
     ``magic_negation`` machinery.  The do_wear / artifact ports."""

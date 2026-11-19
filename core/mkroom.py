@@ -597,17 +597,18 @@ def fill_zoo(
                 if (
                     tile.roomno != rmno
                     or tile.edge
-                    or (room.doorct and sh is not None
-                        and distmin(pos, sh) <= 1)
+                    or (room.doorct and sh is not None and distmin(pos, sh) <= 1)
                 ):
                     continue
-            elif (
-                not space_pos(map_.tile_at(pos).typ)
-                or (room.doorct and sh is not None and (
+            elif not space_pos(map_.tile_at(pos).typ) or (
+                room.doorct
+                and sh is not None
+                and (
                     (sx == room.lx and sh[0] == sx - 1)
                     or (sx == room.hx and sh[0] == sx + 1)
                     or (sy == room.ly and sh[1] == sy - 1)
-                    or (sy == room.hy and sh[1] == sy + 1)))
+                    or (sy == room.hy and sh[1] == sy + 1)
+                )
             ):
                 continue
             # don't place a monster on an explicitly placed throne
@@ -620,8 +621,7 @@ def fill_zoo(
             elif typ == RoomType.MORGUE:
                 pm = morguemon(world, rng)
             elif typ == RoomType.BEEHIVE:
-                pm = _mons_row(PM_QUEEN_BEE if (sx, sy) == (tx, ty)
-                               else PM_KILLER_BEE)
+                pm = _mons_row(PM_QUEEN_BEE if (sx, sy) == (tx, ty) else PM_KILLER_BEE)
             elif typ == RoomType.LEPREHALL:
                 pm = _mons_row(PM_LEPRECHAUN)
             elif typ == RoomType.COCKNEST:
@@ -630,8 +630,9 @@ def fill_zoo(
                 pm = antholemon(world)
             else:
                 pm = None
-            mon = makemon(world, rng, pm, pos, MM_ASLEEP | MM_NOGRP,
-                          map_, lev, in_mklev=True)
+            mon = makemon(
+                world, rng, pm, pos, MM_ASLEEP | MM_NOGRP, map_, lev, in_mklev=True
+            )
             if mon is not None:
                 mon.sleeping = 1
                 if typ == RoomType.COURT and mon.mpeaceful:
@@ -652,31 +653,35 @@ def fill_zoo(
                     mksobj_at(world, rng, int(O.CORPSE), pos, lev)
                 if not rng.rn2(10):  # lots of treasure buried with dead
                     mksobj_at(
-                        world, rng,
+                        world,
+                        rng,
                         int(O.LARGE_BOX) if rng.rn2(3) else int(O.CHEST),
-                        pos, lev)
+                        pos,
+                        lev,
+                    )
                 if not rng.rn2(5):
                     make_grave(world, map_, list(traps), pos)
             elif typ == RoomType.BEEHIVE:
                 if not rng.rn2(3):
-                    mksobj_at(world, rng, int(O.LUMP_OF_ROYAL_JELLY),
-                              pos, lev)
+                    mksobj_at(world, rng, int(O.LUMP_OF_ROYAL_JELLY), pos, lev)
             elif typ == RoomType.BARRACKS:
                 if not rng.rn2(20):  # the payroll and some loot
                     mksobj_at(
-                        world, rng,
+                        world,
+                        rng,
                         int(O.LARGE_BOX) if rng.rn2(3) else int(O.CHEST),
-                        pos, lev)
+                        pos,
+                        lev,
+                    )
             elif typ == RoomType.COCKNEST:
                 if not rng.rn2(3):
                     # C: mk_tt_object(STATUE, ...) = mksobj_at with
                     # init=FALSE (player statues never contain books)
-                    statue = mksobj_at(world, rng, int(O.STATUE), pos,
-                                       lev, init=False)
+                    statue = mksobj_at(world, rng, int(O.STATUE), pos, lev, init=False)
                     for _ in range(rng.rn2(5)):
                         add_to_container(
-                            world, statue,
-                            mkobj(world, rng, RANDOM_CLASS, False))
+                            world, statue, mkobj(world, rng, RANDOM_CLASS, False)
+                        )
                     statue.owt = weight(world, statue)
             elif typ == RoomType.ANTHOLE:
                 if not rng.rn2(3):
@@ -729,10 +734,8 @@ def fill_special_room(
     mktemple; its flag here is the special-level half).
     """
     for sidx in room.sbrooms:
-        fill_special_room(world, rng, map_, traps, map_.subrooms[sidx],
-                          lev)
-    if (room.rtype in (RoomType.OROOM, RoomType.THEMEROOM)
-            or room.needfill == FILL_NONE):
+        fill_special_room(world, rng, map_, traps, map_.subrooms[sidx], lev)
+    if room.rtype in (RoomType.OROOM, RoomType.THEMEROOM) or room.needfill == FILL_NONE:
         return
     if room.needfill == FILL_NORMAL:
         if room.rtype >= RoomType.SHOPBASE:
@@ -742,8 +745,7 @@ def fill_special_room(
         if room.rtype == RoomType.VAULT:
             for sx in range(room.lx, room.hx + 1):
                 for sy in range(room.ly, room.hy + 1):
-                    mkgold(world, rng, rng.rn1(abs(lev) * 100, 51),
-                           (sx, sy), lev)
+                    mkgold(world, rng, rng.rn1(abs(lev) * 100, 51), (sx, sy), lev)
         elif room.rtype in (
             RoomType.COURT,
             RoomType.ZOO,
@@ -840,9 +842,7 @@ def mkshop(map_: Map, stairs: Iterable[Stairway], rng) -> Optional[Room]:
             break
         i += 1
     # big rooms cannot be wand or book shops -- make them general stores
-    if isbig(room) and SHOPTYPES[i].symb in (
-        int(ObjClass.WAND), int(ObjClass.SPBOOK)
-    ):
+    if isbig(room) and SHOPTYPES[i].symb in (int(ObjClass.WAND), int(ObjClass.SPBOOK)):
         i = 0
 
     room.rtype = RoomType(int(RoomType.SHOPBASE) + i)
@@ -959,8 +959,7 @@ def mkswamp(
                     or world.monster_at_lev(lev, pos) is not None
                     or any(t.pos == pos and not t.disarmed for t in traps)
                     or any(
-                        it.lev == lev and it.pos == pos
-                        for it in world.items.values()
+                        it.lev == lev and it.pos == pos for it in world.items.values()
                     )
                 ):
                     continue
@@ -971,19 +970,35 @@ def mkswamp(
                     if not eelct or not rng.rn2(4):
                         # C: mkclass() won't do, as we might get kraken
                         pm = (
-                            _mons_row(PM_GIANT_EEL) if rng.rn2(5)
-                            else _mons_row(PM_PIRANHA) if rng.rn2(2)
-                            else _mons_row(PM_ELECTRIC_EEL)
+                            _mons_row(PM_GIANT_EEL)
+                            if rng.rn2(5)
+                            else (
+                                _mons_row(PM_PIRANHA)
+                                if rng.rn2(2)
+                                else _mons_row(PM_ELECTRIC_EEL)
+                            )
                         )
                         makemon(
-                            world, rng, pm, pos, NO_MM_FLAGS,
-                            map_, lev, in_mklev=True,
+                            world,
+                            rng,
+                            pm,
+                            pos,
+                            NO_MM_FLAGS,
+                            map_,
+                            lev,
+                            in_mklev=True,
                         )
                         eelct += 1
                 elif not rng.rn2(4):  # C: swamps tend to be moldy
                     makemon(
-                        world, rng, mkclass(world, rng, S_FUNGUS, 0),
-                        pos, NO_MM_FLAGS, map_, lev, in_mklev=True,
+                        world,
+                        rng,
+                        mkclass(world, rng, S_FUNGUS, 0),
+                        pos,
+                        NO_MM_FLAGS,
+                        map_,
+                        lev,
+                        in_mklev=True,
                     )
         map_.flags.has_swamp = True
         last = room
@@ -1098,8 +1113,13 @@ def antholemon(world: World) -> Optional[PerMonst]:
 
 
 def mkundead(
-    world: World, rng, map_: Map, lev: int, pos: Pos,
-    revive_corpses: bool, mm_flags: MmFlags,
+    world: World,
+    rng,
+    map_: Map,
+    lev: int,
+    pos: Pos,
+    revive_corpses: bool,
+    mm_flags: MmFlags,
 ) -> None:
     """C: mkroom.c#mkundead -- a swarm of undead around `pos`
     ((level_difficulty() + 1) / 10 + rnd(5) of them, each a
@@ -1129,9 +1149,7 @@ def mkundead(
     map_.flags.graveyard = True
 
 
-def mk_zoo_thronemon(
-    world: World, rng, map_: Map, lev: int, pos: Pos
-) -> None:
+def mk_zoo_thronemon(world: World, rng, map_: Map, lev: int, pos: Pos) -> None:
     """C: mkroom.c#mk_zoo_thronemon -- the throne-room monarch: a gnome
     ruler / dwarf ruler / elven monarch / ogre tyrant by a
     rnd(level_difficulty()) roll, asleep and hostile (mpeaceful forced
@@ -1140,13 +1158,11 @@ def mk_zoo_thronemon(
     """
     i = rng.rnd(level_difficulty(world))
     pm = (
-        PM_OGRE_TYRANT if i > 9
-        else PM_ELVEN_MONARCH if i > 5
-        else PM_DWARF_RULER if i > 2
-        else PM_GNOME_RULER
+        PM_OGRE_TYRANT
+        if i > 9
+        else PM_ELVEN_MONARCH if i > 5 else PM_DWARF_RULER if i > 2 else PM_GNOME_RULER
     )
-    mon = makemon(world, rng, _mons_row(pm), pos, NO_MM_FLAGS,
-                  map_, lev, in_mklev=True)
+    mon = makemon(world, rng, _mons_row(pm), pos, NO_MM_FLAGS, map_, lev, in_mklev=True)
     if mon is not None:
         mon.sleeping = 1
         mon.mpeaceful = False

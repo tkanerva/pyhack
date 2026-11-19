@@ -5,6 +5,7 @@ ARCHITECTURE.md): effects are keyed by an explicit PotionType, and the
 broken blessed/cursed inversion logic from the old PotionActor (which
 flipped blessed/cursed on *every* quaff unconditionally) is dropped.
 """
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -43,18 +44,33 @@ def quaff(world: World, monster_id: str, item_id: str, rng) -> List[Event]:
         events += put_to_sleep(world, monster_id, 15)
     elif ptype == PotionType.POLYMORPH:
         if not can_polymorph(actor):
-            events.append(MessageEvent("You are unaffected." if actor.is_hero
-                                       else f"{actor.name} is unaffected."))
+            events.append(
+                MessageEvent(
+                    "You are unaffected."
+                    if actor.is_hero
+                    else f"{actor.name} is unaffected."
+                )
+            )
         else:
             actor.name = f"Polymorphed {actor.name}"
-            events.append(MessageEvent("You shudder and transform!" if actor.is_hero
-                                       else f"{actor.name} shudders and transforms!"))
+            events.append(
+                MessageEvent(
+                    "You shudder and transform!"
+                    if actor.is_hero
+                    else f"{actor.name} shudders and transforms!"
+                )
+            )
     elif ptype == PotionType.CANCELLATION:
         events += cancel_items(world, actor)
     elif ptype == PotionType.INCREASE_AC:
         actor.ac -= 1
-        events.append(MessageEvent("You feel stronger." if actor.is_hero
-                                   else f"{actor.name} feels stronger."))
+        events.append(
+            MessageEvent(
+                "You feel stronger."
+                if actor.is_hero
+                else f"{actor.name} feels stronger."
+            )
+        )
 
     # C: dopot -- the flask is used up (C: useup(otmp): a potion's
     # count is its quan, and the last flask takes the item with it)

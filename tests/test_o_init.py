@@ -1,10 +1,27 @@
 """Tests for the object table initialization (core.o_init)."""
-from core.objects import (IMMEDIATE, MAXOCLASSES, NODIR, NUM_OBJECTS,
-                          O, OBJECTS, ObjClass)
-from core.o_init import (ObjTables, discover_object,
-                         interesting_to_discover, obj_shuffle_range,
-                         oinit, observe_object, randomize_gem_colors,
-                         setgemprobs, shuffle, typename, undiscover_object)
+
+from core.objects import (
+    IMMEDIATE,
+    MAXOCLASSES,
+    NODIR,
+    NUM_OBJECTS,
+    O,
+    OBJECTS,
+    ObjClass,
+)
+from core.o_init import (
+    ObjTables,
+    discover_object,
+    interesting_to_discover,
+    obj_shuffle_range,
+    oinit,
+    observe_object,
+    randomize_gem_colors,
+    setgemprobs,
+    shuffle,
+    typename,
+    undiscover_object,
+)
 from core.rnd import Rng
 
 
@@ -26,7 +43,7 @@ def test_gem_probs_at_level_zero():
         assert state.prob[first + j] == 0
     # the rest get (171 + k) / (LAST_REAL_GEM + 1 - first) with the
     # advanced first, i.e. (171+k)/13: mostly 13, tail 14
-    rest = state.prob[first + 9:O.JADE.value + 1]
+    rest = state.prob[first + 9 : O.JADE.value + 1]
     assert all(p in (13, 14) for p in rest)
     assert rest[0] == 13 and rest[-1] == 14
 
@@ -78,13 +95,13 @@ def test_randomize_gem_colors():
     state.descr = [o.descr for o in OBJECTS]
     state.color = [o.color for o in OBJECTS]
     randomize_gem_colors(state, ScriptedRng(1, 1, 1))
-    assert state.descr[O.TURQUOISE.value] == "blue"      # sapphire's
+    assert state.descr[O.TURQUOISE.value] == "blue"  # sapphire's
     assert state.descr[O.AQUAMARINE.value] == "blue"
     assert state.descr[O.FLUORITE.value] == "blue"
     state.descr = [o.descr for o in OBJECTS]
     randomize_gem_colors(state, ScriptedRng(0, 0, 3))
-    assert state.descr[O.FLUORITE.value] == "green"      # emerald's
-    assert state.descr[O.TURQUOISE.value] == "green"     # unchanged
+    assert state.descr[O.FLUORITE.value] == "green"  # emerald's
+    assert state.descr[O.TURQUOISE.value] == "green"  # unchanged
 
 
 def test_shuffle_permutes_unknown_descriptions():
@@ -92,9 +109,10 @@ def test_shuffle_permutes_unknown_descriptions():
     # rings: all unknown, all described -> descriptions are permuted
     lo = state.bases[ObjClass.RING]
     hi = state.bases[ObjClass.RING + 1] - 1
-    static = sorted(d for d in (OBJECTS[i].descr for i in range(lo, hi + 1))
-                    if d is not None)
-    current = sorted(d for d in state.descr[lo:hi + 1] if d is not None)
+    static = sorted(
+        d for d in (OBJECTS[i].descr for i in range(lo, hi + 1)) if d is not None
+    )
+    current = sorted(d for d in state.descr[lo : hi + 1] if d is not None)
     assert static == current
 
 
@@ -108,29 +126,44 @@ def test_known_objects_do_not_move():
     shuffle(state, Rng(b"shuf3"), lo, hi, True)
     assert state.descr[otyp] == fixed
     # water keeps its fixed description (outside the shuffle range)
-    assert obj_shuffle_range(state, O.POT_WATER) == (O.POT_WATER,
-                                                     O.POT_WATER)
+    assert obj_shuffle_range(state, O.POT_WATER) == (O.POT_WATER, O.POT_WATER)
     assert hi == O.POT_WATER.value - 1
 
 
 def test_obj_shuffle_ranges():
     state = ObjTables(Rng(b"range"))
-    assert obj_shuffle_range(state, O.RIN_PROTECTION) == \
-        (state.bases[ObjClass.RING], state.bases[ObjClass.RING + 1] - 1)
-    assert obj_shuffle_range(state, O.SCR_IDENTIFY) == \
-        (state.bases[ObjClass.SCROLL], O.SCR_BLANK_PAPER.value - 1)
-    assert obj_shuffle_range(state, O.SPE_HEALING) == \
-        (state.bases[ObjClass.SPBOOK], O.SPE_BLANK_PAPER.value - 1)
-    assert obj_shuffle_range(state, O.AMULET_OF_GUARDING) == \
-        (state.bases[ObjClass.AMULET], O.FAKE_AMULET_OF_YENDOR.value - 1)
-    assert obj_shuffle_range(state, O.HELMET) == \
-        (O.HELMET.value, O.HELM_OF_TELEPATHY.value)
-    assert obj_shuffle_range(state, O.PLATE_MAIL) == \
-        (O.PLATE_MAIL.value, O.PLATE_MAIL.value)  # suits don't shuffle
-    assert obj_shuffle_range(state, O.SPEED_BOOTS) == \
-        (O.SPEED_BOOTS.value, O.LEVITATION_BOOTS.value)
-    assert obj_shuffle_range(state, O.WAN_LIGHT) == \
-        (state.bases[ObjClass.WAND], state.bases[ObjClass.WAND + 1] - 1)
+    assert obj_shuffle_range(state, O.RIN_PROTECTION) == (
+        state.bases[ObjClass.RING],
+        state.bases[ObjClass.RING + 1] - 1,
+    )
+    assert obj_shuffle_range(state, O.SCR_IDENTIFY) == (
+        state.bases[ObjClass.SCROLL],
+        O.SCR_BLANK_PAPER.value - 1,
+    )
+    assert obj_shuffle_range(state, O.SPE_HEALING) == (
+        state.bases[ObjClass.SPBOOK],
+        O.SPE_BLANK_PAPER.value - 1,
+    )
+    assert obj_shuffle_range(state, O.AMULET_OF_GUARDING) == (
+        state.bases[ObjClass.AMULET],
+        O.FAKE_AMULET_OF_YENDOR.value - 1,
+    )
+    assert obj_shuffle_range(state, O.HELMET) == (
+        O.HELMET.value,
+        O.HELM_OF_TELEPATHY.value,
+    )
+    assert obj_shuffle_range(state, O.PLATE_MAIL) == (
+        O.PLATE_MAIL.value,
+        O.PLATE_MAIL.value,
+    )  # suits don't shuffle
+    assert obj_shuffle_range(state, O.SPEED_BOOTS) == (
+        O.SPEED_BOOTS.value,
+        O.LEVITATION_BOOTS.value,
+    )
+    assert obj_shuffle_range(state, O.WAN_LIGHT) == (
+        state.bases[ObjClass.WAND],
+        state.bases[ObjClass.WAND + 1] - 1,
+    )
 
 
 def test_discovery_tracking():
@@ -140,8 +173,7 @@ def test_discovery_tracking():
     def class_disco(ocls):
         lo = state.bases[ocls]
         hi = state.bases[ocls + 1]
-        return [state.disco[i] for i in range(lo, hi)
-                if state.disco[i] is not None]
+        return [state.disco[i] for i in range(lo, hi) if state.disco[i] is not None]
 
     assert not interesting_to_discover(state, t)
     assert discover_object(state, t, True, True)
@@ -180,9 +212,9 @@ def test_uname_wins_in_typename():
     # descriptions, so pin the lookup, not a specific string)
     assert typename(state, t) == state.descr[t]
     discover_object(state, t, True, False)
-    assert typename(state, t) == "healing"     # known: real name
+    assert typename(state, t) == "healing"  # known: real name
     state.uname[t] = "slime"
-    assert typename(state, t) == "slime"       # called: user name
+    assert typename(state, t) == "slime"  # called: user name
 
 
 def test_base_class_order():

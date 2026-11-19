@@ -4,23 +4,70 @@ Focus: the algorithms -- hit/damage bonus computation (including RNG
 draw order), the strength/dexterity bonus tables, and the skill-slot
 economy.  Naming tables are not pinned here.
 """
+
 from dataclasses import dataclass, replace
 
 from core.mondata import hates_blessings, hates_silver
-from core.monst import (M1_THICK_HIDE, MONS, PM_GARTER_SNAKE, PM_GOBLIN,
-                        PM_GRAY_DRAGON, PM_GHOST, PM_NAMES,
-                        PM_STONE_GOLEM, PM_VAMPIRE)
-from core.objects import (ObjClass, ObjType as O, OBJECTS, PIERCE,  # noqa: E741
-                          Skill, WHACK)
+from core.monst import (
+    M1_THICK_HIDE,
+    MONS,
+    PM_GARTER_SNAKE,
+    PM_GOBLIN,
+    PM_GRAY_DRAGON,
+    PM_GHOST,
+    PM_NAMES,
+    PM_STONE_GOLEM,
+    PM_VAMPIRE,
+)
+from core.objects import (
+    ObjClass,
+    ObjType as O,
+    OBJECTS,
+    PIERCE,  # noqa: E741
+    Skill,
+    WHACK,
+)
 from core.weapon import (
-    DefSkill, P_BASIC, P_EXPERT, P_GRAND_MASTER, P_MASTER, P_SKILLED,
-    P_UNSKILLED, RWERP, Skills, abon, advance_skill, add_weapon_skill,
-    ammo_and_launcher, bimanual, can_advance, could_advance, dbon,
-    dmgval, drain_weapon_skill, hitval, is_ammo, is_axe, is_blade,
-    is_blunt_weapon, is_graystone, is_launcher, is_multigen, is_pick,
-    is_pole, is_spear, is_weptool, is_wet_towel, lose_weapon_skill,
-    matching_launcher, peaked_skill, practice_needed_to_advance,
-    skill_init, use_skill, weapon_hit_bonus, weapon_dam_bonus,
+    DefSkill,
+    P_BASIC,
+    P_EXPERT,
+    P_GRAND_MASTER,
+    P_MASTER,
+    P_SKILLED,
+    P_UNSKILLED,
+    RWERP,
+    Skills,
+    abon,
+    advance_skill,
+    add_weapon_skill,
+    ammo_and_launcher,
+    bimanual,
+    can_advance,
+    could_advance,
+    dbon,
+    dmgval,
+    drain_weapon_skill,
+    hitval,
+    is_ammo,
+    is_axe,
+    is_blade,
+    is_blunt_weapon,
+    is_graystone,
+    is_launcher,
+    is_multigen,
+    is_pick,
+    is_pole,
+    is_spear,
+    is_weptool,
+    is_wet_towel,
+    lose_weapon_skill,
+    matching_launcher,
+    peaked_skill,
+    practice_needed_to_advance,
+    skill_init,
+    use_skill,
+    weapon_hit_bonus,
+    weapon_dam_bonus,
     weapon_type,
 )
 import core.weapon as W
@@ -29,6 +76,7 @@ import core.weapon as W
 @dataclass
 class FakeObj:
     """Minimal struct-obj stand-in for the ObjLike protocol."""
+
     otyp: int
     oclass: int
     spe: int = 0
@@ -77,12 +125,13 @@ stone_golem = MONS[PM_STONE_GOLEM]
 # weapon_type and the predicates that gate the algorithms
 # ------------------------------------------------------------
 
+
 def test_weapon_type():
     assert weapon_type(None) == Skill.P_BARE_HANDED_COMBAT
     assert weapon_type(obj("DAGGER")) == Skill.P_DAGGER
-    assert weapon_type(obj("ARROW")) == Skill.P_BOW       # ammo: abs(-P_BOW)
+    assert weapon_type(obj("ARROW")) == Skill.P_BOW  # ammo: abs(-P_BOW)
     assert weapon_type(obj("CROSSBOW_BOLT")) == Skill.P_CROSSBOW
-    assert weapon_type(obj("DIAMOND")) == Skill.P_SLING    # gems are sling ammo
+    assert weapon_type(obj("DIAMOND")) == Skill.P_SLING  # gems are sling ammo
     assert weapon_type(obj("PICK_AXE")) == Skill.P_PICK_AXE  # weptool
     assert weapon_type(obj("TOWEL")) == Skill.P_NONE
     assert weapon_type(obj("BOULDER")) == Skill.P_NONE
@@ -107,8 +156,8 @@ def test_ammo_and_launcher_pairing():
 def test_strike_mode_and_material_predicates():
     assert is_weptool(obj("PICK_AXE")) and is_weptool(obj("UNICORN_HORN"))
     assert is_weptool(obj("GRAPPLING_HOOK"))
-    assert not is_weptool(obj("TOWEL"))      # towel's oc_skill is P_NONE
-    assert not is_weptool(obj("DAGGER"))     # not a tool
+    assert not is_weptool(obj("TOWEL"))  # towel's oc_skill is P_NONE
+    assert not is_weptool(obj("DAGGER"))  # not a tool
     assert bimanual(obj("BATTLE_AXE")) and not bimanual(obj("DAGGER"))
     assert is_blunt_weapon(obj("MACE")) and is_blunt_weapon(obj("CLUB"))
     assert is_blunt_weapon(obj("PICK_AXE"))  # weptool, WHACK
@@ -133,8 +182,9 @@ def test_strike_mode_and_material_predicates():
 # hitval
 # ------------------------------------------------------------
 
+
 def test_hitval_base_and_enchantment():
-    assert hitval(obj("DAGGER"), goblin) == 2      # oc_hitbon
+    assert hitval(obj("DAGGER"), goblin) == 2  # oc_hitbon
     assert hitval(obj("DAGGER", spe=3), goblin) == 5
     assert hitval(obj("SPEAR"), goblin) == 0
 
@@ -159,8 +209,7 @@ def test_hitval_trident_vs_swimmers():
 
 
 def test_hitval_pick_vs_wallwalkers():
-    pm = replace(MONS[PM_GHOST],
-                 mflags1=MONS[PM_GHOST].mflags1 | M1_THICK_HIDE)
+    pm = replace(MONS[PM_GHOST], mflags1=MONS[PM_GHOST].mflags1 | M1_THICK_HIDE)
     # 4 = WHACK in the weptool's oc_hitbon slot (5.0) + 2 pick bonus
     assert hitval(obj("PICK_AXE"), pm) == 4 + 2
 
@@ -175,6 +224,7 @@ def test_weptool_hitbon_is_strike_mode_in_5_0():
 # ------------------------------------------------------------
 # dmgval
 # ------------------------------------------------------------
+
 
 def test_dmgval_cream_pie_consumes_no_dice():
     assert dmgval(obj("CREAM_PIE"), goblin, ScriptedRng()) == 0
@@ -215,39 +265,37 @@ def test_dmgval_additive_bonuses_keep_rng_order():
     # silver dagger vs vampire: rnd(4) base + rnd(20) silver
     assert dmgval(obj("SILVER_DAGGER"), vampire, ScriptedRng(3, 9)) == 4 + 10
     # blessed too: blessed rnd(4) is drawn BEFORE silver rnd(20)
-    assert (dmgval(obj("SILVER_DAGGER", blessed=True), vampire,
-                   ScriptedRng(1, 3, 9)) == 2 + 4 + 10)
+    assert (
+        dmgval(obj("SILVER_DAGGER", blessed=True), vampire, ScriptedRng(1, 3, 9))
+        == 2 + 4 + 10
+    )
     # axe vs a wooden creature: rnd(6) base + rnd(4) axe
-    wood_golem = replace(MONS[PM_STONE_GOLEM],
-                         pmidx=PM_NAMES.index("wood golem"))
+    wood_golem = replace(MONS[PM_STONE_GOLEM], pmidx=PM_NAMES.index("wood golem"))
     assert hates_silver(wood_golem) is False
     assert dmgval(obj("AXE"), wood_golem, ScriptedRng(3, 9)) == 4 + 2
     # goblin hates nothing: no bonus rolls, no dice after the base
-    assert dmgval(obj("SILVER_DAGGER", blessed=True), goblin,
-                  ScriptedRng(3)) == 4
+    assert dmgval(obj("SILVER_DAGGER", blessed=True), goblin, ScriptedRng(3)) == 4
 
 
 def test_dmgval_heavy_iron_ball():
     assert dmgval(obj("HEAVY_IRON_BALL"), goblin, ScriptedRng(5)) == 6
     # 480 + 160: +rnd(4); presets 5, 2 -> 6 + 3
-    assert (dmgval(obj("HEAVY_IRON_BALL", owt=640), goblin,
-                   ScriptedRng(5, 2)) == 6 + 3)
+    assert dmgval(obj("HEAVY_IRON_BALL", owt=640), goblin, ScriptedRng(5, 2)) == 6 + 3
     # 480 + 320: +rnd(8); presets 5, 2 -> 6 + 3 (2 % 8)
-    assert (dmgval(obj("HEAVY_IRON_BALL", owt=800), goblin,
-                   ScriptedRng(5, 2)) == 6 + 3)
+    assert dmgval(obj("HEAVY_IRON_BALL", owt=800), goblin, ScriptedRng(5, 2)) == 6 + 3
 
 
 def test_dmgval_erosion_floor():
     # rusted dagger: rnd(4) base - 3 erosion, floor 1
     assert dmgval(obj("DAGGER", oeroded=3), goblin, ScriptedRng(0)) == 1
     # greatest_erosion uses the larger of the two fields
-    assert dmgval(obj("DAGGER", oeroded=1, oeroded2=3), goblin,
-                  ScriptedRng(0)) == 1
+    assert dmgval(obj("DAGGER", oeroded=1, oeroded2=3), goblin, ScriptedRng(0)) == 1
 
 
 # ------------------------------------------------------------
 # abon / dbon
 # ------------------------------------------------------------
+
 
 def test_abon_table():
     # str on the 5.0 linear scale: 18/50 == 68, 18/100 == 118
@@ -255,17 +303,17 @@ def test_abon_table():
     assert abon(7, 10, ulevel=5) == -1
     assert abon(16, 10, ulevel=5) == 0
     assert abon(17, 10, ulevel=5) == 1
-    assert abon(67, 10, ulevel=5) == 1    # 18/49
-    assert abon(68, 10, ulevel=5) == 2    # 18/50
-    assert abon(117, 10, ulevel=5) == 2   # 18/99
-    assert abon(118, 10, ulevel=5) == 3   # 18/100
+    assert abon(67, 10, ulevel=5) == 1  # 18/49
+    assert abon(68, 10, ulevel=5) == 2  # 18/50
+    assert abon(117, 10, ulevel=5) == 2  # 18/99
+    assert abon(118, 10, ulevel=5) == 3  # 18/100
     # low-level kludge (+1 below level 3) and the dex ladder
-    assert abon(17, 3, ulevel=1) == -1    # 1 + 1 - 3
-    assert abon(17, 5, ulevel=1) == 0     # 1 + 1 - 2
-    assert abon(17, 7, ulevel=1) == 1     # 1 + 1 - 1
-    assert abon(17, 13, ulevel=1) == 2    # 1 + 1
-    assert abon(17, 15, ulevel=1) == 3    # 1 + 1 + (15-14)
-    assert abon(17, 10, ulevel=3) == 1    # no kludge at level 3
+    assert abon(17, 3, ulevel=1) == -1  # 1 + 1 - 3
+    assert abon(17, 5, ulevel=1) == 0  # 1 + 1 - 2
+    assert abon(17, 7, ulevel=1) == 1  # 1 + 1 - 1
+    assert abon(17, 13, ulevel=1) == 2  # 1 + 1
+    assert abon(17, 15, ulevel=1) == 3  # 1 + 1 + (15-14)
+    assert abon(17, 10, ulevel=3) == 1  # no kludge at level 3
     # polymorphed: the monster's adjusted level minus 3 (ulevel unused)
     assert abon(10, 10, ulevel=1, upolyd=True, poly_lev=7) == 4
 
@@ -274,13 +322,13 @@ def test_dbon_table():
     assert dbon(5) == -1
     assert dbon(15) == 0
     assert dbon(17) == 1
-    assert dbon(18) == 2      # 18/00
-    assert dbon(93) == 3      # 18/75
-    assert dbon(94) == 4      # 18/76
-    assert dbon(108) == 4     # 18/90
-    assert dbon(109) == 5     # 18/91
-    assert dbon(117) == 5     # 18/99
-    assert dbon(118) == 6     # 18/100
+    assert dbon(18) == 2  # 18/00
+    assert dbon(93) == 3  # 18/75
+    assert dbon(94) == 4  # 18/76
+    assert dbon(108) == 4  # 18/90
+    assert dbon(109) == 5  # 18/91
+    assert dbon(117) == 5  # 18/99
+    assert dbon(118) == 6  # 18/100
     assert dbon(5, upolyd=True) == 0
 
 
@@ -288,11 +336,14 @@ def test_dbon_table():
 # the skill system
 # ------------------------------------------------------------
 
+
 def test_skill_init_role_flow():
     s = Skills()
-    table = (DefSkill(Skill.P_DAGGER, P_SKILLED),
-             DefSkill(Skill.P_BOW, P_EXPERT),
-             DefSkill(Skill.P_BARE_HANDED_COMBAT, P_MASTER))
+    table = (
+        DefSkill(Skill.P_DAGGER, P_SKILLED),
+        DefSkill(Skill.P_BOW, P_EXPERT),
+        DefSkill(Skill.P_BARE_HANDED_COMBAT, P_MASTER),
+    )
     skill_init(s, table, held=(int(O.DAGGER), int(O.ARROW)), role="")
     # carried dagger -> basic; carried arrows (ammo) -> no bow skill
     assert s.skill[Skill.P_DAGGER] == P_BASIC
@@ -313,18 +364,21 @@ def test_skill_init_role_magic():
     s = Skills()
     # the wizard table must cover both spell skills (the role branch
     # sets both to P_BASIC, C: the WIZARD_SKILLS rows)
-    skill_init(s, (DefSkill(Skill.P_ATTACK_SPELL, P_EXPERT),
-                   DefSkill(Skill.P_ENCHANTMENT_SPELL, P_EXPERT),),
-               role="wizard")
+    skill_init(
+        s,
+        (
+            DefSkill(Skill.P_ATTACK_SPELL, P_EXPERT),
+            DefSkill(Skill.P_ENCHANTMENT_SPELL, P_EXPERT),
+        ),
+        role="wizard",
+    )
     assert s.skill[Skill.P_ATTACK_SPELL] == P_BASIC
     assert s.skill[Skill.P_ENCHANTMENT_SPELL] == P_BASIC
     s2 = Skills()
-    skill_init(s2, (DefSkill(Skill.P_HEALING_SPELL, P_EXPERT),),
-               role="monk")
+    skill_init(s2, (DefSkill(Skill.P_HEALING_SPELL, P_EXPERT),), role="monk")
     assert s2.skill[Skill.P_HEALING_SPELL] == P_BASIC
     s3 = Skills()
-    skill_init(s3, (DefSkill(Skill.P_CLERIC_SPELL, P_EXPERT),),
-               role="cleric")
+    skill_init(s3, (DefSkill(Skill.P_CLERIC_SPELL, P_EXPERT),), role="cleric")
     assert s3.skill[Skill.P_CLERIC_SPELL] == P_BASIC
 
 
@@ -333,8 +387,10 @@ def test_use_skill_threshold_message():
     skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),))
     assert s.skill[Skill.P_DAGGER] == P_UNSKILLED
     assert not can_advance(s, Skill.P_DAGGER)
-    assert use_skill(s, Skill.P_DAGGER, 20) == \
-        "You feel more confident in your weapon skills."
+    assert (
+        use_skill(s, Skill.P_DAGGER, 20)
+        == "You feel more confident in your weapon skills."
+    )
     assert can_advance(s, Skill.P_DAGGER)
     # spread over two calls: silent below the threshold, the message
     # on the call that reaches it (5 + 15 == 20, the practice needed
@@ -342,20 +398,21 @@ def test_use_skill_threshold_message():
     s2 = Skills()
     skill_init(s2, (DefSkill(Skill.P_DAGGER, P_EXPERT),))
     assert use_skill(s2, Skill.P_DAGGER, 5) is None
-    assert use_skill(s2, Skill.P_DAGGER, 15) == \
-        "You feel more confident in your weapon skills."
+    assert (
+        use_skill(s2, Skill.P_DAGGER, 15)
+        == "You feel more confident in your weapon skills."
+    )
     assert can_advance(s2, Skill.P_DAGGER)
 
 
 def test_slots_and_advance_cost():
     s = Skills()
-    skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),),
-               held=(int(O.DAGGER),))
+    skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),), held=(int(O.DAGGER),))
     assert s.skill[Skill.P_DAGGER] == P_BASIC
     assert s.weapon_slots == 1
     use_skill(s, Skill.P_DAGGER, 80)
     assert not can_advance(s, Skill.P_DAGGER)  # practiced, but 2 slots needed
-    add_weapon_skill(s, 1)                     # a level-up slot
+    add_weapon_skill(s, 1)  # a level-up slot
     assert can_advance(s, Skill.P_DAGGER)
     msg = advance_skill(s, Skill.P_DAGGER)
     assert s.skill[Skill.P_DAGGER] == P_SKILLED
@@ -364,8 +421,8 @@ def test_slots_and_advance_cost():
     assert s.skill_record == [Skill.P_DAGGER] and s.skills_advanced == 1
     # practice does not reset on advance; skilled->expert needs 180 and
     # 3 slots (slots_required reads the CURRENT level)
-    use_skill(s, Skill.P_DAGGER, 180)          # 100 + 180 = 280 >= 180
-    add_weapon_skill(s, 3)                     # 0 + 3 = 3 slots
+    use_skill(s, Skill.P_DAGGER, 180)  # 100 + 180 = 280 >= 180
+    add_weapon_skill(s, 3)  # 0 + 3 = 3 slots
     assert can_advance(s, Skill.P_DAGGER)
     advance_skill(s, Skill.P_DAGGER)
     assert s.skill[Skill.P_DAGGER] == P_EXPERT
@@ -374,8 +431,7 @@ def test_slots_and_advance_cost():
 
 def test_lose_weapon_skill():
     s = Skills()
-    skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),),
-               held=(int(O.DAGGER),))
+    skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),), held=(int(O.DAGGER),))
     s.weapon_slots = 5
     use_skill(s, Skill.P_DAGGER, 80)
     advance_skill(s, Skill.P_DAGGER)
@@ -390,9 +446,11 @@ def test_lose_weapon_skill():
 
 def test_drain_weapon_skill():
     s = Skills()
-    skill_init(s, (DefSkill(Skill.P_DAGGER, P_EXPERT),
-                   DefSkill(Skill.P_BOW, P_EXPERT)),
-               held=(int(O.DAGGER), int(O.BOW)))
+    skill_init(
+        s,
+        (DefSkill(Skill.P_DAGGER, P_EXPERT), DefSkill(Skill.P_BOW, P_EXPERT)),
+        held=(int(O.DAGGER), int(O.BOW)),
+    )
     assert s.skill[Skill.P_DAGGER] == P_BASIC and s.skill[Skill.P_BOW] == P_BASIC
     s.weapon_slots = 4
     use_skill(s, Skill.P_DAGGER, 80)
@@ -410,25 +468,24 @@ def test_drain_weapon_skill():
 
 def test_peaked_skill():
     s = Skills()
-    skill_init(s, (DefSkill(Skill.P_DAGGER, P_BASIC),),
-               held=(int(O.DAGGER),))
+    skill_init(s, (DefSkill(Skill.P_DAGGER, P_BASIC),), held=(int(O.DAGGER),))
     assert not can_advance(s, Skill.P_DAGGER)
     assert not could_advance(s, Skill.P_DAGGER)
     assert not peaked_skill(s, Skill.P_DAGGER)  # no practice yet
-    use_skill(s, Skill.P_DAGGER, 80)            # 20 + 80 >= 80
+    use_skill(s, Skill.P_DAGGER, 80)  # 20 + 80 >= 80
     assert peaked_skill(s, Skill.P_DAGGER)
-    assert not can_advance(s, Skill.P_DAGGER)   # still capped at basic
+    assert not can_advance(s, Skill.P_DAGGER)  # still capped at basic
 
 
 # ------------------------------------------------------------
 # skill-based attack bonuses
 # ------------------------------------------------------------
 
+
 def test_weapon_hit_bonus():
     s = Skills()
     d = obj("DAGGER")
-    for level, want in ((P_UNSKILLED, -4), (P_BASIC, 0), (P_SKILLED, 2),
-                        (P_EXPERT, 3)):
+    for level, want in ((P_UNSKILLED, -4), (P_BASIC, 0), (P_SKILLED, 2), (P_EXPERT, 3)):
         s.skill[Skill.P_DAGGER] = level
         assert weapon_hit_bonus(s, d) == want, level
     # two-weapon: the LOWER of the two skills applies
@@ -440,8 +497,7 @@ def test_weapon_hit_bonus():
     # not in hand: the ordinary weapon skill applies
     assert weapon_hit_bonus(s, d, twoweap=True, in_hands=False) == 3
     # bare hands: b.h. basic +1, skilled +2, expert +2, master +3
-    for level, want in ((P_BASIC, 1), (P_SKILLED, 2), (P_EXPERT, 2),
-                        (P_MASTER, 3)):
+    for level, want in ((P_BASIC, 1), (P_SKILLED, 2), (P_EXPERT, 2), (P_MASTER, 3)):
         s.skill[Skill.P_BARE_HANDED_COMBAT] = level
         assert weapon_hit_bonus(s, None) == want, level
     # mounted and unskilled in riding
@@ -460,8 +516,7 @@ def test_weapon_hit_bonus_martial():
 def test_weapon_dam_bonus():
     s = Skills()
     d = obj("DAGGER")
-    for level, want in ((P_UNSKILLED, -2), (P_BASIC, 0), (P_SKILLED, 1),
-                        (P_EXPERT, 2)):
+    for level, want in ((P_UNSKILLED, -2), (P_BASIC, 0), (P_SKILLED, 1), (P_EXPERT, 2)):
         s.skill[Skill.P_DAGGER] = level
         assert weapon_dam_bonus(s, d) == want, level
     # bare hands, including the martial multiplier
@@ -481,22 +536,26 @@ def test_weapon_dam_bonus():
     s.skill[Skill.P_RIDING] = P_EXPERT
     assert weapon_dam_bonus(s, d, mounted=True) == 2
     s.skill[Skill.P_DAGGER] = P_EXPERT
-    assert weapon_dam_bonus(s, d, twoweap=True, in_hands=True,
-                            mounted=True) == 1
+    assert weapon_dam_bonus(s, d, twoweap=True, in_hands=True, mounted=True) == 1
 
 
 # ------------------------------------------------------------
 # data for the mon.c port + the stub surface
 # ------------------------------------------------------------
 
+
 def test_monster_weapon_tables():
     # every table entry is a real weapon/tool/food/gem type (the gray
     # stones in RWERP are GEM_CLASS in the 5.0 table)
     for otyp in RWERP:
         assert int(OBJECTS[otyp].oclass) in (
-            int(ObjClass.WEAPON), int(ObjClass.TOOL), int(ObjClass.FOOD),
-            int(ObjClass.GEM)), otyp
+            int(ObjClass.WEAPON),
+            int(ObjClass.TOOL),
+            int(ObjClass.FOOD),
+            int(ObjClass.GEM),
+        ), otyp
     from core.weapon import autoreturn_weapon, monmightthrowwep
+
     assert autoreturn_weapon(obj("AKLYS")).tethered == 1
     assert autoreturn_weapon(obj("BOOMERANG")) is None
     assert monmightthrowwep(obj("DAGGER"))
@@ -504,10 +563,20 @@ def test_monster_weapon_tables():
 
 
 def test_stubs_raise():
-    from core.weapon import (add_skills_to_menu, enhance_weapon_skill,
-                             mon_wield_item, mwepgone, possibly_unwield,
-                             select_hwep, select_rwep, setmnotwielded,
-                             silver_sears, show_skills, special_dmgval)
+    from core.weapon import (
+        add_skills_to_menu,
+        enhance_weapon_skill,
+        mon_wield_item,
+        mwepgone,
+        possibly_unwield,
+        select_hwep,
+        select_rwep,
+        setmnotwielded,
+        silver_sears,
+        show_skills,
+        special_dmgval,
+    )
+
     calls = (
         (enhance_weapon_skill, ()),
         (show_skills, ()),
@@ -533,10 +602,12 @@ def test_stubs_raise():
 # structural contracts and the module self-check
 # ------------------------------------------------------------
 
+
 def test_rnglike_shape():
     # RngLike names exactly the draws the module makes; both the real
     # RNG (core.rnd.Rng) and the test stand-in provide them
     from core.rnd import Rng
+
     for rng in (Rng(), ScriptedRng(0)):
         assert callable(rng.rnd)
         assert callable(rng.rn2)

@@ -53,37 +53,61 @@ STUB / no-op hooks (named so the C call sites have a home):
 timeout.c), the ``maybe_unpaid`` half of ``consume_obj_charge`` (the
 shop, PLAN-SPECIAL-ROOMS).
 """
+
 from __future__ import annotations
 
 from typing import List, Optional
 
 from .hacklib_inflection import makeplural
-from .objects import (DEF_OC_SYMS, MAXOCLASSES, ObjClass, W_ACCESSORY,
-                      W_AMUL, W_ARMOR, W_RINGL, W_RINGR, W_WEAPONS)
+from .objects import (
+    DEF_OC_SYMS,
+    MAXOCLASSES,
+    ObjClass,
+    W_ACCESSORY,
+    W_AMUL,
+    W_ARMOR,
+    W_RINGL,
+    W_RINGR,
+    W_WEAPONS,
+)
 from .types import Item, Monster, World
 
 # C: hack.h -- the invlet space (the defsym.h GOLD_SYM lives in
 # core.objects_defs; the rest are hack.h)
-GOLD_SYM = "$"      # C: GOLD_SYM -- the one coin stack's letter
-NOINVSYM = "#"      # C: NOINVSYM -- overflow, all 52 letters are in use
+GOLD_SYM = "$"  # C: GOLD_SYM -- the one coin stack's letter
+NOINVSYM = "#"  # C: NOINVSYM -- overflow, all 52 letters are in use
 CONTAINED_SYM = ">"  # C: CONTAINED_SYM -- designator for inside a container
-HANDS_SYM = "-"      # C: HANDS_SYM -- hands|fingers|self, per context
-invlet_basic = 52    # C: invlet_basic -- a..z A..Z
+HANDS_SYM = "-"  # C: HANDS_SYM -- hands|fingers|self, per context
+invlet_basic = 52  # C: invlet_basic -- a..z A..Z
 
 # C: invent.c names[] (4841-4845) -- let_to_name's class table,
 # indexed by oclass (C passes the oclass id AS the menu "letter")
 _CLASS_NAMES = (
-    "",                  # 0: C's NULL slot
-    "Illegal objects",   # 1: ILLOBJ_CLASS
-    "Weapons", "Armor", "Rings", "Amulets", "Tools", "Comestibles",
-    "Potions", "Scrolls", "Spellbooks", "Wands", "Coins",
-    "Gems/Stones", "Boulders/Statues", "Iron balls", "Chains", "Venoms",
+    "",  # 0: C's NULL slot
+    "Illegal objects",  # 1: ILLOBJ_CLASS
+    "Weapons",
+    "Armor",
+    "Rings",
+    "Amulets",
+    "Tools",
+    "Comestibles",
+    "Potions",
+    "Scrolls",
+    "Spellbooks",
+    "Wands",
+    "Coins",
+    "Gems/Stones",
+    "Boulders/Statues",
+    "Iron balls",
+    "Chains",
+    "Venoms",
 )
 
 
 # ------------------------------------------------------------
 # The letter group (C: the invlet allocation of src/invent.c)
 # ------------------------------------------------------------
+
 
 def invletter_value(letter: str) -> int:
     """C: invletter_value (src/invent.c 391-399): the sort rank of an
@@ -158,8 +182,7 @@ def assigninvlet(world: World, mon: Monster, item: Item) -> str:
         i = (i + 1) % n
         steps += 1
     if free >= 0:
-        item.invlet = (chr(ord("a") + free) if free < 26
-                       else chr(ord("A") + free - 26))
+        item.invlet = chr(ord("a") + free) if free < 26 else chr(ord("A") + free - 26)
         world.lastinvnr = free
     else:
         item.invlet = NOINVSYM
@@ -183,8 +206,7 @@ def obj_to_let(item: Item) -> str:
     return item.invlet
 
 
-def let_to_name(let: int, unpaid: bool = False,
-                showsym: bool = False) -> str:
+def let_to_name(let: int, unpaid: bool = False, showsym: bool = False) -> str:
     """C: let_to_name (src/invent.c 4852-4891): the menu heading for a
     class -- the C names[] table (the oclass id is the "letter"), the
     CONTAINED_SYM "Bagged/Boxed items" case, the "Unpaid " prefix, and
@@ -198,14 +220,14 @@ def let_to_name(let: int, unpaid: bool = False,
         class_name = _CLASS_NAMES[1]
     out = ("Unpaid " if unpaid else "") + class_name
     if 1 <= let < MAXOCLASSES and showsym:
-        out += " " * max(7 - len(class_name), 0) \
-            + "  ('%s')" % DEF_OC_SYMS[let].sym
+        out += " " * max(7 - len(class_name), 0) + "  ('%s')" % DEF_OC_SYMS[let].sym
     return out
 
 
 # ------------------------------------------------------------
 # The location group (C: the gi.invent chain operations)
 # ------------------------------------------------------------
+
 
 def addinv(world: World, mon_id: str, item: Item) -> Item:
     """C: addinv -> addinv_core0 (src/invent.c 1151-1155, 1055-1148):
@@ -226,12 +248,11 @@ def addinv(world: World, mon_id: str, item: Item) -> Item:
     """
     mon = world.actors[mon_id]
     if item.carrier is not None:
-        raise ValueError(f"addinv: {item.id} is already carried "
-                         f"by {item.carrier}")
+        raise ValueError(f"addinv: {item.id} is already carried " f"by {item.carrier}")
     for other in world.items.values():
         if other is not item and item.id in other.contents:
             raise ValueError(f"addinv: {item.id} is inside {other.id}")
-    item.pos = None                      # C: obj_extract_self(obj)
+    item.pos = None  # C: obj_extract_self(obj)
     item.carrier = mon_id
     item.lev = mon.lev
     if mon.is_hero:
@@ -270,6 +291,7 @@ def useup(world: World, mon_id: str, item: Item) -> None:
     if item.quan > 1:
         item.quan -= 1
         from .mkobj import weight  # local import: mkobj imports worn
+
         item.owt = weight(world, item)
     else:
         useupall(world, mon_id, item)
@@ -310,13 +332,15 @@ def delobj(world: World, item_id: str, force: bool = False) -> Optional[Item]:
     if mon is not None:
         if item.owornmask:
             from .worn import setnotworn  # local import: worn imports this
-            setnotworn(mon, item)         # C: setnotworn before freeinv
+
+            setnotworn(mon, item)  # C: setnotworn before freeinv
         mon.inventory = [i for i in mon.inventory if i.id != item_id]
     else:
         for parent in world.items.values():
             if item_id in parent.contents:
                 parent.contents.remove(item_id)  # C: obj_extract_self
-                from .mkobj import weight      # local import: mkobj imports worn
+                from .mkobj import weight  # local import: mkobj imports worn
+
                 parent.owt = weight(world, parent)
                 break
     for child_id in list(item.contents):
@@ -326,8 +350,9 @@ def delobj(world: World, item_id: str, force: bool = False) -> Optional[Item]:
     return item
 
 
-def consume_obj_charge(world: World, mon_id: str, item: Item,
-                       maybe_unpaid: bool = False) -> None:
+def consume_obj_charge(
+    world: World, mon_id: str, item: Item, maybe_unpaid: bool = False
+) -> None:
     """C: consume_obj_charge (src/invent.c 1336-1346): spend one
     charge on a wand / book / tool -- the ``spe`` decrement.  The
     ``maybe_unpaid`` shop half (check_unpaid) is accepted and ignored
@@ -368,11 +393,21 @@ def carry_obj_effects(item: Item) -> None:
 # options.c is unported, so the default (sortpack On, include/optlist.h)
 # is fixed here.
 INV_ORDER = (
-    int(ObjClass.COIN), int(ObjClass.AMULET), int(ObjClass.WEAPON),
-    int(ObjClass.ARMOR), int(ObjClass.FOOD), int(ObjClass.SCROLL),
-    int(ObjClass.SPBOOK), int(ObjClass.POTION), int(ObjClass.RING),
-    int(ObjClass.WAND), int(ObjClass.TOOL), int(ObjClass.GEM),
-    int(ObjClass.ROCK), int(ObjClass.BALL), int(ObjClass.CHAIN),
+    int(ObjClass.COIN),
+    int(ObjClass.AMULET),
+    int(ObjClass.WEAPON),
+    int(ObjClass.ARMOR),
+    int(ObjClass.FOOD),
+    int(ObjClass.SCROLL),
+    int(ObjClass.SPBOOK),
+    int(ObjClass.POTION),
+    int(ObjClass.RING),
+    int(ObjClass.WAND),
+    int(ObjClass.TOOL),
+    int(ObjClass.GEM),
+    int(ObjClass.ROCK),
+    int(ObjClass.BALL),
+    int(ObjClass.CHAIN),
 )
 
 
@@ -431,9 +466,14 @@ def doname(mon: Monster, item: Item, quan: int = 0) -> str:
     return name + worn_suffix(mon, item)
 
 
-def xprname(mon: Monster, item: Item, let: str,
-            txt: Optional[str] = None, dot: bool = False,
-            quan: int = 0) -> str:
+def xprname(
+    mon: Monster,
+    item: Item,
+    let: str,
+    txt: Optional[str] = None,
+    dot: bool = False,
+    quan: int = 0,
+) -> str:
     """C: xprname (src/invent.c 2936-2995) -- the ``<let> - <text>.``
     line every inventory listing (and every "you pick up" message) is
     built from.  ``txt`` replaces the item's own name; ``dot`` appends
@@ -452,8 +492,10 @@ def is_inuse(mon: Monster, item: Item) -> bool:
     """C: is_inuse (src/invent.c 2166-2170): a carried item the hero
     is wearing or wielding.  C also counts an active lamp / leash
     (``tool_being_used``), which needs the tool port."""
-    return (bool(item.owornmask & (W_ARMOR | W_ACCESSORY | W_WEAPONS))
-            or mon.wielded == item.id)
+    return (
+        bool(item.owornmask & (W_ARMOR | W_ACCESSORY | W_WEAPONS))
+        or mon.wielded == item.id
+    )
 
 
 def _class_rank(oclass: int) -> int:
@@ -505,11 +547,9 @@ def display_inventory(mon: Monster, lets: str = "") -> List[str]:
     ``display_pickinv`` and ``You have no such objects.`` from
     ``dotypeinv``.
     """
-    items = [it for it in mon.inventory
-             if not lets or _class_sym(it) in lets]
+    items = [it for it in mon.inventory if not lets or _class_sym(it) in lets]
     if not items:
-        return ["You have no such objects." if lets
-                else "Not carrying anything."]
+        return ["You have no such objects." if lets else "Not carrying anything."]
     return _display_lines(mon, items)
 
 
@@ -528,8 +568,7 @@ def money_cnt(mon: Monster) -> int:
     A gold pile is ONE item whose ``quan`` is the amount, so this is a
     sum over the coin stacks (C: plus carried containers --
     ``hidden_gold``, phase E)."""
-    return sum(it.quan for it in mon.inventory
-               if it.oclass == int(ObjClass.COIN))
+    return sum(it.quan for it in mon.inventory if it.oclass == int(ObjClass.COIN))
 
 
 def doprgold(mon: Monster) -> str:
@@ -544,10 +583,31 @@ def doprgold(mon: Monster) -> str:
 
 
 __all__ = [
-    "CONTAINED_SYM", "GOLD_SYM", "HANDS_SYM", "INV_ORDER", "NOINVSYM",
-    "addinv", "assigninvlet", "carry_obj_effects", "consume_obj_charge",
-    "currency", "delobj", "display_in_use", "display_inventory",
-    "doname", "doprgold", "freeinv", "invlet_basic", "invletter_value",
-    "is_inuse", "let_to_name", "money_cnt", "obj_to_let", "reorder_invent",
-    "useup", "useupall", "worn_suffix", "xprname",
+    "CONTAINED_SYM",
+    "GOLD_SYM",
+    "HANDS_SYM",
+    "INV_ORDER",
+    "NOINVSYM",
+    "addinv",
+    "assigninvlet",
+    "carry_obj_effects",
+    "consume_obj_charge",
+    "currency",
+    "delobj",
+    "display_in_use",
+    "display_inventory",
+    "doname",
+    "doprgold",
+    "freeinv",
+    "invlet_basic",
+    "invletter_value",
+    "is_inuse",
+    "let_to_name",
+    "money_cnt",
+    "obj_to_let",
+    "reorder_invent",
+    "useup",
+    "useupall",
+    "worn_suffix",
+    "xprname",
 ]

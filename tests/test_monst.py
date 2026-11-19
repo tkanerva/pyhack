@@ -1,10 +1,22 @@
 """Tests for the monster type table (core.monst)."""
+
 import pytest
 
 from core import monst
-from core.monst import (MONS, PM_NAMES, NUMMONS, SPECIAL_PM, SUBSET_PM,
-                        Attack, defch, is_dragon, is_golem, monclass,
-                        monname, monsndx)
+from core.monst import (
+    MONS,
+    PM_NAMES,
+    NUMMONS,
+    SPECIAL_PM,
+    SUBSET_PM,
+    Attack,
+    defch,
+    is_dragon,
+    is_golem,
+    monclass,
+    monname,
+    monsndx,
+)
 import core.monst as M
 
 # the C rows with no attack slots at all (monsters.h): the worm tail is a
@@ -34,8 +46,9 @@ def test_the_converter_fills_the_whole_table():
         python tools/convert_monsters.py
     """
     if len(SUBSET_PM) == 76:
-        pytest.skip("the depth band is still in place; run "
-                    "tools/convert_monsters.py")
+        pytest.skip(
+            "the depth band is still in place; run " "tools/convert_monsters.py"
+        )
     assert len(SUBSET_PM) == NUMMONS
     assert all(m is not None for m in MONS)
     # and the C ordering survived the pass
@@ -50,16 +63,19 @@ def test_the_band_rows_are_the_c_ones():
     include/monsters.h (PLAN-MAKEMON.md phase A's exit check: a
     transcription bug cannot hide behind "76 rows exist")."""
     ant = MONS[M.PM_GIANT_ANT]
-    assert (ant.mlevel, ant.mmove, ant.ac, ant.mr, ant.maligntyp) == \
-        (2, 18, 3, 0, 0)
+    assert (ant.mlevel, ant.mmove, ant.ac, ant.mr, ant.maligntyp) == (2, 18, 3, 0, 0)
     assert ant.geno == (M.G_GENO | M.G_SGROUP | 3)
     assert ant.mattk[0] == Attack(M.AT_BITE, M.AD_PHYS, 1, 4)
-    assert (ant.cwt, ant.cnutrit, ant.msound, ant.msize) == \
-        (10, 10, M.MS_SILENT, M.MZ_TINY)
-    assert ant.difficulty == 4 and ant.mcolor == 3     # CLR_BROWN
+    assert (ant.cwt, ant.cnutrit, ant.msound, ant.msize) == (
+        10,
+        10,
+        M.MS_SILENT,
+        M.MZ_TINY,
+    )
+    assert ant.difficulty == 4 and ant.mcolor == 3  # CLR_BROWN
 
     bee = MONS[M.PM_QUEEN_BEE]
-    assert bee.geno == (M.G_GENO | M.G_NOGEN)          # only by request
+    assert bee.geno == (M.G_GENO | M.G_NOGEN)  # only by request
     assert bee.mattk[0] == Attack(M.AT_STNG, M.AD_DRST, 1, 8)
     assert bee.mflags2 & M.M2_FEMALE
 
@@ -70,8 +86,7 @@ def test_the_band_rows_are_the_c_ones():
 
     leader = MONS[M.PM_KOBOLD_LEADER]
     # C: NAMS() -- the gendered names live in the row
-    assert leader.pmnames == ("kobold lord", "kobold lady",
-                              "kobold leader")
+    assert leader.pmnames == ("kobold lord", "kobold lady", "kobold leader")
     assert monname(leader, M.FEMALE) == "kobold lady"
 
     soldier = MONS[M.PM_SOLDIER]
@@ -243,7 +258,7 @@ def test_noattacks_flag_consistency():
 
 def test_distance_attack_classification():
     d = MONS[M.PM_BLACK_DRAGON]
-    assert M.distance_atk_type(d.mattk[0].aatyp)   # breath
+    assert M.distance_atk_type(d.mattk[0].aatyp)  # breath
     g = MONS[M.PM_GOBLIN]
     assert not M.distance_atk_type(g.mattk[0].aatyp)  # weapon
 

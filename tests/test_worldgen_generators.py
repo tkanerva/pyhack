@@ -8,6 +8,7 @@ demo expectations live in the other test modules; here the question is
 that the seam exists, that each generator produces a *playable* world,
 and that a game never mixes generators.
 """
+
 import random
 
 import pytest
@@ -17,9 +18,16 @@ from core.commands import CloseCommand, MoveCommand
 from core.doors import close_door, open_door
 from core.rnd import Rng
 from core.step import step
-from core.types import (DoorMask, TerrainType, Tile, World)
-from core.worldgen import (CAVERN, DEMO, GENERATORS, HERO_POS, MKLEV,
-                           demo_floor_items, new_world)
+from core.types import DoorMask, TerrainType, Tile, World
+from core.worldgen import (
+    CAVERN,
+    DEMO,
+    GENERATORS,
+    HERO_POS,
+    MKLEV,
+    demo_floor_items,
+    new_world,
+)
 from conftest import make_hero, make_map, make_world
 
 
@@ -31,9 +39,9 @@ def _rng(seed: int = 1) -> Rng:
 # the switch
 # ------------------------------------------------------------
 
+
 def test_the_generator_names_are_the_three_known_ones():
-    assert (DEMO, MKLEV, CAVERN) == GENERATORS == \
-        ("demo", "mklev", "cavern")
+    assert (DEMO, MKLEV, CAVERN) == GENERATORS == ("demo", "mklev", "cavern")
 
 
 def test_unknown_generator_is_refused():
@@ -148,8 +156,9 @@ def test_generated_world_carries_the_demo_kit(generator):
     genesis may have added more.
     """
     w = new_world(_rng(7), generator=generator)
-    floor_items = [it for it in w.items.values()
-                   if it.pos is not None and it.carrier is None]
+    floor_items = [
+        it for it in w.items.values() if it.pos is not None and it.carrier is None
+    ]
     # 6 armour + 5 scrolls + 2 weapons + 2 wands + 3 books + 4 foods
     kit = {it.id for it, _ in demo_floor_items()}
     assert kit <= {it.id for it in floor_items}
@@ -163,8 +172,9 @@ def test_generated_world_carries_the_demo_kit(generator):
 def test_generated_world_is_deterministic(generator):
     a = new_world(_rng(11), generator=generator)
     b = new_world(_rng(11), generator=generator)
-    assert [[t.typ for t in row] for row in a.map.tiles] == \
-        [[t.typ for t in row] for row in b.map.tiles]
+    assert [[t.typ for t in row] for row in a.map.tiles] == [
+        [t.typ for t in row] for row in b.map.tiles
+    ]
     assert a.hero.pos == b.hero.pos
     assert sorted(a.traps) == sorted(b.traps)
     assert sorted(a.actors) == sorted(b.actors)
@@ -234,11 +244,11 @@ def test_lazy_generation_does_not_touch_the_previous_level():
 # doors
 # ------------------------------------------------------------
 
+
 def _door_world(mask: DoorMask, closed_hero=(5, 5)) -> World:
     """A 10x8 cave whose (6,5) is a door in a north-south wall."""
     m = make_map(width=10, height=8)
-    m.tiles[5][6] = Tile(typ=TerrainType.DOOR, door_mask=mask,
-                         horizontal=False)
+    m.tiles[5][6] = Tile(typ=TerrainType.DOOR, door_mask=mask, horizontal=False)
     for y in range(8):
         if (6, y) != (6, 5):
             m.tiles[y][6] = Tile(typ=TerrainType.VWALL, horizontal=False)
@@ -281,11 +291,9 @@ def test_open_door_messages_cover_the_four_refusals():
     w = _door_world(DoorMask.BROKEN)
     assert open_door(w, (6, 5), _rng())[0].text == "This door is broken."
     w = _door_world(DoorMask(0))
-    assert open_door(w, (6, 5), _rng())[0].text == \
-        "This doorway has no door."
+    assert open_door(w, (6, 5), _rng())[0].text == "This doorway has no door."
     w = _door_world(DoorMask.ISOPEN)
-    assert open_door(w, (6, 5), _rng())[0].text == \
-        "This door is already open."
+    assert open_door(w, (6, 5), _rng())[0].text == "This door is already open."
     w = _door_world(DoorMask.LOCKED)
     assert open_door(w, (6, 5), _rng())[0].text == "This door is locked."
     w = _door_world(DoorMask.CLOSED)
@@ -296,13 +304,16 @@ def test_opening_a_trapped_door_destroys_it():
     w = _door_world(DoorMask.CLOSED | DoorMask.TRAPPED)
     events = open_door(w, (6, 5), _rng())
     assert [e.text for e in events] == [
-        "The door opens.", "A trap on the door goes off!"]
+        "The door opens.",
+        "A trap on the door goes off!",
+    ]
     assert w.map.tile_at((6, 5)).door_mask == DoorMask(0)
 
 
 def test_door_strength_roll_can_fail():
     """C: rnl(20) < (STR + DEX + CON) / 3, and a resisting door also
     costs the turn."""
+
     class Weak:
         def rnl(self, x, luck=0):
             return 19
@@ -321,25 +332,22 @@ def test_closing_an_open_door():
 
 def test_close_refuses_for_the_c_reasons():
     w = _door_world(DoorMask.CLOSED)
-    assert close_door(w, (6, 5), _rng())[0].text == \
-        "This door is already closed."
+    assert close_door(w, (6, 5), _rng())[0].text == "This door is already closed."
     w = _door_world(DoorMask.LOCKED)
-    assert close_door(w, (6, 5), _rng())[0].text == \
-        "This door is already closed."
+    assert close_door(w, (6, 5), _rng())[0].text == "This door is already closed."
     w = _door_world(DoorMask.BROKEN)
     assert close_door(w, (6, 5), _rng())[0].text == "This door is broken."
     w = _door_world(DoorMask(0))
-    assert close_door(w, (6, 5), _rng())[0].text == \
-        "This doorway has no door."
+    assert close_door(w, (6, 5), _rng())[0].text == "This doorway has no door."
 
 
 def test_a_monster_in_the_doorway_blocks_closing():
     w = _door_world(DoorMask.ISOPEN)
     from conftest import make_monster
+
     mon = make_monster("goblin", pos=(6, 5))
     w.actors[mon.id] = mon
-    assert close_door(w, (6, 5), _rng())[0].text == \
-        "Goblin blocks the way!"
+    assert close_door(w, (6, 5), _rng())[0].text == "Goblin blocks the way!"
 
 
 def test_closed_door_blocks_sight_and_walkability():
@@ -358,8 +366,7 @@ def test_closed_door_blocks_sight_and_walkability():
 def test_close_command_goes_through_step():
     w = _door_world(DoorMask.ISOPEN)
     events = step(w, CloseCommand(1, 0), _rng())
-    assert [e.text for e in events if hasattr(e, "text")] == \
-        ["The door closes."]
+    assert [e.text for e in events if hasattr(e, "text")] == ["The door closes."]
     assert w.map.tile_at((6, 5)).door_mask == DoorMask.CLOSED
 
 
@@ -378,8 +385,7 @@ def test_closed_door_helper_is_the_c_macro():
 # a whole game on a generated level
 # ------------------------------------------------------------
 
-_MOVES = [(1, 0), (-1, 0), (0, 1), (0, -1),
-          (1, 1), (1, -1), (-1, 1), (-1, -1)]
+_MOVES = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
 
 
 @pytest.mark.parametrize("generator", [MKLEV, CAVERN])

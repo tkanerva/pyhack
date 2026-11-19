@@ -51,19 +51,30 @@ State layout (C -> pyhack):
   gv.viz_array / rmin/rmax -> world.vision (a HeroVision)
   Algorithm-C file statics -> one _VisionC instance per view_from() call
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
 from .hacklib import is_blind
-from .types import (DoorMask, Map, Monster, ObjectType, Pos, TerrainType,
-                    Tile, World, is_door, is_obstructed)
+from .types import (
+    DoorMask,
+    Map,
+    Monster,
+    ObjectType,
+    Pos,
+    TerrainType,
+    Tile,
+    World,
+    is_door,
+    is_obstructed,
+)
 
 # C: vision.h
 COULD_SEE = 0x1  # location could be seen, if it were lit
-IN_SIGHT = 0x2   # location can be seen
-TEMP_LIT = 0x4   # location is temporarily lit (STUB: unused until light.c)
+IN_SIGHT = 0x2  # location can be seen
+TEMP_LIT = 0x4  # location is temporarily lit (STUB: unused until light.c)
 
 # C: vision.h
 MAX_RADIUS = 15
@@ -73,28 +84,162 @@ MAX_RADIUS = 15
 # the final 16 terminates the range loops.
 CIRCLE_DATA = (
     0,
-    1,  1,
-    2,  2,  1,
-    3,  3,  2,  1,
-    4,  4,  4,  3,  2,
-    5,  5,  5,  4,  3,  2,
-    6,  6,  6,  5,  5,  4,  2,
-    7,  7,  7,  6,  6,  5,  4,  2,
-    8,  8,  8,  7,  7,  6,  6,  4,  2,
-    9,  9,  9,  9,  8,  8,  7,  6,  5,  3,
-    10, 10, 10, 10, 9,  9,  8,  7,  6,  5,  3,
-    11, 11, 11, 11, 10, 10, 9,  9,  8,  7,  5,  3,
-    12, 12, 12, 12, 11, 11, 10, 10, 9,  8,  7,  5,  3,
-    13, 13, 13, 13, 12, 12, 12, 11, 10, 10, 9,  7,  6, 3,
-    14, 14, 14, 14, 13, 13, 13, 12, 12, 11, 10, 9,  8, 6, 3,
-    15, 15, 15, 15, 14, 14, 14, 13, 13, 12, 11, 10, 9, 8, 6, 3,
+    1,
+    1,
+    2,
+    2,
+    1,
+    3,
+    3,
+    2,
+    1,
+    4,
+    4,
+    4,
+    3,
+    2,
+    5,
+    5,
+    5,
+    4,
+    3,
+    2,
+    6,
+    6,
+    6,
+    5,
+    5,
+    4,
+    2,
+    7,
+    7,
+    7,
+    6,
+    6,
+    5,
+    4,
+    2,
+    8,
+    8,
+    8,
+    7,
+    7,
+    6,
+    6,
+    4,
+    2,
+    9,
+    9,
+    9,
+    9,
+    8,
+    8,
+    7,
+    6,
+    5,
+    3,
+    10,
+    10,
+    10,
+    10,
+    9,
+    9,
+    8,
+    7,
+    6,
+    5,
+    3,
+    11,
+    11,
+    11,
+    11,
+    10,
+    10,
+    9,
+    9,
+    8,
+    7,
+    5,
+    3,
+    12,
+    12,
+    12,
+    12,
+    11,
+    11,
+    10,
+    10,
+    9,
+    8,
+    7,
+    5,
+    3,
+    13,
+    13,
+    13,
+    13,
+    12,
+    12,
+    12,
+    11,
+    10,
+    10,
+    9,
+    7,
+    6,
+    3,
+    14,
+    14,
+    14,
+    14,
+    13,
+    13,
+    13,
+    12,
+    12,
+    11,
+    10,
+    9,
+    8,
+    6,
+    3,
+    15,
+    15,
+    15,
+    15,
+    14,
+    14,
+    14,
+    13,
+    13,
+    12,
+    11,
+    10,
+    9,
+    8,
+    6,
+    3,
     16,
 )
 
 # C: vision.c -- starting indexes into CIRCLE_DATA for each radius.
 CIRCLE_START = (
-    0, 1, 3, 6, 10, 15, 21, 28, 36, 45,
-    55, 66, 78, 91, 105, 120,
+    0,
+    1,
+    3,
+    6,
+    10,
+    15,
+    21,
+    28,
+    36,
+    45,
+    55,
+    66,
+    78,
+    91,
+    105,
+    120,
 )
 
 
@@ -104,12 +249,13 @@ def circle_ptr(radius: int) -> tuple:
     if not 1 <= radius <= MAX_RADIUS:
         raise ValueError(f"circle_ptr: illegal range {radius}")
     start = CIRCLE_START[radius]
-    return CIRCLE_DATA[start:start + radius + 1]
+    return CIRCLE_DATA[start : start + radius + 1]
 
 
 # ============================================================
 # State
 # ============================================================
+
 
 @dataclass
 class HeroVision:
@@ -119,6 +265,7 @@ class HeroVision:
     bit flags.  A row that was never marked keeps row_min > row_max
     (C: COLNO-1 / 1 initialisation).
     """
+
     could_see: List[List[int]]
     row_min: List[int]
     row_max: List[int]
@@ -159,17 +306,21 @@ def vision_init(world: World) -> None:
 # Blocking
 # ============================================================
 
+
 def does_block(world: World, pos: Pos) -> int:
     """C: does_block.  Returns 0 if nothing at pos blocks sight, 1 if a
     blocking feature does (opaque terrain, closed door, tree, boulder),
     or 2 for an opaque region (cloud).  The rest of the code only
     distinguishes 0 from non-0 -- same as C."""
     tile = world.map.tile_at(pos)
-    if (is_obstructed(tile.typ)
-            or tile.typ == TerrainType.TREE
-            or (is_door(tile.typ)
-                and tile.door_mask
-                & (DoorMask.CLOSED | DoorMask.LOCKED | DoorMask.TRAPPED))):
+    if (
+        is_obstructed(tile.typ)
+        or tile.typ == TerrainType.TREE
+        or (
+            is_door(tile.typ)
+            and tile.door_mask & (DoorMask.CLOSED | DoorMask.LOCKED | DoorMask.TRAPPED)
+        )
+    ):
         return 1
     # STUB: CLOUD / waterwall / lavawall / moat blocking -- no such
     # terrain is generated yet.
@@ -199,6 +350,7 @@ def _blocked(world: World, pos: Pos) -> bool:
 #                (a left edge points at itself),
 #                right -> right-most blocked tile connected to it
 #                (a right edge points at itself)
+
 
 def _rescan_row(world: World, y: int) -> None:
     """Rebuild one row of viz_clear + left/right pointers from the
@@ -313,6 +465,7 @@ def set_tile(world: World, pos: Pos, tile: Tile) -> None:
 # boulder IS visible until it is on you).  Generalised integer
 # Bresenham's algorithm, per quadrant, from _Procedural Elements for
 # Computer Graphics_ (Rogers, McGraw-Hill, 1985).
+
 
 def _q1_path(m: Map, srow: int, scol: int, row: int, col: int) -> bool:
     """C: q1_path, quadrant I -- destination up-right of the start."""
@@ -449,6 +602,7 @@ def clear_path(world: World, a: Pos, b: Pos) -> bool:
 # Algorithm C (C: view_from / right_side / left_side)
 # ============================================================
 
+
 class _VisionC:
     """Algorithm C state for one view_from() call.
 
@@ -458,17 +612,22 @@ class _VisionC:
     count.
     """
 
-    def __init__(self, m: Map, srow: int, scol: int,
-                 cs_rows: Optional[List[List[int]]],
-                 row_min: Optional[List[int]],
-                 row_max: Optional[List[int]],
-                 range_: int,
-                 func: Optional[Callable[[int, int, object], None]],
-                 arg):
+    def __init__(
+        self,
+        m: Map,
+        srow: int,
+        scol: int,
+        cs_rows: Optional[List[List[int]]],
+        row_min: Optional[List[int]],
+        row_max: Optional[List[int]],
+        range_: int,
+        func: Optional[Callable[[int, int, object], None]],
+        arg,
+    ):
         self.map = m
         self.start_row = srow
         self.start_col = scol
-        self.step = 1            # +1 = down, -1 = up (set per side)
+        self.step = 1  # +1 = down, -1 = up (set per side)
         self.cs_rows = cs_rows
         self.row_min = row_min
         self.row_max = row_max
@@ -484,7 +643,7 @@ class _VisionC:
             # handled by run() itself; the slice keeps the terminator
             # the `deeper` test peeks at.
             start = CIRCLE_START[range_]
-            self.limits = CIRCLE_DATA[start + 1:start + range_ + 2]
+            self.limits = CIRCLE_DATA[start + 1 : start + range_ + 2]
 
     def run(self) -> None:
         """C: view_from -- mark all locations visible from the start.
@@ -499,12 +658,20 @@ class _VisionC:
         else:
             # When in stone, you can only see your adjacent squares,
             # unless you are on a boundary or a stone/clear boundary.
-            left = 0 if scol == 0 else (
-                m.left_ptrs[srow][scol - 1] if clear[srow][scol - 1]
-                else scol - 1)
-            right = w - 1 if scol == w - 1 else (
-                m.right_ptrs[srow][scol + 1] if clear[srow][scol + 1]
-                else scol + 1)
+            left = (
+                0
+                if scol == 0
+                else (
+                    m.left_ptrs[srow][scol - 1] if clear[srow][scol - 1] else scol - 1
+                )
+            )
+            right = (
+                w - 1
+                if scol == w - 1
+                else (
+                    m.right_ptrs[srow][scol + 1] if clear[srow][scol + 1] else scol + 1
+                )
+            )
         if self.range:
             if left < scol - self.range:
                 left = scol - self.range
@@ -518,8 +685,7 @@ class _VisionC:
             assert self.cs_rows is not None
             assert self.row_min is not None
             assert self.row_max is not None
-            cs_rows, row_min, row_max = (self.cs_rows,
-                                         self.row_min, self.row_max)
+            cs_rows, row_min, row_max = (self.cs_rows, self.row_min, self.row_max)
             rowp = cs_rows[srow]
             for i in range(left, right + 1):
                 rowp[i] = COULD_SEE
@@ -553,8 +719,7 @@ class _VisionC:
         assert self.cs_rows is not None
         assert self.row_min is not None
         assert self.row_max is not None
-        cs_rows, row_min, row_max = (self.cs_rows,
-                                     self.row_min, self.row_max)
+        cs_rows, row_min, row_max = (self.cs_rows, self.row_min, self.row_max)
         rowp = cs_rows[row]
         for i in range(a, b + 1):
             rowp[i] = COULD_SEE
@@ -567,16 +732,14 @@ class _VisionC:
         """Clear line of sight from the start to (row, col) on the
         right side (C: q1_path when step < 0, q4_path when step > 0)."""
         if self.step < 0:
-            return _q1_path(self.map, self.start_row, self.start_col,
-                            row, col)
+            return _q1_path(self.map, self.start_row, self.start_col, row, col)
         return _q4_path(self.map, self.start_row, self.start_col, row, col)
 
     def _qpath_left(self, row: int, col: int) -> bool:
         """Clear line of sight from the start to (row, col) on the left
         side (C: q2_path when step < 0, q3_path when step > 0)."""
         if self.step < 0:
-            return _q2_path(self.map, self.start_row, self.start_col,
-                            row, col)
+            return _q2_path(self.map, self.start_row, self.start_col, row, col)
         return _q3_path(self.map, self.start_row, self.start_col, row, col)
 
     def _deeper(self, nrow: int) -> bool:
@@ -589,8 +752,7 @@ class _VisionC:
             return False
         if self.limits is None:
             return True
-        return (self.limits[self.limits_idx]
-                >= self.limits[self.limits_idx + 1])
+        return self.limits[self.limits_idx] >= self.limits[self.limits_idx + 1]
 
     def right_side(self, row: int, left: int, right_mark: int) -> None:
         """C: right_side.  Mark the visible locations on one quadrant
@@ -601,8 +763,7 @@ class _VisionC:
         nrow = row + self.step
         deeper = self._deeper(nrow)
         if self.limits is not None:
-            lim_max = min(self.start_col + self.limits[self.limits_idx],
-                          w - 1)
+            lim_max = min(self.start_col + self.limits[self.limits_idx], w - 1)
             if right_mark > lim_max:
                 right_mark = lim_max
             self.limits_idx += 1  # prepare for next row
@@ -623,9 +784,11 @@ class _VisionC:
                     # part of the wall beyond the mark on this row.  If
                     # so, then see one beyond the mark.  (C: a kludge so
                     # corners with an adjacent doorway show up.)
-                    right_edge = (right_mark + 1
-                                  if clear[row - self.step][right_mark]
-                                  else right_mark)
+                    right_edge = (
+                        right_mark + 1
+                        if clear[row - self.step][right_mark]
+                        else right_mark
+                    )
                 self._mark(row, left, right_edge)
                 left = right_edge + 1  # no limit check necessary
                 continue
@@ -678,9 +841,12 @@ class _VisionC:
                 # vertical wall and it has a break in it, the right mark
                 # is set to be start_col.  We *want* to be able to see
                 # adjacent vertical walls, so set it back.
-                if (left == right and left == self.start_col
-                        and self.start_col < w - 1
-                        and not clear[row][self.start_col + 1]):
+                if (
+                    left == right
+                    and left == self.start_col
+                    and self.start_col < w - 1
+                    and not clear[row][self.start_col + 1]
+                ):
                     right = self.start_col + 1
                 if right > lim_max:
                     right = lim_max
@@ -713,9 +879,11 @@ class _VisionC:
                 # Jump to the far side of a stone wall.
                 if left_edge < left_mark:
                     # Maybe see more (C: the same doorway kludge).
-                    left_edge = (left_mark - 1
-                                 if clear[row - self.step][left_mark]
-                                 else left_mark)
+                    left_edge = (
+                        left_mark - 1
+                        if clear[row - self.step][left_mark]
+                        else left_mark
+                    )
                 self._mark(row, left_edge, right)
                 right = left_edge - 1  # no limit check necessary
                 continue
@@ -750,9 +918,12 @@ class _VisionC:
 
             if left <= right:
                 # An ugly special case.
-                if (left == right and right == self.start_col
-                        and self.start_col > 0
-                        and not clear[row][self.start_col - 1]):
+                if (
+                    left == right
+                    and right == self.start_col
+                    and self.start_col > 0
+                    and not clear[row][self.start_col - 1]
+                ):
                     left = self.start_col - 1
                 if left < lim_min:
                     left = lim_min
@@ -769,14 +940,24 @@ def view_from(world: World, origin: Pos, range_: int = 0) -> HeroVision:
     the CIRCLE_DATA circle).  Does NOT touch world.vision."""
     _ensure(world)
     hv = _fresh_hero_vision(world.map)
-    _VisionC(world.map, origin[1], origin[0], hv.could_see, hv.row_min,
-             hv.row_max, range_, None, None).run()
+    _VisionC(
+        world.map,
+        origin[1],
+        origin[0],
+        hv.could_see,
+        hv.row_min,
+        hv.row_max,
+        range_,
+        None,
+        None,
+    ).run()
     return hv
 
 
 # ============================================================
 # The hero's current view
 # ============================================================
+
 
 def vision_recalc(world: World) -> None:
     """C: vision_recalc (the control = 0 path).  Recompute the hero's
@@ -797,8 +978,7 @@ def vision_recalc(world: World) -> None:
     m = world.map
     hx, hy = world.hero.pos
     hv = _fresh_hero_vision(m)
-    _VisionC(m, hy, hx, hv.could_see, hv.row_min, hv.row_max, 0, None,
-             None).run()
+    _VisionC(m, hy, hx, hv.could_see, hv.row_min, hv.row_max, 0, None, None).run()
     if is_blind(world.hero):
         # C: vision.c -- "Calculate the could_see array even when blind
         # so that monsters can see you, even if you can't see them."
@@ -851,6 +1031,7 @@ def could_see(world: World, pos: Pos) -> bool:
 # Monster sight (C: the m_cansee / m_canseeu macros in vision.h)
 # ============================================================
 
+
 def m_can_see(world: World, mon: Monster, pos: Pos) -> bool:
     """C: m_cansee(m, x, y) == clear_path(m->mx, m->my, x, y).  Can the
     monster see the location?  C leaves the blindness check to the
@@ -876,8 +1057,14 @@ def m_can_see_u(world: World, mon: Monster) -> bool:
 # Area of effect (C: do_clear_area)
 # ============================================================
 
-def do_clear_area(world: World, origin: Pos, range_: int,
-                  func: Callable[[int, int, object], None], arg) -> None:
+
+def do_clear_area(
+    world: World,
+    origin: Pos,
+    range_: int,
+    func: Callable[[int, int, object], None],
+    arg,
+) -> None:
     """C: do_clear_area -- the area-of-effect "engine".  Call
     func(x, y, arg) for each location within `range_` of `origin` that
     has a clear line of sight from `origin` (the CIRCLE_DATA offsets).

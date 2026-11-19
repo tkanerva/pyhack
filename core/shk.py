@@ -1411,9 +1411,7 @@ def paybill(world: World, croaked: int = 1) -> List[Event]:
     return events
 
 
-def inherits(
-    world: World, shkp: Monster, numsk: int, croaked: int
-) -> List[Event]:
+def inherits(world: World, shkp: Monster, numsk: int, croaked: int) -> List[Event]:
     """C: shk.c#inherits (2598-2701), reduced -- does this shopkeeper
     take the hero's inventory when the hero dies?
 
@@ -1449,9 +1447,7 @@ def inherits(
         if hero.inventory:
             _move_pack(world, hero, shkp)
             events.append(
-                MessageEvent(
-                    f"{name} gratefully inherits all your possessions."
-                )
+                MessageEvent(f"{name} gratefully inherits all your possessions.")
             )
         setpaid(world, shkp)
         return events
@@ -1472,9 +1468,7 @@ def inherits(
                 # C: take everything (the gold moves with the pack)
                 eshkp.robbed = max(0, eshkp.robbed - umoney)
                 _move_pack(world, hero, shkp)
-                events.append(
-                    MessageEvent(f"{name} takes all your possessions.")
-                )
+                events.append(MessageEvent(f"{name} takes all your possessions."))
             elif loss > 0:
                 # C: take the owed amount (money2mon(loss))
                 _spend_gold(world, hero, loss)
@@ -1485,8 +1479,7 @@ def inherits(
                 eshkp.robbed = 0
                 events.append(
                     MessageEvent(
-                        f"{name} takes the {loss} {currency(loss)} "
-                        f"you owed it."
+                        f"{name} takes the {loss} {currency(loss)} " f"you owed it."
                     )
                 )
     setpaid(world, shkp)
@@ -1522,8 +1515,7 @@ def shk_chat(world: World, shkp: Monster) -> List[Event]:
     if not shkp.isshk:
         return [
             MessageEvent(
-                f"{shkp.name} asks whether you've seen any untended "
-                "shops recently."
+                f"{shkp.name} asks whether you've seen any untended " "shops recently."
             )
         ]
     eshkp = shkp.eshk
@@ -1543,15 +1535,12 @@ def shk_chat(world: World, shkp: Monster) -> List[Event]:
         # C: the customer-name comparison -- for one hero the stored
         # customer is always the hero (hot_pursuit / the entry hook),
         # so this is the "forgot to pay" half
-        return [
-            MessageEvent(f"{name} asks, 'Didn't you forget to pay?'")
-        ]
+        return [MessageEvent(f"{name} asks, 'Didn't you forget to pay?'")]
     if eshkp.billct:
         total = addupbill(eshkp) + eshkp.debit  # C: the bill total
         return [
             MessageEvent(
-                f"{name} says that your bill comes to "
-                f"{total} {currency(total)}."
+                f"{name} says that your bill comes to " f"{total} {currency(total)}."
             )
         ]
     if eshkp.debit:
@@ -1570,15 +1559,12 @@ def shk_chat(world: World, shkp: Monster) -> List[Event]:
             )
         ]
     if eshkp.robbed:
-        return [
-            MessageEvent(f"{name} complains about a recent robbery.")
-        ]
+        return [MessageEvent(f"{name} complains about a recent robbery.")]
     if eshkp.surcharge:
         pronoun = "she" if shkp.female else "he"
         return [
             MessageEvent(
-                f"{name} warns you that {pronoun} is watching you "
-                "carefully."
+                f"{name} warns you that {pronoun} is watching you " "carefully."
             )
         ]
     shkmoney = money_cnt(shkp)
@@ -1672,16 +1658,12 @@ def shk_entered(world: World, shkp: Optional[Monster]) -> List[Event]:
     if eshkp.surcharge:
         # C: "The atmosphere at %s %s seems unwelcoming."
         return [
-            MessageEvent(
-                f"The atmosphere at {possessive} {shop} seems unwelcoming."
-            )
+            MessageEvent(f"The atmosphere at {possessive} {shop} seems unwelcoming.")
         ]
     if eshkp.robbed:
         # C: "%s mutters imprecations against shoplifters."
         return [
-            MessageEvent(
-                f"{shkname(shkp)} mutters imprecations against shoplifters."
-            )
+            MessageEvent(f"{shkname(shkp)} mutters imprecations against shoplifters.")
         ]
     # C: "Welcome%s to %s %s!" -- visitct++ (the " again" of a repeat)
     again = eshkp.visitct > 0

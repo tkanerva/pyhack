@@ -6,16 +6,15 @@ rooms and joined by corridors.  The tests pin the invariants a playable
 level needs, the tuning constants, and the two helpers the room-based
 generator shares (flood_fill_rm, litstate_rnd).
 """
+
 from typing import Set, Tuple
 
 import pytest
 
 from core import mkmap as MM
-from core.mkmap import (flood_fill_rm, get_map, init_fill, init_map,
-                        litstate_rnd, mkmap)
+from core.mkmap import flood_fill_rm, get_map, init_fill, init_map, litstate_rnd, mkmap
 from core.rnd import Rng
-from core.types import (NO_ROOM, ROOMOFFSET, Map, RoomType, TerrainType,
-                        Tile)
+from core.types import NO_ROOM, ROOMOFFSET, Map, RoomType, TerrainType, Tile
 
 W, H = 40, 20
 
@@ -25,17 +24,21 @@ def _rng(seed: int = 1) -> Rng:
 
 
 def _blank(width: int = W, height: int = H) -> Map:
-    return Map([[Tile(typ=TerrainType.STONE) for _ in range(width)]
-                for _ in range(height)])
+    return Map(
+        [[Tile(typ=TerrainType.STONE) for _ in range(width)] for _ in range(height)]
+    )
 
 
 def _passable(m: Map, pos: Tuple[int, int]) -> bool:
-    return m.tile_at(pos).typ in (TerrainType.ROOM, TerrainType.CORR,
-                                  TerrainType.DOOR, TerrainType.STAIRS)
+    return m.tile_at(pos).typ in (
+        TerrainType.ROOM,
+        TerrainType.CORR,
+        TerrainType.DOOR,
+        TerrainType.STAIRS,
+    )
 
 
-_DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1),
-         (1, 1), (1, -1), (-1, 1), (-1, -1))
+_DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
 
 
 def _reachable(m: Map, start: Tuple[int, int]) -> Set[Tuple[int, int]]:
@@ -59,6 +62,7 @@ def _reachable(m: Map, start: Tuple[int, int]) -> Set[Tuple[int, int]]:
 # ------------------------------------------------------------
 # the small pieces
 # ------------------------------------------------------------
+
 
 def test_litstate_rnd_resolves_the_minus_one_draw():
     """C: `lit < 0` -> `rnd(1 + depth) < 11 && rn2(77)`, and the
@@ -87,7 +91,7 @@ def test_litstate_rnd_resolves_the_minus_one_draw():
     class Deep(Counting):
         def rnd(self, n: int) -> int:
             self.runs += 1
-            return 11   # 11 < 11 is false -> never reaches rn2
+            return 11  # 11 < 11 is false -> never reaches rn2
 
     deep = Deep()
     assert litstate_rnd(deep, -1, 10) is False
@@ -109,8 +113,7 @@ def test_init_fill_puts_about_forty_percent_floor_down():
     m = _blank()
     init_map(m, TerrainType.STONE)
     init_fill(m, _rng(3), TerrainType.STONE, TerrainType.ROOM)
-    floor = sum(1 for row in m.tiles for t in row
-                if t.typ == TerrainType.ROOM)
+    floor = sum(1 for row in m.tiles for t in row if t.typ == TerrainType.ROOM)
     width, height = m.width - 2, m.height - 1
     # init_fill always lands on exactly the limit
     assert floor == (width * height * 2) // 5
@@ -127,13 +130,13 @@ def test_pass_one_kills_a_lone_square_and_fills_a_gap():
     """C: <= 2 foreground neighbours -> background, >= 5 -> foreground."""
     m = _blank()
     init_map(m, TerrainType.STONE)
-    m.tiles[5][5].typ = TerrainType.ROOM          # a lone dot: dies
-    for x in range(10, 15):                        # a hole in the blob
+    m.tiles[5][5].typ = TerrainType.ROOM  # a lone dot: dies
+    for x in range(10, 15):  # a hole in the blob
         m.tiles[5][x].typ = TerrainType.ROOM
     for y in (4, 6):
         for x in range(10, 15):
             m.tiles[y][x].typ = TerrainType.ROOM
-    m.tiles[5][12].typ = TerrainType.STONE         # the gap
+    m.tiles[5][12].typ = TerrainType.STONE  # the gap
     MM.pass_one(m, TerrainType.STONE, TerrainType.ROOM)
     assert m.tile_at((5, 5)).typ == TerrainType.STONE
     assert m.tile_at((12, 5)).typ == TerrainType.ROOM
@@ -142,6 +145,7 @@ def test_pass_one_kills_a_lone_square_and_fills_a_gap():
 # ------------------------------------------------------------
 # flood fill
 # ------------------------------------------------------------
+
 
 def test_flood_fill_marks_one_region_and_reports_its_extents():
     m = _blank()
@@ -188,12 +192,17 @@ def test_flood_fill_marks_a_shared_wall():
 # the finished cavern
 # ------------------------------------------------------------
 
+
 @pytest.mark.parametrize("seed", [1, 2, 3, 42, 1337])
 def test_mkmap_builds_a_walkable_cavern(seed):
     m = _blank()
     mkmap(m, _rng(seed), depth=3)
-    floor = [(x, y) for y in range(m.height) for x in range(m.width)
-             if m.tile_at((x, y)).typ == TerrainType.ROOM]
+    floor = [
+        (x, y)
+        for y in range(m.height)
+        for x in range(m.width)
+        if m.tile_at((x, y)).typ == TerrainType.ROOM
+    ]
     assert len(floor) > 100, "the cavern should be a real level"
     # walled + joined -> a cavernous (not mazelike) level
     assert m.flags.is_cavernous_lev is True
@@ -223,17 +232,24 @@ def test_every_room_of_a_cavern_is_joined(seed):
     assert start is not None
     reach = _reachable(m, start)
     for room in m.rooms:
-        inside = [(x, y) for x in range(room.lx, room.hx + 1)
-                  for y in range(room.ly, room.hy + 1)
-                  if m.tile_at((x, y)).typ == TerrainType.ROOM]
+        inside = [
+            (x, y)
+            for x in range(room.lx, room.hx + 1)
+            for y in range(room.ly, room.hy + 1)
+            if m.tile_at((x, y)).typ == TerrainType.ROOM
+        ]
         assert any(pos in reach for pos in inside), "a blob is walled off"
 
 
 def test_walled_cavern_is_surrounded_by_walls():
     m = _blank()
     mkmap(m, _rng(7), depth=3, walled=True)
-    walls = sum(1 for row in m.tiles for t in row
-                if t.typ in (TerrainType.HWALL, TerrainType.VWALL))
+    walls = sum(
+        1
+        for row in m.tiles
+        for t in row
+        if t.typ in (TerrainType.HWALL, TerrainType.VWALL)
+    )
     assert walls > 0
 
 
@@ -256,12 +272,14 @@ def test_mkmap_is_deterministic():
     b = _blank()
     mkmap(a, _rng(99), depth=3)
     mkmap(b, _rng(99), depth=3)
-    assert [[t.typ for t in row] for row in a.tiles] == \
-        [[t.typ for t in row] for row in b.tiles]
+    assert [[t.typ for t in row] for row in a.tiles] == [
+        [t.typ for t in row] for row in b.tiles
+    ]
     c = _blank()
     mkmap(c, _rng(100), depth=3)
-    assert [[t.typ for t in row] for row in a.tiles] != \
-        [[t.typ for t in row] for row in c.tiles]
+    assert [[t.typ for t in row] for row in a.tiles] != [
+        [t.typ for t in row] for row in c.tiles
+    ]
 
 
 def test_remove_rooms_is_a_stub():

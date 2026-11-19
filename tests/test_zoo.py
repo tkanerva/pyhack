@@ -132,11 +132,15 @@ def _stocked_square(m: Map, room: Room, sh, sx: int, sy: int) -> bool:
     door-adjacent continue)."""
     if not space_pos(m.tile_at((sx, sy)).typ):
         return False
-    if room.doorct and sh is not None and (
-        (sx == room.lx and sh[0] == sx - 1)
-        or (sx == room.hx and sh[0] == sx + 1)
-        or (sy == room.ly and sh[1] == sy - 1)
-        or (sy == room.hy and sh[1] == sy + 1)
+    if (
+        room.doorct
+        and sh is not None
+        and (
+            (sx == room.lx and sh[0] == sx - 1)
+            or (sx == room.hx and sh[0] == sx + 1)
+            or (sy == room.ly and sh[1] == sy - 1)
+            or (sy == room.hy and sh[1] == sy + 1)
+        )
     ):
         return False
     return True
@@ -419,9 +423,7 @@ def test_barracks_gets_the_squad_and_the_payroll():
     squad = {"soldier", "sergeant", "lieutenant", "captain"}
     assert all(mn.mdata.pmnames[2] in squad for mn in mons)
     assert all(mn.sleeping == 1 for mn in mons)
-    assert any(
-        it.otyp in (int(O.CHEST), int(O.LARGE_BOX)) for it in _items(w, 5)
-    )
+    assert any(it.otyp in (int(O.CHEST), int(O.LARGE_BOX)) for it in _items(w, 5))
     assert m.flags.has_barracks
     assert_item_locations(w)
 
@@ -515,8 +517,11 @@ def test_mkundead_with_revive_skips_a_corpsed_square():
         for dy in (-1, 0, 1):
             if dx or dy:
                 mksobj_at(
-                    w, _rng(), int(O.CORPSE),
-                    (CENTER[0] + dx, CENTER[1] + dy), 5,
+                    w,
+                    _rng(),
+                    int(O.CORPSE),
+                    (CENTER[0] + dx, CENTER[1] + dy),
+                    5,
                 )
     mkroom.mkundead(w, _rng(), m, 5, CENTER, True, NO_MM_FLAGS)
     assert not _monsters(w, 5)

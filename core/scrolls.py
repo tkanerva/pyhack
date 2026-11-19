@@ -68,6 +68,7 @@ rnd sites, commented), so SeqRng tests audit the C branches one for
 one.  No draw happens for a scroll that produces no effect branch
 (plain +1 enchants, remove curse, blank paper).
 """
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -75,8 +76,19 @@ from typing import List, Optional
 from .events import Event, MessageEvent
 from .invent import useup
 from .items import wielded_of
-from .objects import (W_ARMC, W_ARM, W_ARMF, W_ARMG, W_ARMH, W_ARMOR,
-                      W_ACCESSORY, W_ARMS, W_ARMU, W_WEP, object_type)
+from .objects import (
+    W_ARMC,
+    W_ARM,
+    W_ARMF,
+    W_ARMG,
+    W_ARMH,
+    W_ARMOR,
+    W_ACCESSORY,
+    W_ARMS,
+    W_ARMU,
+    W_WEP,
+    object_type,
+)
 from .rules import roll, teleport_to_floor
 from .types import Item, Monster, ObjectType, ScrollType, World
 from . import worn
@@ -127,9 +139,11 @@ def some_armor(world: World, mon: Monster, rng) -> Optional[Item]:
     selected (C `!otmph` short-circuits) -- the draw order is the
     C order, auditable with SeqRng.
     """
-    otmph = (worn.which_armor(world, mon, W_ARMC)
-             or worn.which_armor(world, mon, W_ARM)
-             or worn.which_armor(world, mon, W_ARMU))
+    otmph = (
+        worn.which_armor(world, mon, W_ARMC)
+        or worn.which_armor(world, mon, W_ARM)
+        or worn.which_armor(world, mon, W_ARMU)
+    )
     for mask in (W_ARMH, W_ARMG, W_ARMF, W_ARMS):
         otmp = worn.which_armor(world, mon, mask)
         if otmp and (otmph is None or rng.randint(1, 4) > 1):
@@ -151,6 +165,7 @@ def _destroy_wielded(world: World, mon: Monster, weapon: Item) -> None:
 # The seffect_* handlers (C: the seffects() switch, src/read.c)
 # ------------------------------------------------------------
 
+
 def _seffect_blank_paper(world: World, actor: Monster) -> List[Event]:
     """C: seffect_blank_paper: "This scroll seems to be blank."  The
     scroll is NOT consumed (C: doread skips useup for
@@ -158,8 +173,9 @@ def _seffect_blank_paper(world: World, actor: Monster) -> List[Event]:
     return [MessageEvent("This scroll seems to be blank.")]
 
 
-def _seffect_enchant_weapon(world: World, mon: Monster, scroll: Item,
-                            rng) -> List[Event]:
+def _seffect_enchant_weapon(
+    world: World, mon: Monster, scroll: Item, rng
+) -> List[Event]:
     """C: seffect_enchant_weapon (src/read.c) + chwepon (src/wield.c).
 
     The amount `s` of enchantment (C's formula, verbatim): -1 for a
@@ -175,8 +191,9 @@ def _seffect_enchant_weapon(world: World, mon: Monster, scroll: Item,
     if weapon is None:
         # C: chwepon -> strange_feeling("Your hands twitch." /
         # "itch.") + useup
-        return [MessageEvent("Your hands twitch." if scroll.cursed
-                             else "Your hands itch.")]
+        return [
+            MessageEvent("Your hands twitch." if scroll.cursed else "Your hands itch.")
+        ]
 
     if scroll.cursed:
         s = -1
@@ -195,19 +212,20 @@ def _seffect_enchant_weapon(world: World, mon: Monster, scroll: Item,
     return events
 
 
-def _chwepon(world: World, mon: Monster, weapon: Item, s: int,
-             rng) -> List[Event]:
+def _chwepon(world: World, mon: Monster, weapon: Item, s: int, rng) -> List[Event]:
     """C: chwepon (src/wield.c), the scroll subset (the no-weapon
     branch is handled by the caller, as in C's structure)."""
     # C: the soft limit -- a weapon pushed past +5 (or under -5) by
     # the sign of the enchantment evaporates, 2/3 of the time
-    if ((weapon.spe > 5 and s >= 0) or (weapon.spe < -5 and s < 0)) \
-            and rng.randint(1, 3) > 1:
+    if ((weapon.spe > 5 and s >= 0) or (weapon.spe < -5 and s < 0)) and rng.randint(
+        1, 3
+    ) > 1:
         # C: rn2(3) != 0 -> useupall(uwep)
         name = _yname(mon, weapon)
         _destroy_wielded(world, mon, weapon)
-        return [MessageEvent(f"{name} violently glows for a while "
-                             f"and then evaporates.")]
+        return [
+            MessageEvent(f"{name} violently glows for a while " f"and then evaporates.")
+        ]
 
     # C: the glow line (xtime: |s| == 1 -> "moment", else "while";
     # s == 0 -> "violently glow")
@@ -227,16 +245,15 @@ def _chwepon(world: World, mon: Monster, weapon: Item, s: int,
 
     # C: the elven / high-spe vibration clue (elven short-circuits the
     # draw, as C's is_elven_weapon test does)
-    if weapon.spe > 5 and (_is_elven(weapon)
-                           or rng.randint(1, 7) > 1):
+    if weapon.spe > 5 and (_is_elven(weapon) or rng.randint(1, 7) > 1):
         # C: !rn2(7) -- 1/7 for the non-elven case
-        events.append(MessageEvent(f"{name} suddenly vibrates "
-                                   f"unexpectedly."))
+        events.append(MessageEvent(f"{name} suddenly vibrates " f"unexpectedly."))
     return events
 
 
-def _seffect_enchant_armor(world: World, mon: Monster, scroll: Item,
-                           rng) -> List[Event]:
+def _seffect_enchant_armor(
+    world: World, mon: Monster, scroll: Item, rng
+) -> List[Event]:
     """C: seffect_enchant_armor (src/read.c) + some_armor (src/
     do_wear.c), the non-confused subset."""
     armor = some_armor(world, mon, rng)
@@ -256,8 +273,9 @@ def _seffect_enchant_armor(world: World, mon: Monster, scroll: Item,
         name = _yname(mon, armor)
         worn.setnotworn(mon, armor)  # C: remove_worn_item
         useup(world, mon.id, armor)  # C: useup(otmp)
-        return [MessageEvent(f"{name} violently glows for a while, "
-                             f"then evaporates.")]
+        return [
+            MessageEvent(f"{name} violently glows for a while, " f"then evaporates.")
+        ]
 
     # C: the base power -- 2 for spe -1..+0, 1 for +1..+2, 0 for
     # +3..+4, ...; C's (4 - s) / 2 is a truncating division
@@ -288,11 +306,11 @@ def _seffect_enchant_armor(world: World, mon: Monster, scroll: Item,
     name = _yname(mon, armor)
     events: List[Event] = [MessageEvent(f"{name} {verb} for a {xtime}.")]
     if scursed and not armor.cursed:
-        armor.cursed = True      # C: curse(otmp)
+        armor.cursed = True  # C: curse(otmp)
     elif sblessed and not armor.blessed:
-        armor.blessed = True     # C: bless(otmp)
+        armor.blessed = True  # C: bless(otmp)
     elif not scursed and armor.cursed:
-        armor.cursed = False     # C: uncurse(otmp)
+        armor.cursed = False  # C: uncurse(otmp)
     armor.spe += s
     _cap_spe(armor)
     # C: alter_cost (read.c) -- an enchanted item on a shop bill is
@@ -303,10 +321,8 @@ def _seffect_enchant_armor(world: World, mon: Monster, scroll: Item,
 
     # C: the trailing "suddenly vibrate unexpectedly." clue (elven
     # short-circuits the draw, as C does)
-    if armor.spe > (5 if elven else 3) \
-            and (elven or rng.randint(1, 7) > 1):
-        events.append(MessageEvent(f"{name} suddenly vibrates "
-                                   f"unexpectedly."))
+    if armor.spe > (5 if elven else 3) and (elven or rng.randint(1, 7) > 1):
+        events.append(MessageEvent(f"{name} suddenly vibrates " f"unexpectedly."))
     return events
 
 
@@ -317,9 +333,13 @@ def _seffect_remove_curse(world: World, mon: Monster, scroll: Item) -> List[Even
     or every worn item (C: the wornmask condition) is uncursed --
     silently, as C's uncurse() (src/mkobj.c) does.  The scroll hides
     itself from its own scan (C skips it when its quantity is 1)."""
-    events: List[Event] = [MessageEvent(
-        "You feel like someone is helping you." if mon.is_hero
-        else f"{mon.name} feels like someone is helping.")]
+    events: List[Event] = [
+        MessageEvent(
+            "You feel like someone is helping you."
+            if mon.is_hero
+            else f"{mon.name} feels like someone is helping."
+        )
+    ]
     if scroll.cursed:
         events.append(MessageEvent("The scroll disintegrates."))
         return events
@@ -349,8 +369,8 @@ def _seffect_teleportation(world: World, mon: Monster, rng) -> List[Event]:
 # The command entry point (C: doread)
 # ------------------------------------------------------------
 
-def read_scroll(world: World, monster_id: str, item_id: str,
-                rng) -> List[Event]:
+
+def read_scroll(world: World, monster_id: str, item_id: str, rng) -> List[Event]:
     """C: doread (src/read.c): read a scroll and apply its effect.
 
     The scroll is consumed except SCR_BLANK_PAPER (C: doread skips
@@ -374,9 +394,13 @@ def read_scroll(world: World, monster_id: str, item_id: str,
     # the effects that describe the scroll's fate -- a cursed remove
     # curse in the subset
     nodisappear = st is ScrollType.REMOVE_CURSE and item.cursed
-    events: List[Event] = [MessageEvent(
-        "You read the scroll." if nodisappear
-        else "As you read the scroll, it disappears.")]
+    events: List[Event] = [
+        MessageEvent(
+            "You read the scroll."
+            if nodisappear
+            else "As you read the scroll, it disappears."
+        )
+    ]
     if st is ScrollType.ENCHANT_WEAPON:
         events += _seffect_enchant_weapon(world, actor, item, rng)
     elif st is ScrollType.ENCHANT_ARMOR:
@@ -389,6 +413,7 @@ def read_scroll(world: World, monster_id: str, item_id: str,
         # STUB: the C seffect_<name> port (see the module docstring)
         raise NotImplementedError(
             f"the scroll of {st.name.lower().replace('_', ' ')} is not "
-            f"ported yet (C: src/read.c seffects())")
+            f"ported yet (C: src/read.c seffects())"
+        )
     useup(world, monster_id, item)  # C: useup(otmp)
     return events

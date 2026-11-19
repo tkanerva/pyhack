@@ -1,8 +1,16 @@
 """Tests for step(): one command in, world + events out."""
+
 import random
 
-from core import (ListCommand, MoveCommand, PickupCommand, TakeOffCommand,
-                  WaitCommand, WearCommand, step)
+from core import (
+    ListCommand,
+    MoveCommand,
+    PickupCommand,
+    TakeOffCommand,
+    WaitCommand,
+    WearCommand,
+    step,
+)
 from core.events import GameOverEvent, MessageEvent
 from core.objects import ObjClass, ObjType, W_ARM
 from core.types import DoorMask, Item, ObjectType, Tile, TerrainType
@@ -57,6 +65,7 @@ def test_diagonally_adjacent_monster_attacks():
 # monster vision: pursuit (C: the m_canseeu() check in monmove.c)
 # ------------------------------------------------------------
 
+
 def test_monster_pursues_visible_hero():
     """The goblin 4 tiles east of the hero can see it: it steps one
     tile closer (the pursuit direction is preset with SeqRng)."""
@@ -86,8 +95,7 @@ def test_blind_monster_wanders_instead_of_pursuing():
 def test_monster_wanders_when_it_cannot_see_the_hero():
     """A wall between goblin and hero: no line of sight, no pursuit --
     the old random-walk behaviour remains."""
-    w = make_world(map=make_map(walls=((7, 4),)),
-                   monsters=[make_monster(pos=(8, 4))])
+    w = make_world(map=make_map(walls=((7, 4),)), monsters=[make_monster(pos=(8, 4))])
     step(w, WaitCommand(), random.Random(1))
     m = w.actors["goblin_0"]
     assert abs(m.pos[0] - 8) + abs(m.pos[1] - 4) == 1
@@ -95,9 +103,11 @@ def test_monster_wanders_when_it_cannot_see_the_hero():
 
 def test_monster_pursues_hero_through_open_door():
     walls = [(5, y) for y in range(8) if y != 4]
-    w = make_world(map=make_map(walls=walls),
-                   hero=make_hero(pos=(2, 4)),
-                   monsters=[make_monster(pos=(8, 4))])
+    w = make_world(
+        map=make_map(walls=walls),
+        hero=make_hero(pos=(2, 4)),
+        monsters=[make_monster(pos=(8, 4))],
+    )
     set_tile(w, (5, 4), Tile(typ=TerrainType.DOOR, door_mask=DoorMask.ISOPEN))
     step(w, WaitCommand(), SeqRng((-1, 0)))
     assert w.actors["goblin_0"].pos == (7, 4)
@@ -105,9 +115,11 @@ def test_monster_pursues_hero_through_open_door():
 
 def test_monster_cannot_see_hero_behind_closed_door():
     walls = [(5, y) for y in range(8) if y != 4]
-    w = make_world(map=make_map(walls=walls),
-                   hero=make_hero(pos=(2, 4)),
-                   monsters=[make_monster(pos=(8, 4))])
+    w = make_world(
+        map=make_map(walls=walls),
+        hero=make_hero(pos=(2, 4)),
+        monsters=[make_monster(pos=(8, 4))],
+    )
     set_tile(w, (5, 4), Tile(typ=TerrainType.DOOR, door_mask=DoorMask.CLOSED))
     step(w, WaitCommand(), random.Random(1))
     m = w.actors["goblin_0"]
@@ -176,11 +188,21 @@ def test_same_seed_same_game():
         rng = random.Random(seed)
         w = new_world(rng)
         out = []
-        for cmd in (MoveCommand(1, 0), MoveCommand(0, 1), WaitCommand(),
-                    MoveCommand(-1, 0), MoveCommand(0, -1), WaitCommand()):
+        for cmd in (
+            MoveCommand(1, 0),
+            MoveCommand(0, 1),
+            WaitCommand(),
+            MoveCommand(-1, 0),
+            MoveCommand(0, -1),
+            WaitCommand(),
+        ):
             out.extend(step(w, cmd, rng))
-        return (w.hero.hp, w.hero.pos, w.turn,
-                [(type(e).__name__, getattr(e, "text", "")) for e in out])
+        return (
+            w.hero.hp,
+            w.hero.pos,
+            w.turn,
+            [(type(e).__name__, getattr(e, "text", "")) for e in out],
+        )
 
     assert play(42) == play(42)
     assert play(42) != play(1337)
@@ -190,9 +212,16 @@ def test_same_seed_same_game():
 # wear / take off / pickup through step (PLAN-ARMOR.md Phase 2)
 # ------------------------------------------------------------
 
+
 def _kit_item(i: int, otyp: ObjType, name: str, **kw) -> Item:
-    it = Item(id=f"kit_{i}", otype=ObjectType.ARMOR, name=name,
-              otyp=otyp.value, oclass=ObjClass.ARMOR.value, **kw)
+    it = Item(
+        id=f"kit_{i}",
+        otype=ObjectType.ARMOR,
+        name=name,
+        otyp=otyp.value,
+        oclass=ObjClass.ARMOR.value,
+        **kw,
+    )
     it.carrier = "player"
     return it
 
@@ -204,9 +233,10 @@ def test_step_wear_command_wears_and_drops_ac():
     ev = step(w, WearCommand(mail.id), SeqRng())
     assert mail.owornmask == W_ARM
     assert uac(w, w.hero) == 5
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You are now wearing the chain mail."
-               for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You are now wearing the chain mail."
+        for e in ev
+    )
 
 
 def test_step_takeoff_command():
@@ -216,8 +246,10 @@ def test_step_takeoff_command():
     ev = step(w, TakeOffCommand(mail.id), SeqRng())
     assert mail.owornmask == 0
     assert uac(w, w.hero) == 10
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You were wearing the chain mail." for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You were wearing the chain mail."
+        for e in ev
+    )
 
 
 def test_step_wear_refusal_consumes_no_state():
@@ -225,29 +257,33 @@ def test_step_wear_refusal_consumes_no_state():
     w = make_world(hero=make_hero(ac=10), items=[mail])
     # wearing the already-worn mail refuses
     ev = step(w, WearCommand(mail.id), SeqRng())
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You are already wearing that." for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You are already wearing that."
+        for e in ev
+    )
     assert uac(w, w.hero) == 5
 
 
 def test_step_pickup_command():
-    helm = _kit_item(1, ObjType.ELVEN_LEATHER_HELM, "elven leather helm",
-                     pos=(6, 4))
+    helm = _kit_item(1, ObjType.ELVEN_LEATHER_HELM, "elven leather helm", pos=(6, 4))
     helm.carrier = None  # on the floor, not carried
     w = make_world(items=[helm])
     ev = step(w, PickupCommand(), SeqRng())
     assert helm.pos is None and helm.carrier == "player"
     assert helm in w.hero.inventory
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You pick up the elven leather helm."
-               for e in ev)
+    assert any(
+        isinstance(e, MessageEvent) and e.text == "You pick up the elven leather helm."
+        for e in ev
+    )
     # and the picked-up gear can be worn in the same turn sequence
     ev = step(w, WearCommand(helm.id), SeqRng())
     assert helm.owornmask == 4  # W_ARMH
     assert uac(w, w.hero) == 4  # 5 - the helm's bonus of 1
-    assert any(isinstance(e, MessageEvent)
-               and e.text == "You are now wearing the elven leather helm."
-               for e in ev)
+    assert any(
+        isinstance(e, MessageEvent)
+        and e.text == "You are now wearing the elven leather helm."
+        for e in ev
+    )
 
 
 def test_an_inventory_listing_costs_no_turn():

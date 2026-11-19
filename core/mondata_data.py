@@ -7,6 +7,7 @@ from PM_NAMES (core.monst) at import time so a renumbering would
 break loudly.  core.mondata imports them back from here; import
 core.mondata, the public API, don't import this module directly.
 """
+
 from __future__ import annotations
 
 from .monst import PM_NAMES

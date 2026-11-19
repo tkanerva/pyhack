@@ -97,6 +97,7 @@ the hero wears the +1 ring of protection.  Same for the fainted
 metabolism roll (only while fainted) and the faint roll (only in
 the FAINTING branch).
 """
+
 from __future__ import annotations
 
 from typing import Generator, List, Optional
@@ -105,21 +106,37 @@ from .events import Event, MessageEvent
 from .hacklib import rounddiv, sgn
 from .invent import useup
 from .occupation import OccupationStopped, start_occupation
-from .objects import (O, ObjClass, Prop, W_AMUL, W_ARMOR, W_RINGL, W_RINGR,
-                      W_TOOL, object_type)
+from .objects import (
+    O,
+    ObjClass,
+    Prop,
+    W_AMUL,
+    W_ARMOR,
+    W_RINGL,
+    W_RINGR,
+    W_TOOL,
+    object_type,
+)
 from .rules import apply_damage, current_ability
-from .types import (DamageType, HungerState, Item, Monster, World)
+from .types import DamageType, HungerState, Item, Monster, World
 from .worn import which_armor
 
 # C: the hard-coded gauge thresholds of eat.c
-HUNGER_CAP = 2000    # `u.uhunger >= 2000` -- the choke
-FULL_WARN = 1500     # `u.uhunger >= 1500` -- the fullwarning line
-HUNGER_START = 900   # init_uhunger()
+HUNGER_CAP = 2000  # `u.uhunger >= 2000` -- the choke
+FULL_WARN = 1500  # `u.uhunger >= 1500` -- the fullwarning line
+HUNGER_START = 900  # init_uhunger()
 
 # C: the hu_stat[] array (eat.c) -- the bottom-line texts, indexed
 # by the HungerState (C botl.c prints them when uhs != NOT_HUNGRY)
-HU_STAT = ("Satiated", "        ", "Hungry  ", "Weak    ",
-           "Fainting", "Fainted ", "Starved ")
+HU_STAT = (
+    "Satiated",
+    "        ",
+    "Hungry  ",
+    "Weak    ",
+    "Fainting",
+    "Fainted ",
+    "Starved ",
+)
 
 
 def init_uhunger(world: World, actor_id: str) -> None:
@@ -133,6 +150,7 @@ def init_uhunger(world: World, actor_id: str) -> None:
 # ------------------------------------------------------------
 # The state machine (eat.c newuhs)
 # ------------------------------------------------------------
+
 
 def hunger_state(h: int) -> HungerState:
     """C: the `newhs` threshold step of newuhs()."""
@@ -166,10 +184,12 @@ def newuhs(world: World, actor_id: str, incr: bool, rng) -> List[Event]:
         if mon.fainted > 0:
             # C: is_fainted()
             newhs = HungerState.FAINTED
-        if (int(mon.uhs) <= int(HungerState.WEAK)
-                # C: rn2(20 - div) >= 19 -- the C value is 0-based, so
-                # the 1-based draw fires on its TOP value (1/20 at div 0)
-                or rng.randint(1, 20 - div) >= 20):
+        if (
+            int(mon.uhs) <= int(HungerState.WEAK)
+            # C: rn2(20 - div) >= 19 -- the C value is 0-based, so
+            # the 1-based draw fires on its TOP value (1/20 at div 0)
+            or rng.randint(1, 20 - div) >= 20
+        ):
             if mon.fainted == 0:
                 # C: !is_fainted() && gm.multi >= 0
                 mon.fainted = 10 - div
@@ -181,9 +201,14 @@ def newuhs(world: World, actor_id: str, incr: bool, rng) -> List[Event]:
             # C: ACURR(A_CON); done(STARVING), killer "starvation"
             mon.uhs = HungerState.STARVED
             events.append(MessageEvent("You die from starvation."))
-            events += apply_damage(world, actor_id, mon.hp,
-                                   DamageType.STARVING, "starvation",
-                                   message=False)
+            events += apply_damage(
+                world,
+                actor_id,
+                mon.hp,
+                DamageType.STARVING,
+                "starvation",
+                message=False,
+            )
             return events
 
     if newhs != mon.uhs:
@@ -214,9 +239,14 @@ def newuhs(world: World, actor_id: str, incr: bool, rng) -> List[Event]:
         if mon.alive and mon.hp < 1:
             mon.uhs = HungerState.STARVED
             events.append(MessageEvent("You die from hunger and exhaustion."))
-            events += apply_damage(world, actor_id, mon.hp,
-                                   DamageType.STARVING, "exhaustion",
-                                   message=False)
+            events += apply_damage(
+                world,
+                actor_id,
+                mon.hp,
+                DamageType.STARVING,
+                "exhaustion",
+                message=False,
+            )
     return events
 
 
@@ -224,16 +254,19 @@ def newuhs(world: World, actor_id: str, incr: bool, rng) -> List[Event]:
 # The per-round ticker (eat.c gethungry)
 # ------------------------------------------------------------
 
+
 def _accessory_can_burn(world: World, mon: Monster) -> bool:
     """Whether at least one `accessorytime` branch of C gethungry can
     burn nutrition for this actor (PLAN-HUNGER.md decision 4): the
     rn2(20) draw is made only in that case, so the bare hero is a
     zero-draw path (C draws unconditionally; the draw changes state
     only when a branch can burn)."""
-    if (Prop.REGENERATION in mon.intrinsics
-            or Prop.HUNGER in mon.intrinsics
-            or Prop.CONFLICT in mon.intrinsics
-            or Prop.SLOW_DIGESTION in mon.intrinsics):
+    if (
+        Prop.REGENERATION in mon.intrinsics
+        or Prop.HUNGER in mon.intrinsics
+        or Prop.CONFLICT in mon.intrinsics
+        or Prop.SLOW_DIGESTION in mon.intrinsics
+    ):
         return True
     for mask in (W_RINGL, W_RINGR, W_AMUL):
         if which_armor(world, mon, mask) is not None:
@@ -272,7 +305,7 @@ def tick_hunger(world: World, actor_id: str, rng) -> List[Event]:
         if rng.randint(1, 10) == 1:
             mon.uhunger -= 1
     else:
-        mon.uhunger -= 1               # C: ordinary food consumption
+        mon.uhunger -= 1  # C: ordinary food consumption
 
     if _accessory_can_burn(world, mon):
         # C: accessorytime = rn2(20) -- 0..19, the 1-based draw
@@ -280,25 +313,25 @@ def tick_hunger(world: World, actor_id: str, rng) -> List[Event]:
         accessorytime = rng.randint(1, 20) - 1
         left = which_armor(world, mon, W_RINGL)
         right = which_armor(world, mon, W_RINGR)
-        if accessorytime % 2:   # odd
+        if accessorytime % 2:  # odd
             if Prop.REGENERATION in mon.intrinsics:
                 # C: (HRegeneration & ~FROMFORM) || (ERegeneration & ~...)
                 mon.uhunger -= 1
             # C: near_capacity() > SLT_ENCUMBER -- no encumbrance
             # system (PLAN-HUNGER.md 5.3)
-        else:   # even
+        else:  # even
             if Prop.HUNGER in mon.intrinsics:
-                mon.uhunger -= 1       # C: Hunger
+                mon.uhunger -= 1  # C: Hunger
             if Prop.CONFLICT in mon.intrinsics:
-                mon.uhunger -= 1       # C: HConflict || (EConflict & ~W_ARTI)
+                mon.uhunger -= 1  # C: HConflict || (EConflict & ~W_ARTI)
             if accessorytime == 0:
                 # C: the armor slow-digestion burns nutrition (it is
                 # not a ring, so the ring turns do not cover it)
-                if (Prop.SLOW_DIGESTION in mon.intrinsics
-                        and (left is None
-                             or left.otyp != O.RIN_SLOW_DIGESTION)
-                        and (right is None
-                             or right.otyp != O.RIN_SLOW_DIGESTION)):
+                if (
+                    Prop.SLOW_DIGESTION in mon.intrinsics
+                    and (left is None or left.otyp != O.RIN_SLOW_DIGESTION)
+                    and (right is None or right.otyp != O.RIN_SLOW_DIGESTION)
+                ):
                     mon.uhunger -= 1
             elif accessorytime == 4:
                 if _ring_burns(left):
@@ -311,8 +344,7 @@ def tick_hunger(world: World, actor_id: str, rng) -> List[Event]:
                 if _ring_burns(right):
                     mon.uhunger -= 1
             elif accessorytime == 16:
-                if any(it.otyp == O.AMULET_OF_YENDOR
-                       for it in mon.inventory):
+                if any(it.otyp == O.AMULET_OF_YENDOR for it in mon.inventory):
                     mon.uhunger -= 1
 
     return newuhs(world, actor_id, True, rng)
@@ -322,8 +354,8 @@ def tick_hunger(world: World, actor_id: str, rng) -> List[Event]:
 # The gauge up / down (eat.c lesshungry / morehungry)
 # ------------------------------------------------------------
 
-def choke(world: World, actor_id: str, item: Optional[Item],
-          rng) -> List[Event]:
+
+def choke(world: World, actor_id: str, item: Optional[Item], rng) -> List[Event]:
     """C: choke() (src/eat.c) -- only reaches the real branch when the
     pre-meal state was SATIATED (C `u.uhs != SATIATED` early-return;
     the amulet-of-strangulation path is unported).  Survive 1/20
@@ -334,27 +366,29 @@ def choke(world: World, actor_id: str, item: Optional[Item],
     if mon.uhs != HungerState.SATIATED:
         return []
     events: List[Event] = []
-    if rng.randint(1, 20) == 1:   # C: !rn2(20) -- survives 1 in 20
-        events.append(MessageEvent(
-            "You stuff yourself and then vomit voluminously."))
+    if rng.randint(1, 20) == 1:  # C: !rn2(20) -- survives 1 in 20
+        events.append(MessageEvent("You stuff yourself and then vomit voluminously."))
         # C: morehungry(Hunger ? (u.uhunger - 60) : 1000) -- the demo
         # hero has no dragon-skin Hunger property, so the flat 1000
         events += morehungry(world, actor_id, 1000, rng)
         # C: vomit() -- the nomul -2 / acid breath / altar wrath are
         # dropped (PLAN-HUNGER.md 4)
     else:
-        what = "your food" if item is not None else "it"   # C: foodword(food) is the flat "food" for FOOD_CLASS
+        what = (
+            "your food" if item is not None else "it"
+        )  # C: foodword(food) is the flat "food" for FOOD_CLASS
         events.append(MessageEvent(f"You choke over {what}."))
         events.append(MessageEvent("You die..."))
         # C: done(CHOKING), killer "Choked on ..."
-        events += apply_damage(world, actor_id, mon.hp,
-                               DamageType.STARVING, "choking",
-                               message=False)
+        events += apply_damage(
+            world, actor_id, mon.hp, DamageType.STARVING, "choking", message=False
+        )
     return events
 
 
-def lesshungry(world: World, actor_id: str, num: int, rng,
-               item: Optional[Item] = None) -> List[Event]:
+def lesshungry(
+    world: World, actor_id: str, num: int, rng, item: Optional[Item] = None
+) -> List[Event]:
     """C: lesshungry() (src/eat.c) -- the gauge UP (after eating, and
     after drinking fruit juice): the >=1500 fullwarning line, the
     >=2000 choke, then newuhs(FALSE).  `item` is the food being eaten
@@ -366,14 +400,14 @@ def lesshungry(world: World, actor_id: str, num: int, rng,
     if mon.uhunger >= HUNGER_CAP:
         events += choke(world, actor_id, item, rng)
     elif mon.uhunger >= FULL_WARN:
-        if Prop.HUNGER not in mon.intrinsics:   # C: !Hunger
-            events.append(MessageEvent(
-                "You're having a hard time getting all of it down."))
+        if Prop.HUNGER not in mon.intrinsics:  # C: !Hunger
+            events.append(
+                MessageEvent("You're having a hard time getting all of it down.")
+            )
     return events + newuhs(world, actor_id, False, rng)
 
 
-def morehungry(world: World, actor_id: str, num: int,
-               rng) -> List[Event]:
+def morehungry(world: World, actor_id: str, num: int, rng) -> List[Event]:
     """C: morehungry() (src/eat.c) -- the gauge DOWN (after vomiting,
     after feats of magic): newuhs(TRUE)."""
     mon = world.actors[actor_id]
@@ -384,6 +418,7 @@ def morehungry(world: World, actor_id: str, num: int,
 # ------------------------------------------------------------
 # Eating (eat.c doeat, the carried-food subset)
 # ------------------------------------------------------------
+
 
 def _find_food(world: World, actor_id: str, item_id: str) -> Optional[Item]:
     """The carried item (like _find_scroll / _find_potion).  C doeat
@@ -444,8 +479,9 @@ def _meal_plan(item: Item, resume: bool):
     return reqtime, nmod
 
 
-def _meal(world: World, actor_id: str, item_id: str,
-          nmod: int) -> Generator[List[Event], None, List[Event]]:
+def _meal(
+    world: World, actor_id: str, item_id: str, nmod: int
+) -> Generator[List[Event], None, List[Event]]:
     """C: eatfood() (src/eat.c:524-546) -- the eating occupation as a
     generator: one bite per round (the C bite() call), the piece
     consumed when it is gone (C: done_eating).  The state (the item,
@@ -485,16 +521,14 @@ def _meal(world: World, actor_id: str, item_id: str,
             if item.oeaten >= full:
                 # done (C: done_eating): consume the piece (C: useup)
                 useup(world, actor_id, item)
-                return ev + [MessageEvent(
-                    f"You finish eating the {item.name}.")]
+                return ev + [MessageEvent(f"You finish eating the {item.name}.")]
     except OccupationStopped:
         # C: reset_eat() -- the piece stays carried with its oeaten
         # bookkeeping; the resume is an EatCommand on the same item
         return []
 
 
-def eat_food(world: World, actor_id: str, item_id: str,
-             rng) -> List[Event]:
+def eat_food(world: World, actor_id: str, item_id: str, rng) -> List[Event]:
     """C: doeat() (src/eat.c), the carried-food subset: find, the
     edibility refusals, the fprefx first-bite feedback, the meal.
 
@@ -556,6 +590,7 @@ def eat_food(world: World, actor_id: str, item_id: str,
         return events  # the choke vomit -- the meal ends, the piece stays
     # the remainder of the meal (C: set_occupation(eatfood, "eating %s",
     # food_xname(otmp, TRUE)) -- the xname carries the "the")
-    start_occupation(world, _meal(world, actor_id, item.id, nmod),
-                     f"eating the {item.name}")
+    start_occupation(
+        world, _meal(world, actor_id, item.id, nmod), f"eating the {item.name}"
+    )
     return events

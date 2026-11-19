@@ -5,6 +5,7 @@ Events.  The UI (or a test) consumes them.  This is what replaces the
 old MessageRouter / world.broadcast machinery: same decoupling, but the
 flow is visible in one return value and trivially assertable.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ class Event:
 @dataclass(frozen=True)
 class MessageEvent(Event):
     """A line for the message log / player-facing text."""
+
     text: str
 
 
@@ -66,6 +68,7 @@ class DiscoveryEvent(Event):
     - ``reveal_spe``: reveal the enchantment (Item.known) for a charged
       ring whose type is now known.
     """
+
     otyp: int
     item_id: Optional[str] = None
     mark_known: bool = False
@@ -88,6 +91,7 @@ class TrapSeenEvent(Event):
 class ZapEvent(Event):
     """A beam was fired (wand zap or spell cast -- the shared engine
     emits it; the effect is the registry key, C: the zap type)."""
+
     caster: str
     effect: ZapEffect
     target: Optional[str]
@@ -101,6 +105,7 @@ class LevelChangeEvent(Event):
     ``first_visit`` is True when the level was generated for this
     entry (C: the mklev() vs getlev() branch of goto_level).
     """
+
     lev: int
     first_visit: bool
 
