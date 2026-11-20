@@ -112,9 +112,10 @@ details live in the PLAN-*.md files and the module docstrings):**
   `Monster.ac` is the BASE body AC and the effective AC is the
   computed `worn.uac()` (C `find_ac`), never cached; `mattacku`'s
   differential reads `AC_VALUE(uac)` (the roll only for negative AC).
-  Phase 4 (erosion) is counters (`oeroded` / `oeroded2`) that
-  `ARM_BONUS` / `uac` read on every query — no cache invalidation;
-  the live call sites are the fire trap and the acid passive attack.
+  Phase 4 (erosion) is counters (`oeroded` / `oeroded2` plus the
+  `oerodeproof` flag) that `ARM_BONUS` / `uac` read on every query — no
+  cache invalidation; the live call sites are the fire trap and the acid
+  passive attack, and `tests/test_erosion.py` is phase 4's suite.
 - Bump-to-attack: walking into a monster attacks it (the old demo had
   no hero attack at all, so the game was a death-watching exercise).
   Hero melee uses the same hit formula with 1d2 damage.
@@ -154,7 +155,10 @@ details live in the PLAN-*.md files and the module docstrings):**
   ability an ability-ring changes is computed, never cached
   (`rules.current_ability`, the `uac` style), so it feeds to-hit for
   free; the per-turn effects are `rings.tick_rings`; the remaining
-  ring effects are STUBs (the rings.py docstring).
+  ring effects are STUBs (the rings.py docstring).  `tests/test_rings.py`
+  (PLAN-RING.md phase 6) pins the discovery contract, the ability maths,
+  the AC, the two per-turn effects and the draw discipline (a ring-less
+  hero costs zero rng draws).
 - The stairs system (PLAN-STAIRS.md, core/stairs.py): stairs are
   TERRAIN (`TerrainType.STAIRS` + `Tile.stair_dir`, C: the `ladder`
   mask) plus per-level STAIRWAY RECORDS (`World.stairs`), not traps.
@@ -481,9 +485,12 @@ temple itself has landed with it, queue item 1):
    inventories; the `mongets` / `mkmonmoney` mechanism is in),
    phase F's groups / `grow_up` / `clone_mon` / `create_critters`,
    `splitobj` + the container / pickup merge rules, the rust / rot /
-   corrode half of `mkobj_erosions`, and the fire-trap-erodes-armour
-   regression test.  (The `Item.charges` -> `spe` migration is DONE —
-   it landed with PLAN-INVENT.md phase A.)
+   corrode half of `mkobj_erosions`.  (The fire-trap-erodes-armour
+   regression test is DONE — `tests/test_erosion.py`, which is also
+   PLAN-ARMOR.md phase 4's suite and the ring suite's sibling: both
+   landed together, and between them they found the missing
+   `Item.oerodeproof` field.  The `Item.charges` -> `spe` migration
+   landed with PLAN-INVENT.md phase A.)
 3. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
    PLAN-DROP.md — invent.c / pickup.c / do.c + wield.c): phase A is
    in (`core/invent.py`: the pack, the letters, the single writer) and

@@ -639,13 +639,17 @@ def mkobj_erosions(world: World, rng, item: Item) -> None:
     A tiny fraction is erodeproof *instead*; an erodable item may also
     generate greased.  STUB: only the flammability test is ported
     (core.worn.is_flammable), so `oeroded2` (rust / rot / corrode) is
-    never generated yet, and `oerodeproof` has no field.
+    never generated yet.  The erodeproof roll follows C's control flow
+    exactly (it is rolled before the other two, and a hit skips them);
+    the flag it sets is Item.oerodeproof, which core.worn.erode_obj
+    honours.
     """
     del world
     if not may_generate_eroded(item):
         return
     if not rng.rn2(100):
-        return  # C: oerodeproof
+        item.oerodeproof = True  # C: obj->oerodeproof = 1
+        return
     if not rng.rn2(80) and is_flammable(item):
         while True:
             item.oeroded += 1

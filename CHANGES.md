@@ -5,6 +5,64 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The test debt: the ring suite and the erosion suite
+
+**Why:** the queue's own first item (ARCHITECTURE.md "Suggested next
+steps", done/README.md "the test debt first"): two systems had landed
+as *code* with nothing pinning them — PLAN-RING.md phase 6 (a fully
+written 26-test spec for `core/rings.py`, which had no test file at
+all) and PLAN-ARMOR.md phase 4 (erosion, whose only live call site is
+the fire trap).  Cheap, and both cover the item model every later
+wave touches.
+
+**What landed:**
+
+1. **`tests/test_rings.py`** — the phase-6 spec, 26 tests: the
+discovery contract (`ring_on` / `ring_off` are producers; the
+mutation happens only in `rules.apply_discovery`), the ability rings
+(computed, never cached -- including the `uhitm` to-hit integration),
+the protection ring's AC through `worn.uac`, the two per-turn effects
+(`tick_rings`: regen, teleport) with the draw audit (a ring-less hero
+costs zero draws; a worn teleport ring costs exactly one), the
+passive / feel-it rings (prop conveyance, discovery on wear, no
+active effect), `ring_name` (bare "ring" / "ring of X" / the ``(+N)``
+of a charged known ring), the don/doff wiring and a `step()` round
+trip.
+2. **One spec deviation, documented:** the plan's §22 said an
+*undiscovered* ring "resolves through the (possibly shuffled)
+description".  The port returns the bare `"ring"` (the description
+is never leaked as a name -- C's xname behaviour for a ring you have
+not identified), and the test pins that instead.
+3. **`tests/test_erosion.py`** — 16 tests for PLAN-ARMOR phase 4: the
+material predicates over real rows, `erosion_matters` /
+`obj_erode_type`, `erode_obj`'s counters and its message ladder
+(plain / further / completely), the grease protection with its 1/2
+wear-off, the blessed 1/4 resistance, `oerodeproof`, the
+`EF_DESTROY` destruction (slot cleared, item gone), the AC following
+for free via `arm_bonus` / `uac`, the two live call sites
+(`burnarmor`, `erode_armor`), the destroy-armour scroll's
+`disintegrate_arm` / `destroy_arm`, and `mkobj_erosions`.
+4. **The bug the tests found:** `Item` had `oeroded` / `oeroded2` but
+**no `oerodeproof`**, which `worn.erode_obj` (line 814) and
+`destroy_arm` read unconditionally -- so a fire trap on a hero in
+worn armour raised `AttributeError`.  Same class as the `oeroded`
+defect PLAN-MKOBJ.md §2 records, one field short.  `Item` now carries
+`oerodeproof: bool = False` (C: `obj->oerodeproof`), and
+`mkobj_erosions` sets it on C's `!rn2(100)` roll instead of returning
+bare (no draw gained or lost: the roll was already taken).  The
+regression test is `test_fire_trap_erodes_the_worn_armour`, which
+PLAN-MKOBJ.md's DoD asked for by name.
+5. **Baseline:** 1370 -> 1412 tests green, `mypy` clean over 105 files
+(2 new), `flake8` clean, `black` clean.
+
+**Not done:** the ring *effects* (levitation, stealth, invisibility /
+see-invisible, warning, hunger, polymorph, conflict, accuracy / damage)
+stay STUBs, and ring **generation** (the `mksobj` RING branch) is still
+open — both listed in PLAN-RING.md's deferred list, neither is test
+debt.  Phase 4's remaining open item is the per-type `<Type>_on()` /
+`<Type>_off()` side effects (still `NotImplementedError` in
+`core/worn.py`, waiting for the intrinsic/extrinsic property system).
+
 ## The vault (Wave 5, phase 5)
 
 **Why:** the last staging of queue item 1 (PLAN-SPECIAL-ROOMS.md

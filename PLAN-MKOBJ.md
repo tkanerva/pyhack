@@ -105,7 +105,7 @@ function in §1:
 | `contents: List[str] = []` | `obj->cobj` | every container: chests, ice boxes, sacks, bags of holding, statues with loot, shop stock boxes |
 | (rename `container`) | `obj->where` = `OBJ_CONTAINED` + `ocontainer` | **the current `Item.container` means "the id of the monster carrying it"**, which is C's `OBJ_MINVENT`/`OBJ_INVENT`, *not* containment. `mkobj` needs both meanings; they must be two fields: `carrier: Optional[str]` and `contents: List[str]` |
 | `owt: int = 0` | `obj->owt` | `weight()`; encumbrance later |
-| `oeroded` / `oeroded2` | same | **live defect:** `core/worn.py:erode_obj` reads `item.oeroded` (line 756) and increments it (786/788) unguarded, but `Item` has no such field and PLAN-ARMOR.md §294's "Item gains oeroded/oeroded2" never landed. The tests pass only because `tests/test_worn.py` assigns the attribute by hand (`it.oeroded = 4`); a fire trap on a real worn armour item raises `AttributeError`. Fix this first — it is a one-line change with a test |
+| `oeroded` / `oeroded2` | same | **live defect:** `core/worn.py:erode_obj` reads `item.oeroded` (line 756) and increments it (786/788) unguarded, but `Item` has no such field and PLAN-ARMOR.md §294's "Item gains oeroded/oeroded2" never landed. The tests pass only because `tests/test_worn.py` assigns the attribute by hand (`it.oeroded = 4`); a fire trap on a real worn armour item raises `AttributeError`. Fix this first — it is a one-line change with a test.  **Fixed:** `oeroded` / `oeroded2` landed with phase A; `oerodeproof` (the third field of PLAN-ARMOR.md phase 4) was still missing until `tests/test_erosion.py` caught it — `erode_obj` reads it unconditionally, so the same fire trap still raised |
 | `olocked` / `otrapped` / `broken` | same | chests (`mkbox_cnts`), the trapped-box branch |
 | `known`/`dknown` | present | fine |
 | `oartifact: int = 0` | same | accepted, always 0 (no artifact system) |
@@ -361,7 +361,9 @@ vault hoard, and `oinit`'s per-depth object mix in `goto_level`
 - [ ] `Item` carries `quan`/`corpsenm`/`contents`/`owt`/`oeroded`/
       `oeroded2`/`olocked`/`otrapped`; `container` renamed to `carrier`;
       `charges` gone
-- [ ] the fire-trap-erodes-armour regression test exists and passes
+- [x] the fire-trap-erodes-armour regression test exists and passes
+      (`tests/test_erosion.py::test_fire_trap_erodes_the_worn_armour`;
+      it needed `Item.oerodeproof`, which phase A had missed)
 - [ ] `mksobj` / `mkobj` / `mkgold` / `mkcorpstat` / `weight` /
       `blessorcurse` / `mkbox_cnts` ported with C spans in the
       docstrings

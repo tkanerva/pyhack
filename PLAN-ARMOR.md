@@ -26,9 +26,15 @@ call sites: `mhitu.passiveum`'s AD_ACID branch (C
 `erode_armor(mtmp, ERODE_CORRODE)`, 1/30) and the fire trap (C
 dofiretrap -> `burnarmor`).  The destroy-armor scroll itself has no
 live call site yet (pyhack has no scroll command; the read.c port
-brings it, the Phase-3 precedent).  Phase 4's test suite is pending
-(per the execution request, tests land after the code); Phase 5 stays
-out of scope.
+brings it, the Phase-3 precedent).  Phase 4's test suite **landed** as
+`tests/test_erosion.py` (16 tests, including the
+`fire-trap-erodes-the-worn-armour` regression PLAN-MKOBJ.md's DoD
+names) — and it found the plan's third phase-4 `Item` field missing:
+`oeroded` / `oeroded2` were there, `oerodeproof` was not, so
+`erode_obj`'s `item.oerodeproof` raised `AttributeError` on any real
+item (the fire trap on a geared hero).  `Item.oerodeproof` is in, and
+`mkobj_erosions` sets it on C's `!rn2(100)` roll.  Phase 5 stays out of
+scope.
 
 Goal: the hero's defence stops being a fixed `Monster.ac` constant and becomes
 a NetHack defence system: the hero wears armour in the seven C slots
@@ -292,7 +298,10 @@ the demo? optional) refuses to come off.
 ### Phase 4 — erosion & armour destruction (follow-up series)
 
 1. `Item` gains `oeroded: int = 0`, `oeroded2: int = 0`,
-   `oerodeproof: bool = False` (C `obj` fields).
+   `oerodeproof: bool = False` (C `obj` fields).  **Landed** — the
+   first two with PLAN-MKOBJ.md phase A, `oerodeproof` with the phase-4
+   suite (`tests/test_erosion.py`), whose fire-trap test is what caught
+   its absence.
 2. Port `erosion_matters()` (`objnam.c`), `obj_erode_type()`
    (`do_wear.c`), the material predicates (`obj.h`: `is_flammable`,
    `is_rustprone`, `is_crackable`, `is_rottable`, `is_corrodeable` — over
@@ -306,7 +315,7 @@ the demo? optional) refuses to come off.
    `do_wear.c` — fill the Phase-1 STUB).
 4. Tests: erosion per material type, enchantment erosion, destruction drops
    the item (floor) or clears the slot (worn, message), `ARM_BONUS` drops
-   with erosion, `uac` follows.
+   with erosion, `uac` follows.  **Landed:** `tests/test_erosion.py`.
 
 ### Phase 5 — explicitly NOT planned (future, listed so nobody re-decides)
 

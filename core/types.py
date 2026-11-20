@@ -919,6 +919,11 @@ class Item:
     # core.mkobj.mkobj_erosions seeds them at generation time.
     oeroded: int = 0
     oeroded2: int = 0
+    # the item cannot erode at all (C: obj->oerodeproof, the
+    # "rustproof" / "fireproof" gear `mkobj_erosions` generates and the
+    # scroll of enchant armour can make); read by core.worn.erode_obj /
+    # destroy_arm, written by core.mkobj.mkobj_erosions
+    oerodeproof: bool = False
     # a container's state (C: obj->olocked / obj->otrapped / broken)
     olocked: bool = False
     otrapped: bool = False

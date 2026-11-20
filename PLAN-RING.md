@@ -109,7 +109,11 @@ def _type_on(world, mon, item, mask):
 
 ---
 
-## ✅ Implementation status (what the tests must target)
+## ✅ Implementation status (what the tests target)
+
+**The suite is in the tree: `tests/test_rings.py` (phase 6 above, 26
+tests).**  Baseline after it: 1412 tests green, `mypy` clean over 105
+files.
 
 **Implemented and live:**
 - `core.events.DiscoveryEvent` + `core.rules.apply_discovery` (the choke point) + routing in `process_events`.
@@ -193,7 +197,10 @@ Conventions (match `tests/test_worn.py`):
 2. ✅ Per-turn `tick_rings` + `step` wiring (Phase 3, the implemented half) — DONE.
 3. ⏳ Phase 4 — the naming helper `ring_name` is DONE; generation + the full xname + UI wiring are DEFERRED.
 4. ✅ Wire into `core/worn.py` (Phase 5) — DONE.
-5. ⏳ Write `tests/test_rings.py` (the Phase 6 spec above) — NEXT.
+5. ✅ Write `tests/test_rings.py` (the Phase 6 spec above) — DONE (26
+tests; the one deviation: an *undiscovered* ring renders as the bare
+`"ring"`, never through the shuffled description — that is what
+`ring_name` does and what the test pins).
 6. ⏳ Fill the STUB active effects as their systems land (hunger, polymorph, levitation, stealth, invisibility, warning / search, accuracy / damage).
 
 This keeps the ring *effects* isolated in `core.rings` (producers), the *discovery mutation* in the core (`apply_discovery`), and the per-turn upkeep in `step` — all on the event-driven `step()` model.
