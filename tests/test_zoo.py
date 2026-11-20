@@ -127,6 +127,13 @@ def _items(w: World, lev: int):
     return [it for it in w.items.values() if it.lev == lev]
 
 
+def _floor_items(w: World, lev: int):
+    """The items LYING ON the level (not the ones the room's monsters
+    carry -- since PLAN-MAKEMON phase E an armed monster's kit is in
+    World.items too, with the monster's level)."""
+    return [it for it in w.items.values() if it.lev == lev and it.pos is not None]
+
+
 def _stocked_square(m: Map, room: Room, sh, sx: int, sy: int) -> bool:
     """The rectangular-room skip of fill_zoo (C: the !SPACE_POS or
     door-adjacent continue)."""
@@ -225,24 +232,26 @@ def test_court_gets_the_royal_coffers():
     """C: a chest with spe = 2 ("so it can be found later") carrying
     rn1(50 * depth, 10) gold, on a free square in the room.  The chest
     itself is mksobj_at(..., init=TRUE), so it may already hold the
-    random box loot -- the royal gold is the last content, added
-    through add_to_container."""
+    random box loot -- and since a box's loot may itself be a coin pile
+    (BOXIPROBS' COIN row), the royal gold MERGES into it rather than
+    being appended: add_to_container is the merge point."""
     m, room = _room_map()
     w = _claim_and_fill(m, room, RoomType.COURT, 5)
     chests = [
         it
-        for it in _items(w, 5)
-        if it.otyp == int(O.CHEST)
-        and it.pos is not None
-        and LX <= it.pos[0] <= HX
-        and LY <= it.pos[1] <= HY
+        for it in _floor_items(w, 5)
+        if it.otyp == int(O.CHEST) and LX <= it.pos[0] <= HX and LY <= it.pos[1] <= HY
     ]
     assert len(chests) == 1
     chest = chests[0]
     assert chest.spe == 2
-    royal_gold = w.items[chest.contents[-1]]
-    assert royal_gold.otyp == int(O.GOLD_PIECE)
-    assert 10 <= royal_gold.quan <= 50 * 5 + 9
+    coins = [
+        w.items[child_id]
+        for child_id in chest.contents
+        if w.items[child_id].otyp == int(O.GOLD_PIECE)
+    ]
+    assert len(coins) == 1  # the royal gold, merged with any box coins
+    assert 10 <= coins[0].quan <= 50 * 5 + 9
     assert_item_locations(w)
 
 
@@ -263,7 +272,7 @@ def test_zoo_gold_stays_within_the_per_square_budget():
     w = _claim_and_fill(m, room, RoomType.ZOO, ld)
     caps = _gold_budget(m, room, room.doors[0], ld)
     assert len(caps) == STOCKED
-    gold = {it.pos: it for it in _items(w, ld) if it.otyp == int(O.GOLD_PIECE)}
+    gold = {it.pos: it for it in _floor_items(w, ld) if it.otyp == int(O.GOLD_PIECE)}
     assert len(gold) == STOCKED  # one pile per stocked square
     for pos, cap in caps.items():
         assert 10 <= gold[pos].quan <= cap + 9
@@ -286,7 +295,7 @@ def test_zoo_without_a_door_takes_the_flat_budget_per_square():
     room.rtype = RoomType.ZOO
     room.needfill = FILL_NORMAL
     mkroom.fill_special_room(w, _rng(), m, [], room, ld)
-    gold = [it for it in _items(w, ld) if it.otyp == int(O.GOLD_PIECE)]
+    gold = [it for it in _floor_items(w, ld) if it.otyp == int(O.GOLD_PIECE)]
     assert len(gold) == 70
     assert all(10 <= it.quan <= 5 * ld + 9 for it in gold)
     assert m.flags.has_zoo
@@ -302,7 +311,7 @@ def test_leprehall_gets_leprechauns_and_the_zoo_gold():
     assert all(mn.mdata is not None for mn in mons)
     assert all(mn.mdata.pmnames[2] == "leprechaun" for mn in mons)
     caps = _gold_budget(m, room, room.doors[0], ld)
-    gold = {it.pos: it for it in _items(w, ld) if it.otyp == int(O.GOLD_PIECE)}
+    gold = {it.pos: it for it in _floor_items(w, ld) if it.otyp == int(O.GOLD_PIECE)}
     assert len(gold) == STOCKED
     for pos, cap in caps.items():
         assert 10 <= gold[pos].quan <= cap + 9
@@ -321,26 +330,40 @@ def test_morgue_gets_corpses_chests_graves_and_undead():
     with dead"), a grave 1 in 5 (the GRAVE terrain through
     make_grave) -- and one undead per square (at depth 5 the
     morguemon ladder is ghost / wraith / zombie; the demon and the
-    vampire rungs need hd > 10 / > 8)."""
-    m, room = _room_map()
-    w = _claim_and_fill(m, room, RoomType.MORGUE, 5)
-    mons = _monsters(w, 5)
-    assert len(mons) == STOCKED
-    assert all(mn.sleeping == 1 for mn in mons)
-    assert all(mn.mdata is not None for mn in mons)
-    assert all(mn.mdata.mlet in UNDEAD for mn in mons)
-    items = _items(w, 5)
-    assert any(it.otyp == int(O.CORPSE) for it in items)
-    assert any(it.otyp in (int(O.CHEST), int(O.LARGE_BOX)) for it in items)
-    graves = sum(
-        1
-        for y in range(H)
-        for x in range(W)
-        if m.tile_at((x, y)).typ == TerrainType.GRAVE
-    )
-    assert graves > 0
-    assert m.flags.has_morgue
-    assert_item_locations(w)
+    vampire rungs need hd > 10 / > 8).
+
+    The corpse / chest assertions span three seeds: each square has its
+    own 1-in-10 roll, and an undead's kit (PLAN-MAKEMON phase E) draws
+    from the same stream, so a single seed's pile is a coin flip on the
+    chest.  What must hold on *every* seed is the undead population and
+    the graves; what must hold over three is that the treasure rolls fire
+    at all.
+    """
+    chest_seen = corpse_seen = False
+    for seed in (1, 2, 3):
+        m, room = _room_map()
+        w = _claim_and_fill(m, room, RoomType.MORGUE, 5, seed=seed)
+        mons = _monsters(w, 5)
+        assert len(mons) == STOCKED
+        assert all(mn.sleeping == 1 for mn in mons)
+        assert all(mn.mdata is not None for mn in mons)
+        assert all(mn.mdata.mlet in UNDEAD for mn in mons)
+        items = _floor_items(w, 5)
+        corpse_seen = corpse_seen or any(it.otyp == int(O.CORPSE) for it in items)
+        chest_seen = chest_seen or any(
+            it.otyp in (int(O.CHEST), int(O.LARGE_BOX)) for it in items
+        )
+        graves = sum(
+            1
+            for y in range(H)
+            for x in range(W)
+            if m.tile_at((x, y)).typ == TerrainType.GRAVE
+        )
+        assert graves > 0
+        assert m.flags.has_morgue
+        assert_item_locations(w)
+    assert corpse_seen, "1 square in 5 buries a corpse"
+    assert chest_seen, "1 square in 10 buries a chest"
 
 
 # ------------------------------------------------------------

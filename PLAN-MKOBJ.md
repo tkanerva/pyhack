@@ -11,11 +11,14 @@ model of phase A (with `container` renamed to `carrier`), `mksobj` /
 `mkobj_at` / `mksobj_at` / `place_object`, `mkbox_cnts`,
 `add_to_container` / `delete_contents`, `mkgold`, `mkcorpstat`,
 `weight` (whole), the BUC lottery, `rndmonnum` and `mkobj_erosions`.
-Still open: `splitobj`, the container *merge* rules of phase E,
-`mkobj_erosions`' rust / rot / corrode material tests, and the phase-G
-residue (the bonus item, the chest `!rn2(nroom*5/2)` and the graffiti,
-whose `make_engr_at` needs the engraving system), whose rolls are
-deliberately not taken yet.  (The `charges` -> `spe` migration of §4.A
+Since then: `splitobj` / `unsplitobj` (§3.6) and the container *merge*
+rules of phase E both landed with the "genesis residue" session
+(CHANGES.md), so a chest's two identical potions are one stack and a
+stack can be split and put back together.
+Still open: `mkobj_erosions`' rust / rot / corrode material tests, and
+the phase-G residue (the bonus item, the chest `!rn2(nroom*5/2)` and
+the graffiti, whose `make_engr_at` needs the engraving system), whose
+rolls are deliberately not taken yet.  (The `charges` -> `spe` migration of §4.A
 landed with PLAN-INVENT.md phase A: `Item.charges` is deleted and
 `spe` is the only counter -- zap / spells / items / the demo kit all
 read it.  The terrain branches landed after the last session's crash
@@ -61,7 +64,7 @@ hypothesis, the spans are not). Never read `mkobj.c` whole.
 | `weight` | 1903-2017 | `owt` from `oc_weight × quan` + contents + corpses | `mkobj.weight` |
 | `bless` / `unbless` / `curse` / `uncurse` / `blessorcurse` | 1856-1902 ff. | the BUC lottery | `mkobj.blessorcurse` (+ the four primitives) |
 | `next_ident` | 509-~530 | the object id counter | `World.new_ident` (PLAN-MAKEMON.md §3) |
-| `splitobj` / `unsplitobj` | 286 / 327 | stack splitting (throwing one dart out of ten) | `mkobj.splitobj` — deferred, see §4.6 |
+| `splitobj` / `unsplitobj` | 456-503 / 555-622 | stack splitting (throwing one dart out of ten) | `mkobj.splitobj` / `mkobj.unsplitobj` (landed; §3.6) |
 | `place_object` | 2320-~2380 | put an object on the map (`world.items` + position) | `mkobj.place_object` |
 | `rndmonnum` / `rndmonnum_adj` | 241 / 259 | a random monster type (corpse/statue subjects) | `makemon.rndmonst_adj` (PLAN-MAKEMON.md C) |
 | `mkobj_erosions` / `may_generate_eroded` | 148 / 135 | "worn-out gear" generation | `mkobj` (phase F) |
@@ -146,10 +149,13 @@ phase A deleted `charges` and re-pointed the readers (`zap.py` /
    "class → grams", doubles for containers with contents, and it is
    the input to encumbrance and to `costly_alteration`. Formula
    constants (`WT_*`) come from the table.
-6. **No `splitobj` in this wave.** Nothing in the target STUBs needs
-   to split a stack (throwing and shop stock will, later). `quan`
-   alone covers gold piles, arrows and candles. When it lands, it
-   must be the only writer of `quan` except `mksobj_init`.
+6. **`splitobj` is not in wave 4b.** Nothing in wave 4b's target
+   STUBs needs to split a stack (throwing and shop stock will, later).
+   `quan` alone covers gold piles, arrows and candles.  ✅ Landed
+   later, in `core.mkobj.splitobj` / `unsplitobj` (the "genesis
+   residue" session): with `merged` (PLAN-INVENT.md phase B) and
+   `useup` it is one of the three writers of `quan` besides
+   `mksobj_init`, and `tests/test_stacking.py` pins all of them.
 7. **Blessing is one function** (`blessorcurse(item, chance)`), with
    `bless`/`curse`/`unbless`/`uncurse` as primitives — C's split
    exists because the shop code calls the primitives directly; pyhack
@@ -296,7 +302,8 @@ vault hoard, and `oinit`'s per-depth object mix in `goto_level`
    written where C writes it and read nowhere.
 5. **No `no_charge` / `unpaid`** — the shop plan owns billing; the
    fields are added there, not here.
-6. **`splitobj` deferred** (§3.6).
+6. **`splitobj` landed later** (§3.6): `core.mkobj.splitobj` /
+   `unsplitobj`, with the `(parent, child)` pair on the World.
 
 ---
 

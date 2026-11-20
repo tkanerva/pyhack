@@ -26,6 +26,9 @@ C provenance (all src/makemon.c unless noted):
   propagate()                    World.mon_state.propagate() (core.mondata)
   peace_minded() / set_malign()  the mood
   mongets() / mkmonmoney()       the monster's pocket
+  initweap() / initinv() / initthrow()
+                                 the species kits (m_initweap /
+                                 m_initinv / m_initthrow)
   goodpos() / enexto()           core.place (src/teleport.c)
 
 Draw order (PLAN-MAKEMON.md decision 4): position first (when the caller
@@ -42,12 +45,12 @@ raises (PLAN-MAKEMON.md decision 1).
 
 STUBs (announced here, each with the C it waits for):
 
-  - ``m_initweap()`` (C: 160-572) and ``m_initinv()`` (588-833): the
-    400-line "which weapon would this species prefer" switch chains and
-    the per-class extras (jelly treasure, leprechaun gold, nymph items).
-    ``mongets()`` (give one named otyp) and ``mkmonmoney()`` (a purse)
-    are ported, so the *mechanism* is in place; the species tables are
-    PLAN-MAKEMON.md phase E.
+  - ``m_dowear()`` (C: do_wear.c): the monster putting its own armour
+    on after the kit is handed out.  ``initweap()`` / ``initinv()``
+    fill the pack (PLAN-MAKEMON.md phase E) -- a soldier carries the
+    sword and the mail -- but nothing wears it yet, so a monster's AC
+    is still its ``PerMonst.ac`` (PLAN-ARMOR.md §5 lists the monster
+    armour half).
   - ``m_initgrp()`` / ``m_initsgrp()`` / ``m_initlgrp()``: monster
     groups (soldier squads, orc bands) -- phase F.  The generator passes
     MM_NOGRP meanwhile, so the flag is honoured, not faked.
@@ -94,14 +97,26 @@ from .hacklib import sgn
 from .mondata import (
     always_hostile,
     always_peaceful,
+    extra_nasty,
+    genus,
+    humanoid,
     is_armed,
+    is_demon,
+    is_dwarf,
+    is_elf,
     is_female,
+    is_giant,
+    is_lord,
     is_male,
+    is_mercenary,
     is_minion,
     is_neuter,
     is_placeholder,
+    is_prince,
     is_rider,
+    likes_gold,
     set_mon_data,
+    strongmonst,
 )
 from .monst import (
     A_NONE,
@@ -123,38 +138,62 @@ from .monst import (
     MS_GUARDIAN,
     MS_LEADER,
     MS_NEMESIS,
+    MS_PRIEST,
+    PM_ELVEN_MONARCH,
     PM_ERINYS,
     PM_GRAY_DRAGON,
     PM_IRON_GOLEM,
+    PM_MORDOR_ORC,
+    PM_NAMES,
     PM_NAZGUL,
+    PM_ORC_CAPTAIN,
+    PM_ORC_SHAMAN,
     PM_STONE_GOLEM,
+    PM_URUK_HAI,
     PM_WIZARD_OF_YENDOR,
+    S_ANGEL,
     S_BAT,
+    S_CENTAUR,
     S_DEMON,
     S_EEL,
     S_ELEMENTAL,
+    S_GIANT,
+    S_GNOME,
+    S_HUMAN,
+    S_HUMANOID,
     S_JABBERWOCK,
+    S_KOBOLD,
+    S_KOP,
     S_LEPRECHAUN,
     S_LICH,
     S_LIGHT,
+    S_LIZARD,
     S_MIMIC,
+    S_MUMMY,
     S_NYMPH,
+    S_OGRE,
     S_ORC,
+    S_QUANTMECH,
     S_SNAKE,
     S_SPIDER,
+    S_TROLL,
     S_UNICORN,
+    S_WRAITH,
+    S_ZOMBIE,
     SPECIAL_PM,
     PerMonst,
     is_golem,
     monname,
     monsndx,
 )
+from .objects import OBJECTS, ObjClass, ObjType, Skill
 from .place import enexto_core, goodpos
 from .types import (
     Epri,
     Eshk,
     GP_AVOID_MONPOS,
     GP_CHECKSCARY,
+    Item,
     MM_IGNOREWATER,
     Map,
     MmFlags,
@@ -163,6 +202,8 @@ from .types import (
     Pos,
     World,
 )
+
+O = ObjType  # noqa: E741 -- the house alias for the object table
 
 # C: global.h MAXMONNO -- how many of one species may be born before it
 # goes extinct (see mbirth_limit / MonState.propagate).
@@ -184,6 +225,67 @@ STRAT_APPEARMSG = 0x4
 def _mons(mndx: int) -> Optional[PerMonst]:
     """mons[mndx], or None for a table row the port has not filled in."""
     return MONS[mndx]
+
+
+def _pm(name: str) -> int:
+    """The ``mons[]`` index of a species by its neutral name (C: the
+    PM_ constant spelled out).  ``PM_NAMES`` is the complete C ordering,
+    so this resolves the species the PM_ anchors core.monst re-exports
+    do not cover."""
+    return PM_NAMES.index(name)
+
+
+#: C: the quest guardians whose kit m_initweap's MS_GUARDIAN branch
+#: groups together: the scholars (a dagger, light armour, boots, a
+#: healing potion) and the fighters (a sword, mail, boots, a cloak).
+#: Resolved at import time, so a mistyped species name fails the import
+#: instead of a mid-level makemon.
+_SCHOLAR_GUARDIANS = frozenset(
+    _pm(n) for n in ("student", "attendant", "abbot", "acolyte", "guide", "apprentice")
+)
+_FIGHTER_GUARDIANS = frozenset(
+    _pm(n) for n in ("chieftain", "page", "roshi", "warrior")
+)
+
+#: every other species the starting kits name, resolved (and therefore
+#: validated) at import time -- see _SCHOLAR_GUARDIANS.
+_KIT_SPECIES = tuple(
+    _pm(n)
+    for n in (
+        "ettin",
+        "watchman",
+        "soldier",
+        "sergeant",
+        "lieutenant",
+        "captain",
+        "watch captain",
+        "guard",
+        "shopkeeper",
+        "ninja",
+        "cleric",
+        "monk",
+        "hobbit",
+        "salamander",
+        "balrog",
+        "Orcus",
+        "horned devil",
+        "Dispater",
+        "Yeenoghu",
+        "ice devil",
+        "Asmodeus",
+        "housecat",
+        "quantum mechanic",
+        "master lich",
+        "arch-lich",
+        "minotaur",
+        "ogre tyrant",
+        "ogre leader",
+        "forest centaur",
+        "hunter",
+        "thug",
+        "neanderthal",
+    )
+)
 
 
 def monmin_difficulty(levdif: int) -> int:
@@ -767,8 +869,16 @@ def mongets(world: World, rng, mon: Monster, otyp: int) -> Optional[str]:
     addinv's letter half is a hero-only no-op).  C's extra fixups (a
     corpse's corpsenm, the erosion rolls, the "the monster wields it"
     bookkeeping for an AT_WEAP species) ride on mksobj / m_dowear,
-    which are phase E work.  Returns the new item's id, or None if
-    there is nothing to make.
+    which are phase E work.  Returns the id of the stack the object
+    ended up in, or None if there is nothing to make.
+
+    That is the *survivor*'s id, not the new object's: a monster's pack
+    merges (C: addinv -> mpickobj -> add_to_minv -> merged), so a second
+    dagger joins the one already there and the freshly made object is
+    deleted.  C's mongets answers the object it built, which after a
+    merge is a dangling pointer -- this port answers the stack that
+    holds it, which is what m_initinv's `otmp = mongets(...)` idiom
+    (mongets_item below) has to read.
     """
     from .invent import addinv  # local import: the makemon <- mkobj cycle
     from .mkobj import mksobj  # local import: mkobj imports this module
@@ -776,8 +886,7 @@ def mongets(world: World, rng, mon: Monster, otyp: int) -> Optional[str]:
     if not otyp:
         return None
     item = mksobj(world, rng, otyp)
-    addinv(world, mon.id, item)
-    return item.id
+    return addinv(world, mon.id, item).id
 
 
 def mkmonmoney(world: World, rng, mon: Monster, amount: int) -> None:
@@ -959,13 +1068,13 @@ def makemon(
     # drawing the group rolls at all.
 
     if allow_minvent:
-        # C: m_initweap (if is_armed), m_initinv, m_dowear -- phase E.
-        # The mechanism is mongets()/mkmonmoney(); the species tables
-        # are PLAN-MAKEMON.md phase E, so no dice are rolled here and
-        # the draw order is stable when they land.
+        # C: m_initweap (if is_armed), m_initinv, m_dowear.  m_dowear
+        # -- the monster putting its own armour on -- is the armouring
+        # half of monsters, not ported (PLAN-ARMOR.md §5 names it); the
+        # kit itself is real, so a soldier carries its sword.
         if is_armed(ptr):
-            _initweap(world, rng, mon)
-        _initinv(world, rng, mon)
+            initweap(world, rng, mon)
+        initinv(world, rng, mon)
     else:
         # no initial inventory is allowed
         mon.inventory = []
@@ -1048,25 +1157,748 @@ def _is_ndemon(ptr: PerMonst) -> bool:
     return ptr.mlet == S_DEMON and not (ptr.mflags2 & (M2_LORD | M2_PRINCE))
 
 
-def _initweap(world: World, rng, mon: Monster) -> None:
-    """C: makemon.c#m_initweap (STUB -- PLAN-MAKEMON.md phase E).
+def initweap(world: World, rng, mon: Monster) -> None:
+    """Equip an armed monster with weapons, armour and thrown ammo (C:
+    makemon.c#m_initweap, 160-572).
 
-    The 413-line C function picks a weapon by species, depth and skill
-    and then wields it; the port needs the object tables and m_dowear
-    first.  Keeping it a named no-op (rather than folding it into
-    makemon) means the draw order does not change when it lands.
+    C's 413 lines are one ``switch (ptr->mlet)``: a handful of species
+    get a bespoke kit (a giant's boulder, a soldier's polearm, an elf's
+    elven gear, an orc's scimitar) and everything else falls through to
+    the *general case* -- ``rnd(14 - 2*bias)`` against a six-row table
+    of weapons, ``bias`` being ``is_lord + 2*is_prince +
+    extra_nasty``.  This is that switch, with C's draw order kept draw
+    for draw (including the ``do { } while`` that re-rolls the soldier's
+    polearm until it is really a polearm, and the short-circuited
+    ``rn2()`` calls).
+
+    Skipped, each for a system that does not exist here (the branches
+    are named so nobody re-decides them):
+
+    - ``Is_rogue_level()``'s early return (no rogue level);
+    - the angel's ``oname()`` artifact promotion -- the ``rn2(20)`` roll
+      is still taken so the sequence stays put (no artifacts);
+    - ``gi.in_mklev && Is_earthlevel()`` in the elven-monarch and
+      minotaur branches (no Gehennom);
+    - the poison on an orcish arrow (``Item`` has no ``opoisoned``);
+    - C's tail ``mongets(rnd_offensive_item(mtmp))`` -- that is muse.c's
+      table, not this file's; the ``rn2(75)`` gate is still rolled.
     """
-    del world, rng, mon
+    from .invent import addinv  # local import: the makemon <- mkobj cycle
+    from .mkobj import bless, curse, mksobj  # local import: cycle
+
+    ptr = mon.mdata
+    assert ptr is not None  # makemon always sets it
+    mm = ptr.pmidx
+
+    if ptr.mlet == S_GIANT:
+        # a giant's boulder (an ettin's club) and sometimes a big weapon
+        if rng.rn2(2):
+            mongets(
+                world, rng, mon, int(O.CLUB) if mm == _pm("ettin") else int(O.BOULDER)
+            )
+        if mm != _pm("ettin") and not rng.rn2(5):
+            mongets(
+                world,
+                rng,
+                mon,
+                int(O.TWO_HANDED_SWORD) if rng.rn2(2) else int(O.BATTLE_AXE),
+            )
+    elif ptr.mlet == S_HUMAN:
+        if is_mercenary(ptr):
+            w1 = w2 = 0
+            if mm in (_pm("watchman"), _pm("soldier")):
+                if not rng.rn2(3):
+                    # a random polearm -- the rn1 range holds the lance
+                    # and the dwarvish mattock, which use other skills
+                    while True:
+                        w1 = rng.rn1(
+                            int(O.BEC_DE_CORBIN) - int(O.PARTISAN) + 1,
+                            int(O.PARTISAN),
+                        )
+                        if OBJECTS[w1].subtyp == Skill.P_POLEARMS:
+                            break
+                    w2 = int(O.DAGGER) if rng.rn2(2) else int(O.KNIFE)
+                else:
+                    w1 = int(O.SPEAR) if rng.rn2(2) else int(O.SHORT_SWORD)
+            elif mm == _pm("sergeant"):
+                w1 = int(O.FLAIL) if rng.rn2(2) else int(O.MACE)
+            elif mm == _pm("lieutenant"):
+                w1 = int(O.BROADSWORD) if rng.rn2(2) else int(O.LONG_SWORD)
+            elif mm in (_pm("captain"), _pm("watch captain")):
+                w1 = int(O.LONG_SWORD) if rng.rn2(2) else int(O.SILVER_SABER)
+            else:
+                if not rng.rn2(4):
+                    w1 = int(O.DAGGER)
+                if not rng.rn2(7):
+                    w2 = int(O.SPEAR)
+            if w1:
+                mongets(world, rng, mon, w1)
+            if not w2 and w1 != int(O.DAGGER) and not rng.rn2(4):
+                w2 = int(O.KNIFE)
+            if w2:
+                mongets(world, rng, mon, w2)
+        elif is_elf(ptr):
+            if rng.rn2(2):
+                mongets(
+                    world,
+                    rng,
+                    mon,
+                    int(O.ELVEN_MITHRIL_COAT) if rng.rn2(2) else int(O.ELVEN_CLOAK),
+                )
+            if rng.rn2(2):
+                mongets(world, rng, mon, int(O.ELVEN_LEATHER_HELM))
+            elif not rng.rn2(4):
+                mongets(world, rng, mon, int(O.ELVEN_BOOTS))
+            if rng.rn2(2):
+                mongets(world, rng, mon, int(O.ELVEN_DAGGER))
+            kit = rng.rn2(3)
+            if kit == 0:
+                if not rng.rn2(4):
+                    mongets(world, rng, mon, int(O.ELVEN_SHIELD))
+                if rng.rn2(3):
+                    mongets(world, rng, mon, int(O.ELVEN_SHORT_SWORD))
+                mongets(world, rng, mon, int(O.ELVEN_BOW))
+                initthrow(world, rng, mon, int(O.ELVEN_ARROW), 12)
+            elif kit == 1:
+                mongets(world, rng, mon, int(O.ELVEN_BROADSWORD))
+                if rng.rn2(2):
+                    mongets(world, rng, mon, int(O.ELVEN_SHIELD))
+            else:
+                if rng.rn2(2):
+                    mongets(world, rng, mon, int(O.ELVEN_SPEAR))
+                    mongets(world, rng, mon, int(O.ELVEN_SHIELD))
+            if mm == PM_ELVEN_MONARCH:
+                if rng.rn2(3):
+                    mongets(world, rng, mon, int(O.PICK_AXE))
+                if not rng.rn2(50):
+                    mongets(world, rng, mon, int(O.CRYSTAL_BALL))
+        elif ptr.msound == MS_PRIEST or _quest_role(ptr) == _pm("cleric"):
+            # C: mace of random enchantment, half of them cursed
+            mace = mksobj(world, rng, int(O.MACE), False, False)
+            mace.spe = rng.rnd(3)
+            if not rng.rn2(2):
+                curse(mace)
+            addinv(world, mon.id, mace)
+        elif mm == _pm("ninja"):
+            mongets(
+                world,
+                rng,
+                mon,
+                int(O.SHURIKEN) if rng.rn2(4) else int(O.DART),
+            )
+            mongets(
+                world,
+                rng,
+                mon,
+                int(O.SHORT_SWORD) if rng.rn2(4) else int(O.AXE),
+            )
+        elif ptr.msound == MS_GUARDIAN:
+            _quest_guardian_kit(world, rng, mon, mm)
+    elif ptr.mlet == S_ANGEL:
+        if humanoid(ptr):
+            # C: "create minion stuff; bypass mongets"
+            typ = int(O.LONG_SWORD) if rng.rn2(3) else int(O.SILVER_MACE)
+            weapon = mksobj(world, rng, typ, False, False)
+            # C: `(!rn2(20) || is_lord(ptr)) && sgn(maligntyp) ==
+            # A_LAWFUL` -> oname(otmp, "Sunsword"/"Demonbane"); no
+            # artifacts here, but the roll stays in the sequence
+            rng.rn2(20)
+            bless(weapon)
+            weapon.oerodeproof = True
+            weapon.spe = rng.rn2(4)
+            if typ == int(O.SILVER_MACE):
+                weapon.spe += 3
+            addinv(world, mon.id, weapon)
+            shield = mksobj(
+                world,
+                rng,
+                int(O.SHIELD_OF_REFLECTION) if not rng.rn2(4) else int(O.LARGE_SHIELD),
+                False,
+                False,
+            )
+            shield.oerodeproof = True
+            shield.spe = 0
+            addinv(world, mon.id, shield)
+    elif ptr.mlet == S_HUMANOID:
+        if mm == _pm("hobbit"):
+            kit = rng.rn2(3)
+            if kit == 0:
+                mongets(world, rng, mon, int(O.DAGGER))
+            elif kit == 1:
+                mongets(world, rng, mon, int(O.ELVEN_DAGGER))
+            else:
+                mongets(world, rng, mon, int(O.SLING))
+                initthrow(
+                    world,
+                    rng,
+                    mon,
+                    int(O.FLINT) if not rng.rn2(4) else int(O.ROCK),
+                    6,
+                )
+            if not rng.rn2(10):
+                mongets(world, rng, mon, int(O.ELVEN_MITHRIL_COAT))
+            if not rng.rn2(10):
+                mongets(world, rng, mon, int(O.DWARVISH_CLOAK))
+        elif is_dwarf(ptr):
+            if rng.rn2(7):
+                mongets(world, rng, mon, int(O.DWARVISH_CLOAK))
+            if rng.rn2(7):
+                mongets(world, rng, mon, int(O.IRON_SHOES))
+            if not rng.rn2(4):
+                mongets(world, rng, mon, int(O.DWARVISH_SHORT_SWORD))
+                if rng.rn2(2):
+                    mongets(world, rng, mon, int(O.DWARVISH_MATTOCK))
+                else:
+                    mongets(
+                        world,
+                        rng,
+                        mon,
+                        int(O.AXE) if rng.rn2(2) else int(O.DWARVISH_SPEAR),
+                    )
+                    mongets(world, rng, mon, int(O.DWARVISH_ROUNDSHIELD))
+                mongets(world, rng, mon, int(O.DWARVISH_IRON_HELM))
+                if not rng.rn2(3):
+                    mongets(world, rng, mon, int(O.DWARVISH_MITHRIL_COAT))
+            else:
+                mongets(
+                    world,
+                    rng,
+                    mon,
+                    int(O.PICK_AXE) if not rng.rn2(3) else int(O.DAGGER),
+                )
+    elif ptr.mlet == S_KOP:
+        # C: Keystone Kops with cream pies to throw [MRS]
+        if not rng.rn2(4):
+            initthrow(world, rng, mon, int(O.CREAM_PIE), 2)
+        if not rng.rn2(3):
+            mongets(world, rng, mon, int(O.CLUB) if rng.rn2(2) else int(O.RUBBER_HOSE))
+    elif ptr.mlet == S_ORC:
+        if rng.rn2(2):
+            mongets(world, rng, mon, int(O.ORCISH_HELM))
+        kind = (
+            mm
+            if mm != PM_ORC_CAPTAIN
+            else (PM_MORDOR_ORC if rng.rn2(2) else PM_URUK_HAI)
+        )
+        if kind == PM_MORDOR_ORC:
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.SCIMITAR))
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.ORCISH_SHIELD))
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.KNIFE))
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.ORCISH_CHAIN_MAIL))
+        elif kind == PM_URUK_HAI:
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.ORCISH_CLOAK))
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.ORCISH_SHORT_SWORD))
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.IRON_SHOES))
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.ORCISH_BOW))
+                initthrow(world, rng, mon, int(O.ORCISH_ARROW), 12)
+            if not rng.rn2(3):
+                mongets(world, rng, mon, int(O.URUK_HAI_SHIELD))
+        else:
+            if mm != PM_ORC_SHAMAN and rng.rn2(2):
+                mongets(
+                    world,
+                    rng,
+                    mon,
+                    (
+                        int(O.ORCISH_DAGGER)
+                        if mm == _pm("goblin") or rng.rn2(2) == 0
+                        else int(O.SCIMITAR)
+                    ),
+                )
+    elif ptr.mlet == S_OGRE:
+        # a tyrant is likelier to have the axe than a plain ogre
+        chance = (
+            3 if mm == _pm("ogre tyrant") else 6 if mm == _pm("ogre leader") else 12
+        )
+        if not rng.rn2(chance):
+            mongets(world, rng, mon, int(O.BATTLE_AXE))
+        else:
+            mongets(world, rng, mon, int(O.CLUB))
+    elif ptr.mlet == S_TROLL:
+        if not rng.rn2(2):
+            polearm = rng.rn2(4)
+            mongets(
+                world,
+                rng,
+                mon,
+                (
+                    int(O.RANSEUR),
+                    int(O.PARTISAN),
+                    int(O.GLAIVE),
+                    int(O.SPETUM),
+                )[polearm],
+            )
+    elif ptr.mlet == S_KOBOLD:
+        if not rng.rn2(4):
+            initthrow(world, rng, mon, int(O.DART), 12)
+    elif ptr.mlet == S_CENTAUR:
+        if rng.rn2(2):
+            if ptr.pmnames[2] == "forest centaur":
+                mongets(world, rng, mon, int(O.BOW))
+                initthrow(world, rng, mon, int(O.ARROW), 12)
+            else:
+                mongets(world, rng, mon, int(O.CROSSBOW))
+                initthrow(world, rng, mon, int(O.CROSSBOW_BOLT), 12)
+    elif ptr.mlet == S_WRAITH:
+        mongets(world, rng, mon, int(O.KNIFE))
+        mongets(world, rng, mon, int(O.LONG_SWORD))
+    elif ptr.mlet == S_ZOMBIE:
+        if not rng.rn2(4):
+            mongets(world, rng, mon, int(O.LEATHER_ARMOR))
+        if not rng.rn2(4):
+            mongets(world, rng, mon, int(O.KNIFE) if rng.rn2(3) else int(O.SHORT_SWORD))
+    elif ptr.mlet == S_LIZARD:
+        if mm == _pm("salamander"):
+            mongets(
+                world,
+                rng,
+                mon,
+                (
+                    int(O.SPEAR)
+                    if rng.rn2(7)
+                    else (int(O.TRIDENT) if rng.rn2(3) else int(O.STILETTO))
+                ),
+            )
+    elif ptr.mlet == S_DEMON:
+        if mm == _pm("balrog"):
+            mongets(world, rng, mon, int(O.BULLWHIP))
+            mongets(world, rng, mon, int(O.BROADSWORD))
+        elif mm == _pm("Orcus"):
+            mongets(world, rng, mon, int(O.WAN_DEATH))  # the Wand of Orcus
+        elif mm == _pm("horned devil"):
+            mongets(world, rng, mon, int(O.TRIDENT) if rng.rn2(4) else int(O.BULLWHIP))
+        elif mm == _pm("Dispater"):
+            mongets(world, rng, mon, int(O.WAN_STRIKING))
+        elif mm == _pm("Yeenoghu"):
+            mongets(world, rng, mon, int(O.FLAIL))
+        # C: "prevent djinn and mail daemons from leaving objects when
+        # they vanish" -- a real demon falls through to the general case
+        if is_demon(ptr):
+            _general_weapon(world, rng, mon, ptr)
+    else:
+        _general_weapon(world, rng, mon, ptr)
+
+    # C: `if ((int) mtmp->m_lev > rn2(75)) mongets(rnd_offensive_item)`.
+    # The roll is taken (the draw-order rule); the item is muse.c's.
+    mon.m_lev > rng.rn2(75)
 
 
-def _initinv(world: World, rng, mon: Monster) -> None:
-    """C: makemon.c#m_initinv (STUB -- PLAN-MAKEMON.md phase E).
-
-    The per-class extras: a jelly's treasure, a leprechaun's gold, a
-    nymph's items, a soldier's kit.  ``mongets`` / ``mkmonmoney`` are
-    the mechanism, so the fill-in is a table plus calls to those.
+def _general_weapon(world: World, rng, mon: Monster, ptr: PerMonst) -> None:
+    """C: m_initweap's ``default:`` case -- "some chance of getting
+    some type of weapon for normal monsters": ``rnd(14 - 2*bias)``
+    against the six-row table, with strong monsters getting the heavy
+    version of each row and weak ones the thrown version.
     """
-    del world, rng, mon
+    bias = (1 if is_lord(ptr) else 0) + 2 * (1 if is_prince(ptr) else 0)
+    bias += 1 if extra_nasty(ptr) else 0
+    roll = rng.rnd(14 - 2 * bias)
+    strong = strongmonst(ptr)
+    if roll == 1:
+        if strong:
+            mongets(world, rng, mon, int(O.BATTLE_AXE))
+        else:
+            initthrow(world, rng, mon, int(O.DART), 12)
+    elif roll == 2:
+        if strong:
+            mongets(world, rng, mon, int(O.TWO_HANDED_SWORD))
+        else:
+            mongets(world, rng, mon, int(O.CROSSBOW))
+            initthrow(world, rng, mon, int(O.CROSSBOW_BOLT), 12)
+    elif roll == 3:
+        mongets(world, rng, mon, int(O.BOW))
+        initthrow(world, rng, mon, int(O.ARROW), 12)
+    elif roll == 4:
+        if strong:
+            mongets(world, rng, mon, int(O.LONG_SWORD))
+        else:
+            initthrow(world, rng, mon, int(O.DAGGER), 3)
+    elif roll == 5:
+        if strong:
+            mongets(world, rng, mon, int(O.LUCERN_HAMMER))
+        else:
+            mongets(world, rng, mon, int(O.AKLYS))
+
+
+def _quest_guardian_kit(world: World, rng, mon: Monster, mm: int) -> None:
+    """C: m_initweap's ``MS_GUARDIAN`` half -- the quest guardians'
+    starting kits.  The ``switch`` groups are kept as C has them: the
+    three scholarly guardians (a dagger, light armour, boots, a healing
+    potion), the four fighters (a sword, mail, boots, a cloak and
+    sometimes a bow) and the three one-off kits.
+    """
+    scholar = _SCHOLAR_GUARDIANS
+    fighter = _FIGHTER_GUARDIANS
+    if mm in scholar:
+        if rng.rn2(2):
+            mongets(world, rng, mon, int(O.DAGGER) if rng.rn2(3) else int(O.KNIFE))
+        if rng.rn2(5):
+            mongets(
+                world,
+                rng,
+                mon,
+                int(O.LEATHER_JACKET) if rng.rn2(3) else int(O.LEATHER_CLOAK),
+            )
+        if rng.rn2(3):
+            mongets(
+                world, rng, mon, int(O.LOW_BOOTS) if rng.rn2(3) else int(O.HIGH_BOOTS)
+            )
+        if rng.rn2(3):
+            mongets(world, rng, mon, int(O.POT_HEALING))
+    elif mm in fighter:
+        mongets(
+            world, rng, mon, int(O.LONG_SWORD) if rng.rn2(3) else int(O.SHORT_SWORD)
+        )
+        mongets(
+            world, rng, mon, int(O.CHAIN_MAIL) if rng.rn2(3) else int(O.LEATHER_ARMOR)
+        )
+        if rng.rn2(2):
+            mongets(
+                world, rng, mon, int(O.LOW_BOOTS) if rng.rn2(2) else int(O.HIGH_BOOTS)
+            )
+        if not rng.rn2(3):
+            mongets(world, rng, mon, int(O.LEATHER_CLOAK))
+        if not rng.rn2(3):
+            mongets(world, rng, mon, int(O.BOW))
+            initthrow(world, rng, mon, int(O.ARROW), 12)
+    elif mm == _pm("hunter"):
+        mongets(world, rng, mon, int(O.SHORT_SWORD) if rng.rn2(3) else int(O.DAGGER))
+        if rng.rn2(2):
+            mongets(
+                world,
+                rng,
+                mon,
+                int(O.LEATHER_JACKET) if rng.rn2(2) else int(O.LEATHER_ARMOR),
+            )
+        mongets(world, rng, mon, int(O.BOW))
+        initthrow(world, rng, mon, int(O.ARROW), 12)
+    elif mm == _pm("thug"):
+        mongets(world, rng, mon, int(O.CLUB))
+        mongets(world, rng, mon, int(O.DAGGER) if rng.rn2(3) else int(O.KNIFE))
+        if rng.rn2(2):
+            mongets(world, rng, mon, int(O.LEATHER_GLOVES))
+        mongets(
+            world,
+            rng,
+            mon,
+            int(O.LEATHER_JACKET) if rng.rn2(2) else int(O.LEATHER_ARMOR),
+        )
+    elif mm == _pm("neanderthal"):
+        mongets(world, rng, mon, int(O.CLUB))
+        mongets(world, rng, mon, int(O.LEATHER_ARMOR))
+
+
+def initthrow(world: World, rng, mon: Monster, otyp: int, oquan: int) -> None:
+    """Give a monster a bundle of ammo (C: makemon.c#m_initthrow):
+    ``rn1(oquan, 3)`` of them, in one stack."""
+    from .invent import addinv  # local import: the makemon <- mkobj cycle
+    from .mkobj import mksobj, weight  # local import: the mkobj cycle
+
+    item = mksobj(world, rng, otyp, True, False)
+    item.quan = rng.rn1(oquan, 3)
+    item.owt = weight(world, item)
+    # C: an orcish arrow is poisoned -- Item has no opoisoned yet
+    addinv(world, mon.id, item)
+
+
+def initinv(world: World, rng, mon: Monster) -> None:
+    """The class-specific extras on top of the weapon kit (C:
+    makemon.c#m_initinv, 588-833): a soldier's armour (aimed at the AC
+    the species is supposed to have), a shopkeeper's key and stock, a
+    priest's robe and purse, a nymp's mirror, a giant's gems, a
+    leprechaun's gold, a gnome's candle.
+
+    The same C order and the same draws.  Skipped (each named):
+    ``Is_rogue_level()``; the quantmech's Schroedinger box's rot timer
+    (the box and its cat are built, the corpse simply never rots); the
+    gnome's ``begin_burn`` (no lamp system); the two muse.c tails
+    (``rnd_defensive_item`` / ``rnd_misc_item`` -- their rolls are
+    taken, no item is made).
+    """
+    from .invent import addinv  # local import: the makemon <- mkobj cycle
+    from .mkobj import (  # local import: the mkobj cycle
+        add_to_container,
+        curse,
+        mksobj,
+        set_corpsenm,
+        weight,
+    )
+    from .worn import arm_bonus  # local import: worn imports invent
+
+    ptr = mon.mdata
+    assert ptr is not None
+    mm = ptr.pmidx
+
+    if ptr.mlet == S_HUMAN:
+        if is_mercenary(ptr):
+            # C: the armour is chosen to approximate the species' AC
+            mac = {
+                _pm("guard"): -1,
+                _pm("soldier"): 3,
+                _pm("sergeant"): 0,
+                _pm("lieutenant"): -2,
+                _pm("captain"): -3,
+                _pm("watchman"): 3,
+                _pm("watch captain"): -2,
+            }.get(mm, 0)
+
+            def add_ac(item: Optional[Item]) -> None:
+                nonlocal mac
+                if item is not None:
+                    mac += arm_bonus(item)
+
+            # round 1: body armour
+            if mac < -1 and rng.rn2(5):
+                add_ac(
+                    mongets_item(
+                        world,
+                        rng,
+                        mon,
+                        int(O.PLATE_MAIL) if rng.rn2(5) else int(O.CRYSTAL_PLATE_MAIL),
+                    )
+                )
+            elif mac < 3 and rng.rn2(5):
+                add_ac(
+                    mongets_item(
+                        world,
+                        rng,
+                        mon,
+                        int(O.SPLINT_MAIL) if rng.rn2(3) else int(O.BANDED_MAIL),
+                    )
+                )
+            elif rng.rn2(5):
+                add_ac(
+                    mongets_item(
+                        world,
+                        rng,
+                        mon,
+                        int(O.RING_MAIL) if rng.rn2(3) else int(O.STUDED_LEATHER_ARMOR),
+                    )
+                )
+            else:
+                add_ac(mongets_item(world, rng, mon, int(O.LEATHER_ARMOR)))
+            # round 2: helmets
+            if mac < 10 and rng.rn2(3):
+                add_ac(mongets_item(world, rng, mon, int(O.HELMET)))
+            elif mac < 10 and rng.rn2(2):
+                add_ac(mongets_item(world, rng, mon, int(O.DENTED_POT)))
+            # round 3: shields
+            if mac < 10 and rng.rn2(3):
+                add_ac(mongets_item(world, rng, mon, int(O.SMALL_SHIELD)))
+            elif mac < 10 and rng.rn2(2):
+                add_ac(mongets_item(world, rng, mon, int(O.LARGE_SHIELD)))
+            # round 4: boots
+            if mac < 10 and rng.rn2(3):
+                add_ac(mongets_item(world, rng, mon, int(O.LOW_BOOTS)))
+            elif mac < 10 and rng.rn2(2):
+                add_ac(mongets_item(world, rng, mon, int(O.HIGH_BOOTS)))
+            # round 5: gloves or a cloak
+            if mac < 10 and rng.rn2(3):
+                add_ac(mongets_item(world, rng, mon, int(O.LEATHER_GLOVES)))
+            elif mac < 10 and rng.rn2(2):
+                add_ac(mongets_item(world, rng, mon, int(O.LEATHER_CLOAK)))
+
+            if mm == _pm("watch captain"):
+                pass  # C: "better weapon rather than extra gear here"
+            elif mm == _pm("watchman"):
+                if rng.rn2(3):  # most watchmen carry a whistle
+                    mongets(world, rng, mon, int(O.TIN_WHISTLE))
+            elif mm == _pm("guard"):
+                # C: the vault guard's whistle is cursed
+                whistle = mksobj(world, rng, int(O.TIN_WHISTLE), True, False)
+                curse(whistle)
+                addinv(world, mon.id, whistle)
+            else:  # soldiers and their officers
+                if not rng.rn2(3):
+                    mongets(world, rng, mon, int(O.K_RATION))
+                if not rng.rn2(2):
+                    mongets(world, rng, mon, int(O.C_RATION))
+                if mm != _pm("soldier") and not rng.rn2(3):
+                    mongets(world, rng, mon, int(O.BUGLE))
+        elif mm == _pm("shopkeeper"):
+            mongets(world, rng, mon, int(O.SKELETON_KEY))
+            # C: a fall-through ladder -- the deeper the case, the more
+            purse = rng.rn2(4)
+            if purse == 0:
+                mongets(world, rng, mon, int(O.WAN_MAGIC_MISSILE))
+            if purse <= 1:
+                mongets(world, rng, mon, int(O.POT_EXTRA_HEALING))
+            if purse <= 2:
+                mongets(world, rng, mon, int(O.POT_HEALING))
+            mongets(world, rng, mon, int(O.WAN_STRIKING))
+        elif ptr.msound == MS_PRIEST or _quest_role(ptr) == _pm("cleric"):
+            mongets(
+                world,
+                rng,
+                mon,
+                (
+                    int(O.ROBE)
+                    if rng.rn2(7)
+                    else (
+                        int(O.CLOAK_OF_PROTECTION)
+                        if rng.rn2(3)
+                        else int(O.CLOAK_OF_MAGIC_RESISTANCE)
+                    )
+                ),
+            )
+            mongets(world, rng, mon, int(O.SMALL_SHIELD))
+            mkmonmoney(world, rng, mon, rng.rn1(10, 20))
+        elif _quest_role(ptr) == _pm("monk"):
+            mongets(
+                world,
+                rng,
+                mon,
+                int(O.ROBE) if rng.rn2(11) else int(O.CLOAK_OF_MAGIC_RESISTANCE),
+            )
+    elif ptr.mlet == S_NYMPH:
+        if not rng.rn2(2):
+            mongets(world, rng, mon, int(O.MIRROR))
+        if not rng.rn2(2):
+            mongets(world, rng, mon, int(O.POT_OBJECT_DETECTION))
+    elif ptr.mlet == S_GIANT:
+        if mm == _pm("minotaur"):
+            if not rng.rn2(8):
+                mongets(world, rng, mon, int(O.WAN_DIGGING))
+        elif is_giant(ptr):
+            # a giant's purse of gems, one stack per point of half level
+            for _ in range(rng.rn2(mon.m_lev // 2)):
+                gems = mksobj(
+                    world,
+                    rng,
+                    rnd_class_int(
+                        world,
+                        rng,
+                        int(O.DILITHIUM_CRYSTAL),
+                        int(O.LUCKSTONE) - 1,
+                    ),
+                    False,
+                    False,
+                )
+                gems.quan = rng.rn1(2, 3)
+                gems.owt = weight(world, gems)
+                addinv(world, mon.id, gems)
+    elif ptr.mlet == S_WRAITH:
+        if mm == PM_NAZGUL:
+            ring = mksobj(world, rng, int(O.RIN_INVISIBILITY), False, False)
+            curse(ring)
+            addinv(world, mon.id, ring)
+    elif ptr.mlet == S_LICH:
+        if mm == _pm("master lich") and not rng.rn2(13):
+            mongets(
+                world,
+                rng,
+                mon,
+                int(O.ATHAME) if rng.rn2(7) else int(O.WAN_NOTHING),
+            )
+        elif mm == _pm("arch-lich") and not rng.rn2(3):
+            staff = mksobj(
+                world,
+                rng,
+                int(O.ATHAME) if rng.rn2(3) else int(O.QUARTERSTAFF),
+                True,
+                not rng.rn2(13),  # C: artif = rn2(13) == 0
+            )
+            if staff.spe < 2:
+                staff.spe = rng.rnd(3)
+            if not rng.rn2(4):
+                staff.oerodeproof = True
+            addinv(world, mon.id, staff)
+    elif ptr.mlet == S_MUMMY:
+        if rng.rn2(7):
+            mongets(world, rng, mon, int(O.MUMMY_WRAPPING))
+    elif ptr.mlet == S_QUANTMECH:
+        if not rng.rn2(20) and mm == _pm("quantum mechanic"):
+            # C: Schroedinger's box -- a large box with a house cat
+            # corpse in it (the rot timer is the timeout system's)
+            box = mksobj(world, rng, int(O.LARGE_BOX), False, False)
+            cat = mksobj(world, rng, int(O.CORPSE), True, False)
+            box.spe = 1  # the flag for a special Schroedinger's box
+            set_corpsenm(world, cat, _pm("housecat"))
+            add_to_container(world, box, cat)
+            box.owt = weight(world, box)
+            addinv(world, mon.id, box)
+    elif ptr.mlet == S_LEPRECHAUN:
+        mkmonmoney(world, rng, mon, rng.d(rules.level_difficulty(world), 30))
+    elif ptr.mlet == S_DEMON:
+        # C: these don't have AT_WEAP, so m_initweap is never called
+        if mm == _pm("ice devil") and not rng.rn2(4):
+            mongets(world, rng, mon, int(O.SPEAR))
+        elif mm == _pm("Asmodeus"):
+            mongets(world, rng, mon, int(O.WAN_COLD))
+            mongets(world, rng, mon, int(O.WAN_FIRE))
+    elif ptr.mlet == S_GNOME:
+        if not rng.rn2(60):
+            candle = mksobj(
+                world,
+                rng,
+                int(O.TALLOW_CANDLE) if rng.rn2(4) else int(O.WAX_CANDLE),
+                True,
+                False,
+            )
+            candle.quan = 1
+            candle.owt = weight(world, candle)
+            addinv(world, mon.id, candle)
+            # C: begin_burn(candle) when the square is unlit -- no lamp
+            # system yet
+
+    # C: ordinary soldiers rarely have access to magic (or gold :-)
+    if mm == _pm("soldier") and rng.rn2(13):
+        return
+
+    # C: the two muse.c tails.  Their rolls are taken (the draw-order
+    # rule); rnd_defensive_item / rnd_misc_item are not ported.
+    mon.m_lev > rng.rn2(50)
+    mon.m_lev > rng.rn2(100)
+    if likes_gold(ptr) and not _has_gold(mon) and not rng.rn2(5):
+        mkmonmoney(
+            world,
+            rng,
+            mon,
+            rng.d(rules.level_difficulty(world), 5 if mon.inventory else 10),
+        )
+
+
+def _has_gold(mon: Monster) -> bool:
+    """C: findgold(mon->minvent) -- does the pack hold any coins?"""
+    return any(it.oclass == int(ObjClass.COIN) for it in mon.inventory)
+
+
+def _quest_role(ptr: PerMonst) -> int:
+    """C: quest_mon_represents_role(ptr, pm) -- does this quest guardian
+    stand in for that role's character class?  ``genus(mode=1)`` is
+    exactly that mapping (mondata._GENUS_MAP plus the species rule), so
+    the test is ``genus(ptr) == pm``.
+    """
+    return genus(ptr.pmidx, 1)
+
+
+def mongets_item(world: World, rng, mon: Monster, otyp: int) -> Optional[Item]:
+    """``mongets`` that answers the item (C: m_initinv's ``otmp =
+    mongets(...)`` idiom -- the mercenary's ``add_ac(otmp)`` macro reads
+    the armour's AC bonus as soon as it is made)."""
+    item_id = mongets(world, rng, mon, otyp)
+    if item_id is None:
+        return None
+    item = world.items.get(item_id)
+    if item is None:
+        return None
+    return item
+
+
+def rnd_class_int(world: World, rng, o_low: int, o_high: int) -> int:
+    """C: rnd_class(o_low, o_high) -- re-exported from core.mkobj so a
+    monster kit can pick a random object type (C calls it from
+    m_initinv)."""
+    from .mkobj import rnd_class  # local import: the mkobj cycle
+
+    return rnd_class(world, rng, o_low, o_high)
 
 
 __all__ = [
@@ -1081,6 +1913,9 @@ __all__ = [
     "align_shift",
     "golemhp",
     "gen_ok",
+    "initinv",
+    "initthrow",
+    "initweap",
     "is_home_elemental",
     "makemon",
     "mbirth_limit",

@@ -230,10 +230,13 @@ only some rows are filled) and the hero's row was never one of them
    returns a `Flight` value (§3.4), never mutates.
 3. **The projectile is one `Item` with `quan == 1`, split off the
    stack.** `mkobj.splitobj` / `unsplitobj` (spans `mkobj.c#splitobj`
-   456-503, `#unsplitobj` 555-622) land **here**, because PLAN-MKOBJ
-   §3.6 deferred them and named this wave as the owner ("throwing one
-   dart out of ten"). Rule inherited from PLAN-MKOBJ: `splitobj` is the
-   only writer of `quan` outside `mksobj_init`.
+   456-503, `#unsplitobj` 555-622) were deferred by PLAN-MKOBJ §3.6 to
+   this wave ("throwing one dart out of ten") and **landed early**, with
+   the merge rules, in the "genesis residue" session (CHANGES.md) --
+   PLAN-INVENT phase B's `splittable` and the pickup merge wanted them
+   too.  The `quan` writers are `mksobj_init`, `merged` (the sum),
+   `splitobj` (the difference) and `useup` (the decrement);
+   `tests/test_stacking.py` pins all four.
 4. **No `gt.thrownobj` global: a `Flight` value.** C carries the
    in-flight object in a global that `drop_throw`, `breakobj`,
    `passive_obj` and `return_throw_to_inv` all read. pyhack has no
@@ -408,11 +411,15 @@ id across a throw (§6.5).
 
 ### Phase C — stacks and the volley (~1.5 sessions)
 
-1. `mkobj.splitobj` / `unsplitobj` (spans above), with the
-   `quan`/`owt`/`invlet` rules: the parent keeps its letter, the child
-   is a new id from `World.new_ident`, `unsplitobj` merges the child
-   back into the parent if both still exist (C's `save_osplit`
-   restore).
+1. ✅ **Already landed** (the "genesis residue" session, ahead of this
+   phase): `mkobj.splitobj` / `unsplitobj` (spans above), with the
+   `quan`/`owt`/`invlet` rules -- the parent keeps its letter, the
+   child is a new id from `World.new_id()`, and `unsplitobj` merges the
+   child back into the parent if both are still in the same list (C's
+   `save_osplit` restore; the pair lives on `World.split_parent` /
+   `split_child`).  Two divergences this phase must live with: the
+   child comes back **free** (the caller places it -- C links it into
+   the parent's chain), and its `invlet` is cleared.
 2. `throw_obj`'s multishot block: `multishot_class_bonus` (the role
    table), the skill switch (`P_SKILL(weapon_type(obj))` via
    `weapon.uwep_skill_type` + `Skills`), the ammo/launcher rule, the
@@ -420,8 +427,10 @@ id across a throw (§6.5).
    `shotlimit` clamp, and the "You shoot 3 arrows." line.
 3. The volley loop: one `splitobj` per shot, `freeinv`, `throwit`,
    the projected-hp abort, `endmultishot`.
-4. `mergable`/`merged` (PLAN-INVENT B) on landing so a second arrow
-   stacks with the first.
+4. ✅ `mergable`/`merged` (PLAN-INVENT B) on landing so a second arrow
+   stacks with the first -- landed; the landing's writer is
+   `invent.stackobj` (C's `drop_throw` calls `place_object` then
+   `stackobj`), which nothing calls yet.
 5. Tests: 5 arrows + a bow → between 1 and 5 leave the pack in one
    turn and the leftovers keep their letter; two arrows land and
    merge into one floor stack of 2; `limit` (`3t`) throws at most 3.
@@ -723,7 +732,7 @@ deferred function in §5 and a test naming the wave that owns it.
 | `t` / `f` — the two missing combat commands | no command at all |
 | the hero's first ranged attack | melee only (bump to attack) |
 | monsters that can hurt the hero from more than one tile | `distmin == 1` |
-| `splitobj` / `unsplitobj` | deferred by PLAN-MKOBJ §3.6 |
+| `splitobj` / `unsplitobj` | ✅ landed early (the "genesis residue") |
 | `place_object`'s second caller (after drop) | nothing put an item back |
 | `select_rwep` / `mon_wield_item` / `weapon_check` | three STUBs |
 | a real second user of the weapon tables (RWERP/ARWEP/BOLT_LIM) | data with no consumer |
@@ -736,7 +745,7 @@ deferred function in §5 and a test naming the wave that owns it.
 | needs | from |
 |---|---|
 | `Item.quan` / `owt` / `invlet`, `invent.{freeinv,useup,useupall,delobj,place_object}`, `carrier` | PLAN-INVENT A (**hard**) |
-| `mergable` / `merged` (landing stacks) | PLAN-INVENT B |
+| `mergable` / `merged` (landing stacks) | PLAN-INVENT B ✅ landed |
 | `xname` / `doname` / `an` / `the` / `singular` (every line) | PLAN-INVENT C |
 | `weight_cap` / `calc_capacity` (the stamina drop, encumbrance refusal) | PLAN-INVENT D |
 | `hero_gold` (throwing coins) | PLAN-INVENT E |
@@ -744,7 +753,7 @@ deferred function in §5 and a test naming the wave that owns it.
 | `setuwep` / `W_WEP` / `welded` (throwing the wielded weapon) | PLAN-DROP C (**hard**) |
 | `setuqwep` / `W_QUIVER` / `doquiver_core` (`f`) | PLAN-DROP D |
 | `mksobj` (venom, and ammo for monsters to carry) | PLAN-MKOBJ B |
-| `m_initweap` / `m_initthrow` / `mongets` (monsters with ammo) | PLAN-MAKEMON E |
+| `m_initweap` / `m_initthrow` / `mongets` (monsters with ammo) | PLAN-MAKEMON E ✅ landed |
 | `potionhit` (a broken potion's contents) | a potion-throwing wave |
 | the breath engine (spit is not breath; breath is not here) | `zap.c` / `mcastu.c` wave |
 

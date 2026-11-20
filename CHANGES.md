@@ -5,6 +5,103 @@ and the architectural choices.  The full session specs are in the
 PLAN-*.md files; the current state is in the module docstrings and
 ARCHITECTURE.md.
 
+## The genesis residue: stacking, splitting, and the monster kits
+
+**Why:** queue item 2 (ARCHITECTURE.md "Suggested next steps",
+HANDOFF §5) -- the three pieces of the object/monster genesis that
+earlier waves named and left open, and that between them unblock four
+plans: the merge rules (`mergable` / `merged` / `merge_choice` /
+`stackobj` / `splittable`, PLAN-INVENT.md phase B), the split pair
+(`splitobj` / `unsplitobj`, which PLAN-MKOBJ §3.6 deferred to
+PLAN-THROW but PLAN-PICKUP / PLAN-DROP need too), and the species
+kits (`m_initweap` / `m_initthrow` / `m_initinv`, PLAN-MAKEMON.md
+phase E).  Without the first two every stack stays a list of
+one-item objects; without the third a soldier carries nothing.
+
+**What landed:**
+
+1. **`core/invent.py` -- the stacking group.**  `mergable` is C's
+   rule table (4429-4551): same otyp, `oc_merge`, the coin shortcut,
+   BUC, `unpaid` / `no_charge` / `spe` / `broken` / `otrapped`,
+   `oeaten` on food, `dknown` / erosion / grease, `oerodeproof` when
+   `erosion_matters`, a corpse's species (and a revivable corpse
+   never), the candle-age window (C's magic 25), the artifact and the
+   name.  `merged` (812-948) is the only writer of `quan` besides
+   `splitobj` and `useup`: it sums, recomputes `owt`, averages the age
+   by quantity, keeps the most specific worn slot, and deletes the
+   loser through `delobj` (C's `obj_extract_self` + `obfree`).
+   `stackobj` (4415-4427) is the floor half and `splittable`
+   (1662-1668) the count-prefix guard; `merge_choice` (771-810) is
+   the "all 52 letters used" query, including C's "punt" on a scroll
+   of scare monster.
+2. **`core/mkobj.py` -- `splitobj` / `unsplitobj`** (456-503,
+   555-622): a `dataclasses.replace` copy of the parent with a fresh
+   id, the quantity, its own weight and no worn mask; the parent
+   keeps its letter and its place.  Two documented divergences: the
+   child comes back **free** (like `mksobj`'s answer) instead of being
+   linked into the parent's chain -- the pack list is `core.invent`'s
+   alone -- and its `invlet` is cleared, because the pyhack pack is
+   kept unique-and-sorted by letter.  The `(parent, child)` pair goes
+   on the World (`split_parent` / `split_child`, C's
+   `svc.context.objsplit`, which also holds exactly one pair), which is
+   what `unsplitobj` reads.
+3. **`core/makemon.py` -- the kits.**  `initweap` is C's 413-line
+   `switch (ptr->mlet)` (160-572) draw for draw: the giant's boulder,
+   the mercenary weapon table, the elf's elven gear, the priest's
+   cursed-or-not mace, the ninja, the quest guardians' three kit
+   groups, the angel's blessed sword and shield, the orc / ogre /
+   troll / kobold / centaur / wraith / zombie / lizard / demon
+   branches, and the general `rnd(14 - 2*bias)` case -- including the
+   `do..while` that re-rolls the soldier's polearm until it really is
+   a polearm.  `initinv` (588-833) is the armour ladder that aims a
+   mercenary's AC at its species, the shopkeeper's key and wand /
+   potion ladder, the priest's robe and purse, the nymph, the giant's
+   gems, the leprechaun's gold, the gnome's candle, the lich, the
+   nazgul's ring, the quantmech's Schroedinger box and the two tails.
+   `initthrow` is the ammo bundle (`rn1(oquan, 3)` in one stack).
+4. **Wired in where C puts it:** `addinv` merges on the way in (the
+   pack), `add_to_container` merges on the way in (a chest), and the
+   funnel calls `initweap` when `is_armed` then `initinv`.
+   `m_dowear` -- the monster putting its armour on -- stays named and
+   unported (PLAN-ARMOR.md §5), so a soldier carries mail that does
+   not yet protect it.
+5. **Three defects the change surfaced.**
+   (a) `mongets` returned the id of the object it *made*; once the
+   pack merges, that object can be deleted, so the answer is now the
+   id of the stack that holds it (C answers the possibly-dead
+   pointer; `m_initinv`'s `otmp = mongets(...)` idiom reads it for the
+   AC ladder).
+   (b) `pickup` read the floor object *after* `addinv`, so a merged
+   pickup messaged and -- worse -- **billed** a deleted item (the bill
+   is keyed by item id).  It now bills the survivor.
+   (c) `add_to_container` returned None; it now returns the stack the
+   object landed in, which is what C's callers expect.
+6. **Tests:** `tests/test_stacking.py`, 49 cases (39 functions, one
+   parametrized over 12 fields): every row of the merge table on its
+   own, the coin shortcut, `oc_merge`, the revivable corpse, the
+   candle window, `merge_choice`'s punt, `merged`'s quan / weight /
+   age / worn-slot / discovery behaviour, `stackobj`, `splittable`,
+   the split round trip (through `unsplitobj`) and its four refusals,
+   plus the two merge points.  `test_pickup.py` gains the
+   pickup-merges-into-the-pack case, and `test_makemon.py`'s
+   inventory test now pins the merge (`mongets` answers a live id).
+   Four suites needed re-pinning because generated levels draw from a
+   different stream once monsters have kits (the zoo / leprehall /
+   court / morgue gold and chest searches now read FLOOR items, since
+   a monster's kit is in `World.items` too) and the priest test counts
+   its spellbooks instead of the whole pack -- each edit records why.
+7. **Baseline:** 1412 -> 1463 tests green, `mypy` clean over 106
+   files, `flake8` clean, `black` clean.  The pinned demo
+   (`generator="demo"`) is untouched: it does not go through
+   `makemon`.
+
+**Not done:** `m_initgrp` / `m_initsgrp` / `m_initlgrp` (squads and
+bands) stay PLAN-MAKEMON phase F; `m_dowear` is PLAN-ARMOR §5's;
+`rnd_offensive_item` / `rnd_defensive_item` / `rnd_misc_item` (muse.c)
+are not ported -- their rolls are still taken, per the draw-order rule,
+and each call site says so.  Nothing calls `stackobj` yet: the drop
+and the throw landing (PLAN-DROP / PLAN-THROW) are its callers.
+
 ## The test debt: the ring suite and the erosion suite
 
 **Why:** the queue's own first item (ARCHITECTURE.md "Suggested next

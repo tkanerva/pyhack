@@ -10,7 +10,7 @@ peace / forbidding feeling, an untended one the C eerie lines and a
 misaligned-altar line until src/pray.c lands.
 """
 
-from core import mkroom, priest
+from core import invent, mkroom, priest
 from core.commands import MoveCommand, OfferCommand, PrayCommand
 from core.events import MessageEvent
 from core.mklev import add_door, add_room, blank_map, topologize
@@ -23,7 +23,7 @@ from core.monst_defs import (
     AM_SHRINE,
     amask2align,
 )
-from core.objects import ObjClass
+from core.objects import O, ObjClass
 from core.rnd import Rng
 from core.step import step
 from core.types import DoorMask, RoomType, TerrainType, Tile, World
@@ -106,11 +106,17 @@ def test_priestini_places_a_peaceful_priest_by_the_shrine():
     # on the 1-square ring around the shrine, never on the shrine
     assert p.pos != pos
     assert max(abs(p.pos[0] - pos[0]), abs(p.pos[1] - pos[1])) <= 1
-    # the goodies: 2 to 4 spellbooks (C: rn1(3, 2)), all carried
+    # the goodies: 2 to 4 spellbooks (C: rn1(3, 2)), all carried -- and,
+    # on top of them, the priest's own kit from makemon's m_initweap /
+    # m_initinv (a mace, a robe and a small shield, plus a purse)
     books = [it for it in p.inventory if it.oclass == int(ObjClass.SPBOOK)]
     assert 2 <= len(books) <= 4
-    assert len(books) == len(p.inventory)
+    otypes = {it.otyp for it in p.inventory}
+    assert int(O.MACE) in otypes
+    assert int(O.ROBE) in otypes or int(O.CLOAK_OF_MAGIC_RESISTANCE) in otypes
+    assert int(O.SMALL_SHIELD) in otypes
     assert all(it.carrier == p.id for it in p.inventory)
+    assert invent.money_cnt(p) > 0  # C: mkmonmoney(rn1(10, 20))
     assert_item_locations(w)
 
 

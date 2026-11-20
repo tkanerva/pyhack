@@ -12,11 +12,15 @@ item's where-state has exactly one writer.
 
 Simplifications (documented, not bugs):
 
-- No merging (C merges compatible items into stacks --
-  PLAN-INVENT.md phase B), no inventory cap (C INV_MAX), no leashes /
-  containers / food checks, no encumbrance refusal (C's
-  hold_another_object near_capacity branch -- PLAN-INVENT.md
-  phase D).
+- No inventory cap (C INV_MAX), no leashes / containers / food
+  checks, no encumbrance refusal (C's hold_another_object
+  near_capacity branch -- PLAN-INVENT.md phase D).
+- The line is "You pick up the X." -- one name, no count and no BUC /
+  `+N` wording, which is PLAN-INVENT.md phase C's `doname`.  The stack
+  itself is real: addinv merges a compatible item into the pack
+  (PLAN-INVENT.md phase B), so a second dagger becomes `quan == 2` of
+  the one already carried while the message still names the dagger
+  that was on the floor (C: the picked object, before it merges).
 - "Topmost" is the item C's per-tile chain head would be: the most
   recently placed (C add_lev() inserts at the head), i.e. the last
   entry in ``world.items_at()``'s insertion order.  Unobservable in
@@ -50,26 +54,33 @@ def pickup(world: World, mon_id: str, rng) -> List[Event]:
     if not here:
         return [MessageEvent("You see nothing here to pick up.")]
     top = here[-1]
-    addinv(world, mon_id, top)
+    # the survivor: addinv merges, so ``top`` may be gone from the world
+    # afterwards and the pack's stack is the item that is really carried
+    item = addinv(world, mon_id, top)
     events: List[Event] = [MessageEvent(f"You pick up the {top.name}.")]
     if mon.is_hero:
-        events += _shop_billing(world, mon, top)
+        events += _shop_billing(world, mon, item)
     return events
 
 
-def _shop_billing(world: World, mon, top) -> List[Event]:
+def _shop_billing(world: World, mon, item) -> List[Event]:
     """The pickup billing hook (C: pickobj -> addtobill).  A picked-up
     item on a costly_spot that is not a coin and not no_charge goes on
-    the shopkeeper's bill."""
+    the shopkeeper's bill.
+
+    ``item`` is the stack addinv answered (the one actually in the pack),
+    not the floor object it came from: the bill is keyed by item id, so
+    billing an object a merge has deleted would name a ghost.
+    """
     from .shk import add_one_tobill, costly_spot, inside_shop, shop_keeper
 
     x, y = mon.pos
     if (
         costly_spot(world, x, y)
-        and top.oclass != int(ObjClass.COIN)
-        and not top.no_charge
+        and item.oclass != int(ObjClass.COIN)
+        and not item.no_charge
     ):
         roomno = inside_shop(world.map, mon.pos)
         shkp = shop_keeper(world, world.lev, roomno)
-        return add_one_tobill(world, shkp, top)
+        return add_one_tobill(world, shkp, item)
     return []

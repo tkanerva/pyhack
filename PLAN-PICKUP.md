@@ -59,7 +59,8 @@ Data and machinery that already exists:
   already uses `here[-1]` as "topmost".
 - `invent.addinv` / `freeinv` / `useup` (PLAN-INVENT phase A) — the
   only writers of location.
-- `invent.mergable` / `merged` (phase B) — stacking.
+- `invent.mergable` / `merged` (phase B ✅) — stacking, and `addinv`
+  now merges a picked-up duplicate into the pack.
 - `hacklib.distmin`, the direction prompt in `ui/console.py`, and the
   `TerrainType` predicates (`is_pool`, `is_furniture`, …) for the
   gates.
@@ -374,14 +375,14 @@ adds it to the wallet with the C message, and nothing else is grabbed.
 |---|---|
 | `quan` / `owt` / `contents` / `carrier` / `invlet` | PLAN-INVENT A (= PLAN-MKOBJ A) |
 | `addinv` / `freeinv` / `useup` / `delobj` | PLAN-INVENT A |
-| `mergable` / `merged` / `splittable` | PLAN-INVENT B |
+| `mergable` / `merged` / `splittable` | PLAN-INVENT B ✅ landed |
 | `xname` / `doname` / `an` / `the` / `singular` | PLAN-INVENT C |
 | `near_capacity` / `calc_capacity` / `inv_weight` | PLAN-INVENT D |
 | `money_cnt` / `findgold` (gold pickup, `carry_count`'s gold arm) | PLAN-INVENT E |
 | `select_many` / `loot_classify` / `loot_xname` | PLAN-INVENT G |
 | `add_to_container` / `delete_contents` / `mkbox_cnts` / `mkcorpstat` | PLAN-MKOBJ E |
 | a real `core/occupation.py` | only for a future multi-turn `#loot`; **not** needed here (§3.5) |
-| `minvent` (monster packs) for `loot_mon` | PLAN-MAKEMON E |
+| `minvent` (monster packs) for `loot_mon` | PLAN-MAKEMON E ✅ landed |
 
 ---
 

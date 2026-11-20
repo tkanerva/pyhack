@@ -1,7 +1,7 @@
 # Plan: Wave 4a — the monster genesis layer (`makemon`)
 
-**Status: phases A, B, C and D landed; E is the mechanism only; F and
-G are partly open.** Written after Wave 3 landed
+**Status: phases A, B, C, D and E landed; F and G are partly open.**
+Written after Wave 3 landed
 (PLAN-MKLEV.md: rooms + corridors + doors, 521 tests green, mypy clean).
 Landed as `core/makemon.py` + `core/place.py` (see CHANGES.md "Wave
 4a/4b"): the funnel, the selection half (uncommon / rndmonst_adj /
@@ -11,9 +11,12 @@ set_malign), `mongets` / `mkmonmoney`, and `fill_ordinary_room()` now
 spawns through it.  What is still open, in this plan's terms: **A** is
 done as of the converter pass (`tools/convert_monsters.py` rewrote
 `core/monst_data.py` from `include/monsters.h`: 383 rows, so
-`SUBSET_PM` is the whole table and nothing renumbered); **E** has the
-inventory *mechanism* but not the `m_initweap` / `m_initinv` species
-tables; **F** (groups, grow_up, clone_mon) is untouched and the
+`SUBSET_PM` is the whole table and nothing renumbered); **E** landed in
+full with the "genesis residue" session (CHANGES.md): `initweap` is
+C's species switch, `initinv` the class extras, `initthrow` the ammo
+bundle, and the funnel calls them where C does -- what is still missing
+there is `m_dowear` (PLAN-ARMOR.md §5), so the kit exists but is not
+worn; **F** (groups, grow_up, clone_mon) is untouched and the
 generator passes MM_NOGRP so the flag is honoured rather than faked;
 **G** retired the demo spawn and added the object half of
 fill_ordinary_room (gold / statue / final object), while the trap-type
@@ -188,14 +191,21 @@ both apply; `_spawn_monster` is deleted, not extended.
    spiders/eels, sleep rolls for demons, `mkobj_at` under a spider).
    pyhack passes `in_mklev: bool` down from the generator rather than
    storing a global; the level-change and zap call sites pass False.
-9. **Inventory is a two-phase subset.** `m_initweap` is 413 lines of
-   "which weapon would this species prefer given skill and depth";
-   it is not needed for the first delivery (a monster that fights with
-   its natural attacks is already NetHack-shaped for depth 1..10). The
-   subset is: (i) `mongets` (give one specific otyp), (ii) a
-   depth-appropriate weapon/armour roll for `M2_MERC`/humanoids, (iii)
-   `mkmonmoney` for greedy monsters. Everything else names its C in a
-   comment and takes no roll (the PLAN-MKLEV draw-order rule).
+9. **Inventory is a two-phase subset** — landed as the *whole* switch
+   instead.  `m_initweap` is 413 lines of "which weapon would this
+   species prefer given skill and depth"; the plan proposed a small
+   subset ((i) `mongets`, (ii) a depth-appropriate weapon/armour roll
+   for `M2_MERC`/humanoids, (iii) `mkmonmoney`).  When it landed, every
+   predicate the switch needs (`is_mercenary`, `is_elf`, `is_dwarf`,
+   `is_giant`, `humanoid`, `is_lord`, `is_prince`, `extra_nasty`,
+   `strongmonst`, `likes_gold`) and every predicate the object table
+   needs were already ported, so the branch-by-branch port cost little
+   more than the subset and keeps C's draw order exact.  What is still
+   skipped (each named at the call site) is what belongs to another
+   file: the muse.c tails (`rnd_offensive_item` / `rnd_defensive_item`
+   / `rnd_misc_item` -- their rolls ARE taken, the PLAN-MKLEV
+   draw-order rule), the angel's artifact naming, the orcish arrow's
+   poison, and `m_dowear`.
 10. **Groups are behind the flag, not deleted.** `m_initgrp` (soldier
     squads, orc bands, ant swarms) is what makes BARRACKS and ANTHOLE
     look right, but it multiplies the monster count on every level. It
@@ -296,21 +306,33 @@ fields unset-but-defaulted for the demo monsters.
 **Exit:** `generator="mklev"` levels are populated from the real table,
 placed legally, and the demo generator is untouched.
 
-### Phase E — inventory (~1-2 sessions, depends on PLAN-MKOBJ.md C–E)
+### Phase E — inventory ✅ LANDED (minus `m_dowear`)
 
-1. `mongets`, `mkmonmoney`; `Monster.inventory` fed through `mksobj`.
-2. `m_initweap` subset: for `M2_MERC`/`AT_WEAP` monsters, a weapon by
-   depth + armour by class (the C table is 400 lines of `switch`
-   chains; port `oselect`-equivalent as data: `(oclass, otyp,
-   probability)` per species-group, with the exotic cases STUBbed and
-   commented).
-3. `m_initthrow` (ammo with a launcher), `m_initinv` subset (jelly
-   treasure, leprechaun gold, nymph items).
-4. Rendering: the console must show a monster's weapon/armour nowhere
-   yet — assert via inventory contents only.
+1. [x] `mongets`, `mkmonmoney`; `Monster.inventory` fed through `mksobj`.
+   (`mongets` answers the id of the stack the object landed in, not the
+   object it made: a monster's pack merges.)
+2. [x] `m_initweap`: C's 413-line `switch (ptr->mlet)`, ported draw for
+   draw rather than as an `oselect` table -- the per-species branches
+   (giant / human / angel / humanoid / kop / orc / ogre / troll /
+   kobold / centaur / wraith / zombie / lizard / demon) plus the
+   general `rnd(14 - 2*bias)` case.  The species names are resolved in
+   `_KIT_SPECIES` / `_SCHOLAR_GUARDIANS` / `_FIGHTER_GUARDIANS` at
+   import time, so a typo fails the import instead of a level.
+3. [x] `m_initthrow` (ammo with a launcher), `m_initinv` (the
+   mercenary AC ladder, shopkeeper, priest, monk, nymph, giant,
+   leprechaun, gnome, lich, nazgul, quantmech and demon kits).
+   Skipped, named at the call site: the muse.c tails
+   (`rnd_offensive_item` / `rnd_defensive_item` / `rnd_misc_item`) and
+   the quantmech box's rot timer -- their rolls are still taken.
+4. [x] Rendering: the console shows a monster's gear nowhere; the
+   assertions are on inventory contents (`test_makemon.py`).
+5. [ ] `m_dowear` -- C's `makemon` calls it right after `m_initinv`;
+   it is the monster-side of PLAN-ARMOR.md §5, so a soldier carries
+   mail that does not yet protect it.
 
 **Exit:** a BARRACKS squad can carry swords and armour; a leprechaun
-carries gold.
+carries gold.  ✅ (The squad's *group* is phase F; one soldier carries
+the kit today.)
 
 ### Phase F — growth, groups, vitals (~1 session)
 

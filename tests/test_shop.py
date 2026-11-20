@@ -323,16 +323,31 @@ def test_the_keeper_starts_with_its_capital():
 
 
 def test_the_jeweller_gets_a_touchstone_and_a_charging_scroll():
-    """C: `if (shp->shknms == shkrings) mongets(TOUCHSTONE)`, and the
-    rings / tools / wands lists get a scroll of charging."""
-    m, room = _room_map()
-    w = _world(m)
-    mkroom.mkshop(m, [], _FixedRng(88))  # 87..89 is the ring shop
-    assert room.rtype == RoomType.RINGSHOP
-    shk.stock_room(w, _rng(), m, room, 1)
-    otypes = {it.otyp for it in _kid(w, room).inventory}
-    assert int(O.TOUCHSTONE) in otypes
-    assert int(O.SCR_CHARGING) in otypes
+    """C: shkinit's two mongets -- `if (shknms == shkrings) mongets(shk,
+    TOUCHSTONE)` is unconditional, and the next test
+    `shktools || shkwands || (shkrings && rn2(2)) || (shkgeneral &&
+    rn2(5))` adds the SCROLL OF CHARGING on a coin flip.  So the
+    touchstone holds on every seed, and the scroll has to both appear
+    and stay away: over 20 seeds the flip has to land on both sides
+    (a run of 20 is a 2-in-a-million accident, not a rule).
+
+    The keeper's inventory also carries its own makemon kit (a skeleton
+    key and the wand / potion ladder of m_initinv), which is why this
+    asks about membership rather than the exact contents.
+    """
+    charges = 0
+    for seed in range(1, 21):
+        m, room = _room_map()
+        w = _world(m)
+        mkroom.mkshop(m, [], _FixedRng(88))  # 87..89 is the ring shop
+        assert room.rtype == RoomType.RINGSHOP
+        shk.stock_room(w, _rng(seed), m, room, 1)
+        otypes = {it.otyp for it in _kid(w, room).inventory}
+        assert int(O.TOUCHSTONE) in otypes
+        assert int(O.SKELETON_KEY) in otypes  # the m_initinv kit
+        charges += int(O.SCR_CHARGING) in otypes
+        assert_item_locations(w)
+    assert 0 < charges < 20, "the charging scroll is a 1-in-2"
 
 
 def test_two_shops_on_a_level_never_share_a_name():

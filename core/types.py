@@ -1303,6 +1303,13 @@ class World:
     # invlet_constant behaviour, PLAN-INVENT.md decision 5).  -1 before
     # the first assignment (C: reset_globals).
     lastinvnr: int = -1
+    # the last stack split (C: svc.context.objsplit.parent_oid /
+    # child_oid, mkobj.c): core.mkobj.splitobj records the pair and
+    # unsplitobj() looks for it to put the stack back together.  C
+    # remembers exactly one pair (the context is reset by
+    # clear_splitobjs()); so does this.  None = no split yet.
+    split_parent: Optional[str] = None
+    split_child: Optional[str] = None
 
     def new_id(self, prefix: str = "obj") -> str:
         """Allocate a fresh unique id (C: next_ident())."""

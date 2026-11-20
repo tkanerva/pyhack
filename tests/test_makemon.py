@@ -27,6 +27,7 @@ from core.makemon import (
     uncommon,
 )
 from core.mklev import blank_map, makelevel
+from core.objects import ObjClass, ObjType
 from core.monst import (
     A_LAWFUL,
     G_GENOD,
@@ -44,7 +45,7 @@ from core.monst import (
 from core.rnd import Rng
 from core.rules import level_difficulty
 from core.types import MmFlags, World
-from conftest import make_map, make_monster, make_world
+from conftest import assert_item_locations, make_map, make_monster, make_world
 
 
 def _rng(seed: int = 1) -> Rng:
@@ -277,18 +278,34 @@ def test_makemon_records_the_birth_for_the_vitals():
 
 
 def test_makemon_gives_a_monster_money_and_gear():
-    """The inventory mechanism (C: mongets / mkmonmoney) -- the species
-    tables of m_initweap are phase E, the plumbing is here."""
+    """The inventory mechanism (C: mongets / mkmonmoney): a purse is one
+    COIN stack and a second purse merges into it (mergable's coin rule)
+    instead of becoming a second item -- while gear is an item of its
+    own, and mongets answers the stack the object landed in."""
     w = _world()
     mon = spawn(w, _rng(7), _mon(PM_SOLDIER), (3, 3), MmFlags.NO_MINVENT)
     assert mon is not None
     assert mon.inventory == []
     makemon.mkmonmoney(w, _rng(8), mon, 40)
-    gold = [it for it in mon.inventory if it.quan == 40]
-    assert gold and gold[0].carrier == mon.id
-    otyp = mkobj.mkgold(w, _rng(9), 10, (5, 5), w.lev).otyp
-    assert makemon.mongets(w, _rng(10), mon, otyp) is not None
+    gold = [it for it in mon.inventory if it.oclass == int(ObjClass.COIN)]
+    assert len(gold) == 1 and gold[0].quan == 40
+    assert gold[0].carrier == mon.id
+    makemon.mkmonmoney(w, _rng(8), mon, 10)
+    assert len(mon.inventory) == 1  # one pile, not two
+    assert gold[0].quan == 50  # the 10 joined the 40 (quan, not a copy)
+    assert gold[0].owt == mkobj.weight(w, gold[0])  # weight follows quan
+    # gear is its own item, and the id mongets answers is the item that
+    # survived -- the new ration, since nothing in the pack matched it
+    gear = makemon.mongets(w, _rng(9), mon, int(ObjType.C_RATION))
     assert len(mon.inventory) == 2
+    assert gear == mon.inventory[1].id
+    # a second, identical ration merges into the first: mongets answers
+    # the stack that holds it, and the pack does not grow
+    again = makemon.mongets(w, _rng(10), mon, int(ObjType.C_RATION))
+    assert len(mon.inventory) == 2
+    assert again == gear
+    assert mon.inventory[1].quan >= 2
+    assert_item_locations(w)
 
 
 # ------------------------------------------------------------

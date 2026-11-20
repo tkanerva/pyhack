@@ -25,6 +25,12 @@ is PLAN-INVENT.md §1):
   allocation, the C gl.lastinvnr walk on ``World.lastinvnr``),
   ``invletter_value``, ``reorder_invent``, ``obj_to_let``,
   ``let_to_name`` (the C names[] class table);
+- the stacking group (phase B): ``mergable`` (the rule table),
+  ``merge_choice``, ``merged`` (the one writer of ``quan`` besides
+  ``mkobj.splitobj`` and ``useup``), ``stackobj`` (the floor pile a
+  dropped / thrown object lands in) and ``splittable`` (may a count
+  prefix split this stack); ``addinv`` merges on the way in, exactly as
+  C's addinv / add_to_minv do;
 - the display group (the non-menu half, phase F): ``doname`` /
   ``worn_suffix`` (the reduced objnam.c naming -- phase C replaces
   them), ``xprname``, ``display_inventory`` (the `i` list and its
@@ -59,16 +65,23 @@ from __future__ import annotations
 from typing import List, Optional
 
 from .hacklib_inflection import makeplural
+from .mondata import is_reviver
+from .monst import LOW_PM, MONS, NUMMONS
 from .objects import (
     DEF_OC_SYMS,
     MAXOCLASSES,
+    OBJECTS,
     ObjClass,
+    ObjType,
     W_ACCESSORY,
     W_AMUL,
     W_ARMOR,
+    W_QUIVER,
     W_RINGL,
     W_RINGR,
+    W_SWAPWEP,
     W_WEAPONS,
+    W_WEP,
 )
 from .types import Item, Monster, World
 
@@ -237,14 +250,16 @@ def addinv(world: World, mon_id: str, item: Item) -> Item:
     and at most lying on the floor -- which is the C
     ``obj_extract_self(obj)`` the pickup path does before the
     ``obj->where != OBJ_FREE`` panic, spelled as "clear ``pos``" here
-    because the floor half of the where-state *is* ``pos``.  The
-    letter is assigned and the pack re-sorted for the hero (C:
-    gi.invent is the hero's pack; a monster's minvent carries no
-    letters); ``World.items`` is the registry, so the item is
-    registered here whether or not it was already in it.  The merge
-    half of C's addinv (merged() into the quiver, then the pack) is
-    phase B; until it lands this never merges.  Returns the item (C:
-    the possibly-merged survivor).
+    because the floor half of the where-state *is* ``pos``.  A stack
+    that ``mergable`` accepts is merged into the pack's copy instead of
+    being inserted (C: the quiver-merge then the ``merged(&otmp, &obj)``
+    walk down the chain -- there is no quiver yet, so the walk is the
+    whole story).  Otherwise the letter is assigned and the pack
+    re-sorted for the hero (C: gi.invent is the hero's pack; a
+    monster's minvent carries no letters); ``World.items`` is the
+    registry, so the item is registered here whether or not it was
+    already in it.  Returns the survivor -- the item itself, or the
+    stack it merged into (C: the possibly-merged ``obj``).
     """
     mon = world.actors[mon_id]
     if item.carrier is not None:
@@ -255,6 +270,12 @@ def addinv(world: World, mon_id: str, item: Item) -> Item:
     item.pos = None  # C: obj_extract_self(obj)
     item.carrier = mon_id
     item.lev = mon.lev
+    # C: the merge walk over the chain (add_to_minv does the same for a
+    # monster's pack): a compatible stack absorbs the new object
+    for other in mon.inventory:
+        if merged(world, other, item):
+            carry_obj_effects(other)  # C: the `added:` label
+            return other
     if mon.is_hero:
         assigninvlet(world, mon, item)
     mon.inventory.append(item)
@@ -367,6 +388,239 @@ def carry_obj_effects(item: Item) -> None:
     timeout.  pyhack has no timers (no timeout.c), so this is the
     named hook that does nothing; the call site stays where C calls
     it (addinv)."""
+
+
+# ------------------------------------------------------------
+# The stacking group (C: merge_choice / merged / mergable /
+# stackobj / splittable -- src/invent.c)
+# ------------------------------------------------------------
+#
+# A stack is one `Item` whose `quan` is the count, so "merging" is
+# adding one object's `quan` to another's and deleting the loser.  The
+# four functions below are the whole vocabulary:
+#
+#   mergable(otmp, obj)      may these two combine?  (the rule table)
+#   merge_choice(list, obj)  the first stack in a list `obj` fits into
+#   merged(world, otmp, obj) do it -- `obj` goes away, `otmp` survives
+#   stackobj(world, item)    `item` was just placed: merge it into the
+#                            floor pile it lands in
+#
+# `merged` and `mkobj.splitobj` (plus `useup`'s decrement) are the only
+# writers of `quan` outside `mksobj_init`.
+
+
+def _is_candle(item: Item) -> bool:
+    """C: Is_candle (include/obj.h) -- the two candle rows (their ages
+    decide whether two candles may merge)."""
+    return item.otyp in (int(ObjType.TALLOW_CANDLE), int(ObjType.WAX_CANDLE))
+
+
+def mergable(otmp: Item, obj: Item) -> bool:
+    """Whether ``obj`` may be merged INTO ``otmp`` (C: mergable,
+    src/invent.c 4429-4551).
+
+    The rule table, in C's order: the same object twice, a different
+    type, a type that never merges (``oc_merge``) and the coin
+    shortcut; then BUC, the shop flags, ``spe`` (so a +1 and a +0
+    dagger never stack, and a charged wand keeps its own count), a
+    broken / trapped container, the food's eaten-down amount, the
+    knowledge / erosion / greased state, `erosion_matters`'s
+    erodeproof, a corpse's species (and a revivable corpse never
+    merges at all), candle ages within the same 25-turn window, the
+    artifact, and the name.
+
+    The dropped halves are C's ``how_lost`` / ``bypass`` / globby /
+    ``lamplit`` / ``orotten`` / ``bknown`` / ``rknown`` / ``omonst`` /
+    ``omid`` / ``oname`` / ``omailcmd`` comparisons: pyhack has no
+    thrown-from state, no globs, no burning items, no rotten food, no
+    belief bookkeeping and no user-named objects (``Item.name`` is the
+    *type* name and is compared instead, which is the same test for
+    everything mksobj builds).  C's ``Blind || Hallucination`` guards
+    around the ``bknown`` / ``rknown`` / ``known`` comparisons are the
+    property system's; as in C they are only compared when unsighted,
+    so the port skips them (the sighted branch).
+    """
+    # C: `obj == otmp || obj->otyp != otmp->otyp || nomerge ||
+    # !objects[obj->otyp].oc_merge`
+    if obj is otmp or obj.otyp != otmp.otyp or not OBJECTS[otmp.otyp].merge:
+        return False
+
+    # C: coins of the same kind will always merge
+    if obj.oclass == int(ObjClass.COIN):
+        return True
+
+    if obj.cursed != otmp.cursed or obj.blessed != otmp.blessed:
+        return False
+
+    if (
+        obj.unpaid != otmp.unpaid
+        or obj.spe != otmp.spe
+        or obj.no_charge != otmp.no_charge
+        or obj.broken != otmp.broken
+        or obj.otrapped != otmp.otrapped
+    ):
+        return False
+
+    if obj.oclass == int(ObjClass.FOOD) and obj.oeaten != otmp.oeaten:
+        return False
+
+    if (
+        obj.dknown != otmp.dknown
+        or obj.oeroded != otmp.oeroded
+        or obj.oeroded2 != otmp.oeroded2
+        or obj.greased != otmp.greased
+    ):
+        return False
+
+    from .worn import erosion_matters  # local import: worn imports this
+
+    if erosion_matters(obj) and obj.oerodeproof != otmp.oerodeproof:
+        return False
+
+    if obj.otyp in (int(ObjType.CORPSE), int(ObjType.EGG), int(ObjType.TIN)):
+        if obj.corpsenm != otmp.corpsenm:
+            return False
+
+    # C: revivable corpses never merge (an egg's `timed` half needs the
+    # timer system, which does not exist)
+    if obj.otyp == int(ObjType.CORPSE) and otmp.corpsenm >= LOW_PM:
+        ptr = MONS[otmp.corpsenm] if otmp.corpsenm < NUMMONS else None
+        if ptr is not None and is_reviver(ptr):
+            return False
+
+    # allow candle merging only if their ages are close (C's magic 25)
+    if _is_candle(obj) and obj.age // 25 != otmp.age // 25:
+        return False
+
+    if obj.oartifact != otmp.oartifact:
+        return False
+
+    if obj.name != otmp.name:
+        return False
+
+    return True
+
+
+def merge_choice(items: List[Item], obj: Item) -> Optional[Item]:
+    """The first stack in ``items`` that ``obj`` would merge into, or
+    None (C: merge_choice, src/invent.c 771-810).
+
+    C uses this when all 52 inventory slots are held, to decide whether
+    a pickup can still happen; ``addinv`` does the same walk inline.
+    Two C branches are dropped with their systems: the shop-floor
+    ``no_charge`` juggling (the ``inhishop`` half needs ``shk.c``'s
+    live bill) and the ``LOST_EXPLODING`` early return.
+    """
+    if not items:
+        return None
+    if obj.otyp == int(ObjType.SCR_SCARE_MONSTER):
+        return None  # C: "punt on these"
+    for other in items:
+        if mergable(other, obj):
+            return other
+    return None
+
+
+def merged(world: World, otmp: Item, obj: Item) -> bool:
+    """Merge ``obj`` into ``otmp`` and delete ``obj`` (C: merged,
+    src/invent.c 812-948).  Returns whether anything happened.
+
+    The survivor keeps ``otmp``'s identity (C's ``otmp`` / ``obj``
+    pointer pair becomes "the caller passes the two items and reads the
+    first one afterwards"), its letter and its place in the world; the
+    loser goes through ``delobj`` -- which is C's ``obj_extract_self`` +
+    ``obfree``, and is also what takes a container's contents with it
+    (containers never merge: ``oc_merge`` is false for every one of
+    them).
+
+    The side effects C performs here and this port keeps:
+
+    - the **approximate age** (a quantity-weighted average, so merged
+      corpses keep a sensible rot age);
+    - the **weight** recomputation (``owt`` is derived from ``quan``);
+    - the **worn slot** preference when the two stacks are worn in
+      competing slots (primary weapon beats alternate beats quiver, C's
+      comment);
+    - the **enchantment discovery**: when one stack's ``spe`` was known
+      and the other's was not, the survivor's is now known (C's "you
+      learn more about your items by comparing them").  This writes
+      ``Item.known`` directly, and deliberately: the *type* was already
+      known to the player (mergable requires the same ``otyp`` and
+      ``spe``), so no ``obj_tables`` bookkeeping moves and this is not
+      a ``DiscoveryEvent`` -- it is the per-stack flag only.
+    """
+    if not mergable(otmp, obj):
+        return False
+
+    total = otmp.quan + obj.quan
+    if total > 0:
+        otmp.age = (otmp.age * otmp.quan + obj.age * obj.quan) // total
+    otmp.quan = total
+
+    from .mkobj import weight  # local import: mkobj imports this module
+
+    otmp.owt = weight(world, otmp)
+
+    # C's "fixup for #adjust merging wielded darts, daggers, &c": the
+    # two stacks may occupy competing weapon slots, and the survivor
+    # keeps the most specific one.
+    if obj.owornmask and otmp.carrier is not None:
+        from .worn import setnotworn, setworn  # local import: cycle
+
+        wmask = otmp.owornmask | obj.owornmask
+        if wmask & W_WEP:
+            wmask = W_WEP
+        elif wmask & W_SWAPWEP:
+            wmask = W_SWAPWEP
+        elif wmask & W_QUIVER:
+            wmask = W_QUIVER
+        survivor_mon = world.actors[otmp.carrier]
+        if otmp.owornmask & ~wmask:
+            setnotworn(survivor_mon, otmp)
+        setworn(survivor_mon, otmp, wmask)
+        if obj.carrier is not None:
+            setnotworn(world.actors[obj.carrier], obj)
+
+    if obj.known != otmp.known:
+        otmp.known = True
+
+    delobj(world, obj.id)  # C: obj_extract_self(obj) + obfree(obj, otmp)
+    return True
+
+
+def stackobj(world: World, item: Item) -> Optional[Item]:
+    """``item`` has just been placed on the floor: merge it into the
+    pile already there, and answer the surviving stack (C: stackobj,
+    src/invent.c 4415-4427).
+
+    C calls this from the drop (``dropz``) and throw-landing
+    (``drop_throw``) paths *after* ``place_object``; pyhack's
+    ``core.mkobj.place_object`` deliberately does not merge (mkgold
+    does its own), so the callers will.  Returns ``item`` itself when
+    nothing was there to merge with.
+    """
+    if item.pos is None:
+        return item
+    for other in world.items_at(item.pos):
+        if other is not item and merged(world, item, other):
+            return item
+    return item
+
+
+def splittable(item: Item, mon: Optional[Monster] = None) -> bool:
+    """Whether a count prefix may split this stack (C: splittable,
+    src/invent.c 1662-1668): a cursed loadstone cannot be dropped in
+    part, and neither can a welded wielded weapon.
+
+    The welded half needs ``wield.welded`` (PLAN-DROP.md phase C); the
+    worn-weapon test below is the stand-in: a cursed weapon the carrier
+    is wielding does not split.
+    """
+    if item.otyp == int(ObjType.LOADSTONE) and item.cursed:
+        return False
+    if mon is not None and item.owornmask & W_WEP and item.cursed:
+        return False
+    return True
 
 
 # ------------------------------------------------------------
@@ -603,9 +857,14 @@ __all__ = [
     "invletter_value",
     "is_inuse",
     "let_to_name",
+    "merge_choice",
+    "mergable",
+    "merged",
     "money_cnt",
     "obj_to_let",
     "reorder_invent",
+    "splittable",
+    "stackobj",
     "useup",
     "useupall",
     "worn_suffix",

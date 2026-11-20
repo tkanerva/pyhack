@@ -130,8 +130,10 @@ Already in pyhack that the plan builds on:
 8. **Wielding stays on `Monster.wielded`.** Migrating the wielded weapon to
    `owornmask`'s `W_WEP` bit is a cross-cutting refactor (items.py,
    worldgen, tests) with no defence benefit — deferred, noted.
-9. **Monster armour is out of scope.** Monsters don't carry items in the
-   runtime yet (the mon.c port brings `minvent`). `uac()` is written
+9. **Monster armour is out of scope.**  (Monsters now DO carry items --
+   PLAN-MAKEMON.md phase E landed `minvent` with the species kits -- but
+   nothing wears them: `m_dowear` is still unported, so a soldier's mail
+   is carried, not worn, and changes no AC.)  `uac()` is written
    generically over `Monster` so that port reuses it; `uhitm.known_hitum`
    keeps reading the monster's `PerMonst.ac`.
 10. **Floor gear + a pickup subset.** The demo floor is currently item-free

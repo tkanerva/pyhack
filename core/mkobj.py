@@ -63,8 +63,10 @@ STUBs / simplifications (documented, not bugs):
     start_*_timeout() calls are named in the comments.
   - **no artifacts**: `artif` is accepted and ignored, `oartifact`
     stays 0.
-  - **no `splitobj`**: nothing in this wave needs to split a stack.
-    `quan` alone covers gold piles, arrows and candles.
+  - **`splitobj` takes a clean stack**: C's `splitbill` / `omid` /
+    `obj_split_timers` / `obj_split_light_source` follow-ups are all
+    systems that do not exist here; what is left is the quantity, the
+    weight, the id and the (parent, child) record `unsplitobj` reads.
   - **`mksobj_init` is a subset per class**: the exotic per-otyp
     switches (tins, candy bars, kelp fronds, the invocation tools) fall
     through to the class default, which is C's own `default: break`.
@@ -74,12 +76,14 @@ STUBs / simplifications (documented, not bugs):
   - `mkobj_erosions` tests only flammability (core.worn.is_flammable):
     the rust / crack / rot / corrode material tests are not ported, so
     `oeroded2` is never generated yet.
-  - `mkbox_cnts` does not merge: C's add_to_container merges compatible
-    stacks, which is PLAN-MKOBJ.md phase E.
+  - `mkbox_cnts` builds each item and hands it to `add_to_container`,
+    which is where C merges the compatible stacks (`merged()`), so a
+    chest's two identical potions are one stack.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Dict, Optional, Tuple
 
 from . import invent, makemon, rules
@@ -682,22 +686,30 @@ def set_corpsenm(world: World, item: Item, mndx: int) -> None:
 # ------------------------------------------------------------
 
 
-def add_to_container(world: World, container: Item, item: Item) -> None:
+def add_to_container(world: World, container: Item, item: Item) -> Item:
     """Put `item` inside `container` (C: mkobj.c#add_to_container).
 
     A contained item has no position and no carrier -- the parent's id in
     `contents` is the only reference -- and it is registered in
     World.items, so it stays reachable exactly twice (the world's dict
-    and the container's list): the invariant the tests assert.  C merges
-    compatible stacks first; pyhack's merge rules are PLAN-MKOBJ.md
-    phase E, so nothing merges yet.
+    and the container's list): the invariant the tests assert.  A
+    compatible stack already in the container absorbs it (C's
+    `merged(&otmp, &obj)` walk over `container->cobj`), so the caller
+    gets back the item that actually holds the object: the new one, or
+    the stack it merged into.
     """
+    for child_id in container.contents:
+        child = world.items.get(child_id)
+        if child is not None and invent.merged(world, child, item):
+            container.owt = weight(world, container)
+            return child
     item.pos = None
     item.carrier = None
     item.lev = container.lev
     container.contents.append(item.id)
     world.items[item.id] = item
     container.owt = weight(world, container)
+    return item
 
 
 def delete_contents(world: World, container: Item) -> None:
@@ -707,6 +719,107 @@ def delete_contents(world: World, container: Item) -> None:
     for child_id in list(container.contents):
         world.items.pop(child_id, None)
     container.contents = []
+
+
+# ------------------------------------------------------------
+# Stack splitting (C: mkobj.c splitobj / unsplitobj)
+# ------------------------------------------------------------
+
+
+def _place_key(world: World, item: Item):
+    """The item's where-state as a hashable key: ("carried", carrier
+    id), ("floor", position), ("contained", parent id), or None for a
+    free object (C: OBJ_FREE).  Used by unsplitobj() to check that the
+    two halves of a split are still in the same list -- C walks the one
+    list it derived from the object it was handed."""
+    if item.carrier is not None:
+        return ("carried", item.carrier)
+    if item.pos is not None:
+        return ("floor", item.pos)
+    for parent in world.items.values():
+        if item.id in parent.contents:
+            return ("contained", parent.id)
+    return None
+
+
+def splitobj(world: World, item: Item, num: int) -> Item:
+    """Split `num` of the stack `item` off into a new object (C:
+    mkobj.c#splitobj).  The parent keeps the rest -- and with it its
+    letter and its place in the world; the child comes back *free*
+    (``pos`` / ``carrier`` None, like a fresh ``mksobj``), for the
+    caller to hand to ``invent.addinv`` / ``place_object``.  Returns
+    the child.
+
+    C panics on a container, a non-positive count or a split that would
+    empty the stack (``quan <= num``); the caller must use
+    ``useup`` / ``delobj`` for those, and this port raises ValueError
+    the same way ``addinv`` refuses a stale item.
+
+    The child is a copy of every field C's ``*otmp = *obj`` copies
+    (age, BUC, ``spe``, erosion, corpsenm), with the differences C
+    spells out: a fresh id, no worn mask, and its own quantity and
+    weight.  Two deliberate differences: the child's ``invlet`` is
+    cleared (C leaves the parent's letter on it; the pack here is kept
+    unique-and-sorted by letter, so a duplicate would break the display
+    -- the next ``addinv`` allocates a real one), and the child is not
+    linked into the parent's list (C's ``obj->nobj = otmp``), because a
+    free object is what every writer here accepts.
+
+    The ``(parent, child)`` pair is recorded on the World -- C's
+    ``svc.context.objsplit`` -- for ``unsplitobj``.
+    """
+    if item.contents:
+        raise ValueError(f"splitobj: {item.id} is a non-empty container")
+    if num <= 0 or item.quan <= num:
+        raise ValueError(f"splitobj: cannot take {num} of {item.quan} in {item.id}")
+    child = dataclasses.replace(
+        item,
+        id=world.new_id("obj"),
+        contents=[],
+        owornmask=0,
+        invlet="",
+        pos=None,
+        carrier=None,
+        quan=num,
+    )
+    world.items[child.id] = child
+    item.quan -= num
+    item.owt = weight(world, item)
+    child.owt = weight(world, child)
+    world.split_parent = item.id
+    world.split_child = child.id
+    return child
+
+
+def unsplitobj(world: World, item: Item) -> Optional[Item]:
+    """Try to put a split stack back together (C: mkobj.c#unsplitobj):
+    find the other half of the last split, and merge the two if they are
+    still in the same place.  Returns the combined stack, or None.
+
+    C refuses a free / floor / on-bill / migrating / buried object (it
+    follows ``o->nobj``, which only a carried or contained object has);
+    the same rule here is "the item must be carried or contained".
+    Nothing clears the pair after a successful unsplit -- C leaves it
+    too, and a second call simply finds the two ids no longer both
+    ``mergable`` (the child id is gone) and answers None.
+    """
+    where = _place_key(world, item)
+    if where is None or where[0] == "floor":
+        return None
+    parent_id, child_id = world.split_parent, world.split_child
+    if not parent_id or not child_id:
+        return None
+    if item.id not in (parent_id, child_id):
+        return None
+    parent = world.items.get(parent_id)
+    child = world.items.get(child_id)
+    if parent is None or child is None:
+        return None
+    if _place_key(world, parent) != _place_key(world, child):
+        return None
+    if invent.merged(world, parent, child):
+        return parent
+    return None
 
 
 def mkbox_cnts(world: World, rng, box: Item) -> None:
@@ -1072,8 +1185,10 @@ __all__ = [
     "rndmonnum_adj",
     "set_corpsenm",
     "sobj_at",
+    "splitobj",
     "unbless",
     "uncurse",
     "unknow_object",
+    "unsplitobj",
     "weight",
 ]

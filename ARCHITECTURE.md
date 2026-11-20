@@ -326,11 +326,13 @@ details live in the PLAN-*.md files and the module docstrings):**
   tail.  The console turns those keys into a `ListCommand`, answers it
   itself (`ui.console.inventory_lines`) and `core.step` returns nothing
   for it: **a listing is a render, not a turn** (C: ECMD_OK).  Still
-  open from the plan: merging (`mergable` / `merged`, phase B), the
-  naming slice (`core/objnam.py`, phase C -- it replaces `doname`),
-  weight / encumbrance (phase D), gold (phase E), the menu half of the
-  display and `prinv` (phase F), `getobj` / selection (phase G) and
-  `#adjust` (phase H).
+  open from the plan: the naming slice (`core/objnam.py`, phase C -- it
+  replaces `doname`, and with it the count in the pickup line), weight /
+  encumbrance (phase D), gold (phase E), the menu half of the display
+  and `prinv` (phase F), `getobj` / selection (phase G) and `#adjust`
+  (phase H).  Phase B (stacking: `mergable` / `merge_choice` /
+  `merged` / `stackobj` / `splittable`) landed with the "genesis
+  residue" session.
 - The level generators (WAVE3.md / PLAN-MKLEV.md, core/mklev.py,
   core/mkroom.py, core/mkmap.py, core/doors.py): `new_world(rng,
   generator="demo"|"mklev"|"cavern")` behind a switch that defaults to
@@ -379,10 +381,10 @@ details live in the PLAN-*.md files and the module docstrings):**
   and `weight()` ported whole -- an object is registered in
   `World.items` when `mksobj()` builds it, and `place_object()` /
   `add_to_container()` then set its where-state.  Still STUBs inside
-  them, each named in the module docstrings: `m_initweap` /
-  `m_initinv` (the 400-line species weapon tables), monster groups,
+  them, each named in the module docstrings: monster groups,
   mimics, shapechangers, the timers (corpse rot / eggs / oil / ice),
-  artifacts, `splitobj`, and container merging.  The monster table is
+  artifacts and `m_dowear` (a monster's kit is carried, not worn --
+  PLAN-ARMOR.md §5).  The monster table is
   C's, whole: `tools/convert_monsters.py` parses
   `include/monsters.h` and rewrites `core/monst_data.py` in C order
   (383 rows, one per `MON(...)`, so nothing renumbers), which is what
@@ -480,26 +482,31 @@ temple itself has landed with it, queue item 1):
    (the vault.c guard stays a separate system).  shk.c is billing
    before it is a room, which is why the shop is last and lands in
    sub-phases.
-2. **The genesis residue** (independent of 1, interleavable):
-   phase E's `m_initweap` / `m_initinv` species tables (monster
-   inventories; the `mongets` / `mkmonmoney` mechanism is in),
-   phase F's groups / `grow_up` / `clone_mon` / `create_critters`,
-   `splitobj` + the container / pickup merge rules, the rust / rot /
-   corrode half of `mkobj_erosions`.  (The fire-trap-erodes-armour
-   regression test is DONE — `tests/test_erosion.py`, which is also
-   PLAN-ARMOR.md phase 4's suite and the ring suite's sibling: both
-   landed together, and between them they found the missing
-   `Item.oerodeproof` field.  The `Item.charges` -> `spe` migration
-   landed with PLAN-INVENT.md phase A.)
+2. **The genesis residue** — ✅ **the three major pieces landed**
+   (the "genesis residue" session): phase E's `m_initweap` /
+   `m_initthrow` / `m_initinv` species kits, `splitobj` / `unsplitobj`,
+   and the merge rules (`mergable` / `merged` / `merge_choice` /
+   `stackobj` / `splittable`) including the container and pickup merge
+   points.  What is left of this item: phase F's groups / `grow_up` /
+   `clone_mon` / `create_critters`, `m_dowear` (a monster's kit is
+   carried, not worn), the rust / rot / corrode half of
+   `mkobj_erosions`, and the muse.c item pickers whose rolls are taken
+   but not spent.  (The fire-trap-erodes-armour regression test is DONE
+   — `tests/test_erosion.py`, which is also PLAN-ARMOR.md phase 4's
+   suite and the ring suite's sibling: both landed together, and
+   between them they found the missing `Item.oerodeproof` field.  The
+   `Item.charges` -> `spe` migration landed with PLAN-INVENT.md phase A.)
 3. **Wave 6: the inventory core** (PLAN-INVENT.md / PLAN-PICKUP.md /
    PLAN-DROP.md — invent.c / pickup.c / do.c + wield.c): phase A is
-   in (`core/invent.py`: the pack, the letters, the single writer) and
-   so is phase F's display half (`display_inventory` / `xprname` /
-   the reduced `doname`; the console's `i` family, which costs no turn);
-   the rest of the plan's staging — stacking (B), naming (C), weight /
-   encumbrance (D), gold (E), selection (G) —
-   is what turns the pack into NetHack's, and it consumes 2's merge
-   rules and `splitobj`.
+   in (`core/invent.py`: the pack, the letters, the single writer), so
+   is phase B (stacking) and phase F's display half
+   (`display_inventory` / `xprname` / the reduced `doname`; the
+   console's `i` family, which costs no turn);
+   the rest of the plan's staging — naming (C), weight / encumbrance
+   (D), gold (E), selection (G) —
+   is what turns the pack into NetHack's.  **PLAN-THROW is next in the
+   queue** (item 7): it now has every primitive it needs — `splitobj`,
+   `freeinv`, `place_object`, `stackobj` and the merge rules.
 4. **The small UI debt**: wire `QuaffCommand` (zap / cast / eat are
    wired; `q` quits, so the quaff key is to choose).
 5. **Scrolls**: fill in the STUBs of `core/scrolls.py` as their

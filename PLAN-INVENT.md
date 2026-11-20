@@ -1,8 +1,8 @@
 # Plan: Wave 6a — the inventory core (`src/invent.c`)
 
-**Status: phase A landed (`core/invent.py`); phase F's display half
-landed (the `i` / class / `*` / `$` listings and the reduced `doname`);
-phases B-E, G-H proposed.**
+**Status: phases A and B landed (`core/invent.py`, including the
+stacking group); phase F's display half landed (the `i` / class / `*`
+/ `$` listings and the reduced `doname`); phases C-E, G-H proposed.**
 Written against the tree that has 521 tests green and mypy clean, with
 Wave 3 (mklev / mkroom / mkmap + doors) landed and PLAN-MAKEMON /
 PLAN-MKOBJ / PLAN-SPECIAL-ROOMS / PLAN-SPLEV proposed.  This is the
@@ -280,19 +280,35 @@ The same commit as PLAN-MKOBJ phase A, done once (the `quan` / `owt` /
 letter-drift test (drop the second item, assert the third keeps its
 letter) passes; deletion of a *container* deletes its contents.
 
-### Phase B — stacking (~1 session)
+### Phase B — stacking ✅ LANDED
 
-1. `mergable` + `merge_choice` + `merged`, whole, minus §5.3's drops.
-2. `quan` in the messages: `pickup` says "You pick up 3 arrows.";
-   `_inventory_line` shows "3 arrows".
-3. `splittable` (a count prefix on a stack) — used by pickup and drop.
-4. Tests: a cursed and a blessed arrow do not merge; two `spe`-different
-   daggers do not merge; gold always merges; merging upstreams an
-   `owt` recompute; `merged` returns the survivor.
+Landed as one block with `mkobj.splitobj` / `unsplitobj` (the split
+pair is PLAN-MKOBJ §3.6's, deferred there to PLAN-THROW, but
+`splittable`, the pickup merge and the drop both need it; see the
+HANDOFF / CHANGES entry "The genesis residue").  `tests/test_stacking.py`
+is the suite.
 
-**Exit:** `merged` is the only writer of `quan` except `mksobj`, and a
-10k-draw property test finds no pair that merges and then fails the
-`quan == sum` invariant.
+1. [x] `mergable` + `merge_choice` + `merged`, whole, minus §5.3's drops.
+2. [ ] `quan` in the messages: `pickup` says "You pick up 3 arrows.";
+   `_inventory_line` shows "3 arrows".  (`_inventory_line` / `doname`
+   already render the count; the pickup *message* still names the
+   object once, because it builds the line from `Item.name` -- it
+   becomes `doname(picked)` with phase C's objnam slice.)
+3. [x] `splittable` (a count prefix on a stack) — used by pickup and
+   drop.  (The C `welded(uwep)` half stands in as "cursed and in the
+   primary weapon slot" until PLAN-DROP phase C lands `wield.welded`.)
+4. [x] Tests: a cursed and a blessed arrow do not merge; two
+   `spe`-different daggers do not merge; gold always merges; merging
+   upstreams an `owt` recompute; `merged` returns the survivor.
+5. [x] (not in the plan, needed by it) `stackobj` — the floor half of
+   the merge, ready for PLAN-DROP / PLAN-THROW's landing.
+
+**Exit:** `merged` is the only writer of `quan` except `mksobj` —
+refined: the writers are `mksobj_init`, `merged` (the sum), `splitobj`
+(the difference) and `useup` (the decrement), each documented as such —
+and a 10k-draw property test finds no pair that merges and then fails
+the `quan == sum` invariant.  The property test is not written; the
+rule table is covered field by field instead (`test_stacking.py`).
 
 ### Phase C — naming (`core/objnam.py`) (~2 sessions)
 
@@ -551,8 +567,9 @@ the identification port), `dounpaid` / `find_unpaid` / `count_unpaid`
       resolves) is `conftest.assert_item_locations`, called from the
       suites that mutate items
 - [x] the letter-drift test passes; `_item_by_letter` is a lookup
-- [ ] `mergable` / `merged` / `merge_choice` ported with spans in the
+- [x] `mergable` / `merged` / `merge_choice` ported with spans in the
       docstrings; cursed+blessed and `spe`-different items never stack
+      (plus `stackobj` / `splittable`; `tests/test_stacking.py`)
 - [ ] `core/objnam.py` renders `xname` / `doname` / `an` / `the` /
       `singular` / `currency`; the demo items keep their stored names
 - [ ] `weight_cap` / `inv_weight` / `near_capacity` / `ENC_STAT`; the

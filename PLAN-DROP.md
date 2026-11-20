@@ -401,7 +401,7 @@ wave can fill it without editing `drop.py`.
 |---|---|
 | `freeinv` / `place_object` / `useup` / `invlet` | PLAN-INVENT A |
 | `xname` / `doname` / `the` / `singular` | PLAN-INVENT C (every drop message) |
-| `splittable` / `adjust_split` (drop half a stack) | PLAN-INVENT B / G |
+| `splittable` ✅ / `adjust_split` (drop half a stack) | PLAN-INVENT B (landed) / G |
 | `select_many` | PLAN-INVENT G |
 | `near_capacity` (C's "you are not strong enough to wield that") | PLAN-INVENT D |
 | `takeoff_order`'s per-type side effects | the property system (PLAN-ARMOR §5) |
