@@ -76,7 +76,7 @@ one-item objects; without the third a soldier carries nothing.
    is keyed by item id).  It now bills the survivor.
    (c) `add_to_container` returned None; it now returns the stack the
    object landed in, which is what C's callers expect.
-6. **Tests:** `tests/test_stacking.py`, 49 cases (39 functions, one
+6. **Tests:** `tests/test_stacking.py`, 50 cases (39 functions, one
    parametrized over 12 fields): every row of the merge table on its
    own, the coin shortcut, `oc_merge`, the revivable corpse, the
    candle window, `merge_choice`'s punt, `merged`'s quan / weight /

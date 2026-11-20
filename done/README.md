@@ -58,7 +58,7 @@ occupation port).
    `splitobj` / `unsplitobj`, the merge rules (`mergable` / `merged` /
    `merge_choice` / `stackobj` / `splittable`), the container and
    pickup merge points, and the `m_initweap` / `m_initthrow` /
-   `m_initinv` species kits are in, with `tests/test_stacking.py` (49
+   `m_initinv` species kits are in, with `tests/test_stacking.py` (50
    cases) and the re-pinned monster/shop/zoo suites; 1463 tests green.
    Leftovers, all owned by other rows: `m_dowear` (PLAN-ARMOR §5),
    monster groups (PLAN-MAKEMON F), the rust / rot / corrode erosion

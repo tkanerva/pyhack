@@ -40,7 +40,7 @@ PLAN-MAKEMON.md phase E's *deferred* lists was touched.
   now); `pickup` messaged and **billed** the floor object after
   `addinv` had possibly merged it away (it bills the survivor); and
   `add_to_container` answered None.
-- **`tests/test_stacking.py` — 49 cases**, the suite the two systems
+- **`tests/test_stacking.py` — 50 cases**, the suite the two systems
   had none of: every row of the merge table on its own field, the coin
   shortcut, `oc_merge`, the revivable corpse, the candle window, the
   `merge_choice` punt, `merged`'s quan / weight / age / worn slot /
